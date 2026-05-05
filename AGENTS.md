@@ -5,8 +5,9 @@
 
 ## Worktree の分離
 
-- 同じ worktree を複数のセッションや agent 間で共有しないこと。
-- アクティブな issue または scope ごとに、必ず別の repo-local worktree を使うこと。
+- 同じ worktree を複数のセッションや agent 間で**同時に**共有しないこと。
+- 同じ issue の既存 worktree を後続 run で再利用すること自体は問題ないが、同時に複数セッションで使わないこと。
+- アクティブな issue ごとに、必ず別の repo-local worktree を使うこと。
 - worktree はこのリポジトリ内の `.agent-workspaces/` 配下に置くこと。`/Users/seeton`、`~`、その他ホームディレクトリ配下には clone や worktree を作らないこと。
 
 ## Issue の所有権

@@ -275,7 +275,7 @@ func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:
 	if _looks_like_rule_package(rule_patch):
 		return rule_patch.duplicate(true)
 
-	for key in ["package_id", "template_id", "id"]:
+	for key in ["package_id", "template_id"]:
 		var candidate_id := String(rule_patch.get(key, "")).strip_edges()
 		if candidate_id.is_empty():
 			continue

@@ -5,7 +5,7 @@
 This repository uses **issue-driven development**:
 
 1. Open or refine a GitHub issue before writing code.
-2. Create or reuse a repo-local git worktree under `.agent-workspaces/<issue-or-scope>/`.
+2. Create or reuse a repo-local git worktree under `.agent-workspaces/issue-<number>/`.
 3. Create the issue branch in that worktree, or reuse the existing issue branch when the worktree already exists.
 4. Implement the scoped change.
 5. Open a PR linked to the issue.
@@ -17,9 +17,10 @@ This repository uses **issue-driven development**:
 
 Keep reusable contributor and agent workspaces inside the repository boundary:
 
-- preferred location: `.agent-workspaces/<issue-or-scope>/`
-- create once from the repo root with `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>`
-- reuse the same worktree for follow-up commits on that issue when practical
+- preferred location: `.agent-workspaces/issue-<number>/`
+- prefer `scripts/worktree.sh ensure <issue-number> <branch-name>` from the repo root
+- if you create it manually, use `git worktree add .agent-workspaces/issue-<number> -b <branch-name>`
+- reuse the same worktree for follow-up commits on that issue across later runs when practical, but do not have multiple active sessions share it concurrently
 - keep scratch notes, logs, and generated artifacts inside that worktree or other ignored repo-local paths
 - do **not** create extra clones or checkouts under `/Users/seeton`, `~`, or other home-directory locations
 

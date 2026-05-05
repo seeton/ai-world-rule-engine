@@ -119,7 +119,7 @@ remove_worktree() {
   branch_name="$(git -C "${target_path}" rev-parse --abbrev-ref HEAD)"
   git worktree remove ${force_flag} "${target_path}"
 
-  if [[ "${delete_branch}" -eq 1 ]]; then
+  if [[ "${delete_branch}" -eq 1 && "${branch_name}" != "HEAD" ]]; then
     git branch -D "${branch_name}"
   fi
 

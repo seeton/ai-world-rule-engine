@@ -14,8 +14,9 @@ Start with [`godot-world/README.md`](./godot-world/README.md) for the project ov
 Default development flow is **issue → repo-local worktree → branch → PR**.
 
 - Start from a GitHub issue before implementing.
-- Create or reuse a repo-local git worktree under `.agent-workspaces/<issue-or-scope>/`.
-- Create the issue branch with `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>` when needed, then reuse that worktree for follow-up commits.
+- Create or reuse a repo-local git worktree under `.agent-workspaces/issue-<number>/`.
+- Prefer `scripts/worktree.sh ensure <issue-number> <branch-name>`; if you create the worktree manually, use `git worktree add .agent-workspaces/issue-<number> -b <branch-name>`.
+- Reuse that same issue worktree for follow-up commits on later runs when practical, but do not have multiple active sessions share it at the same time.
 - Keep scratch notes, logs, and generated artifacts inside that worktree or other ignored repo-local paths.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
 - Keep gameplay, runtime, and rule package work under `godot-world/`.

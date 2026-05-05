@@ -7,7 +7,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -161,7 +161,7 @@ def count_reference_files(root_dir: Path) -> int:
     return len(iter_reference_files(root_dir))
 
 
-def load_json(path: Path, errors: list[ValidationError], source: str) -> Any | None:
+def load_json(path: Path, errors: list[ValidationError], source: str) -> Optional[Any]:
     try:
         with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)

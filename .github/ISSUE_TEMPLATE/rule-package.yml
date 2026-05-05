@@ -1,0 +1,117 @@
+name: Rule package request
+description: Request a new, cloned, or forked rule package for the Godot World simulation.
+title: "[Rule Package]: "
+labels:
+  - rule-package
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for work under `godot-world/rules/`.
+
+        Rule packages must stay data-driven and schema-safe:
+        - package files live in `godot-world/rules/packages/`
+        - schema contract lives in `godot-world/rules/schema/rule_package.schema.json`
+        - packages must not embed arbitrary GDScript
+  - type: dropdown
+    id: request_type
+    attributes:
+      label: Request type
+      options:
+        - clone existing package
+        - fork existing package
+        - create new package
+        - update existing package
+    validations:
+      required: true
+  - type: input
+    id: package_id
+    attributes:
+      label: Target package ID
+      placeholder: builtin.hunger-variant or community.sleep-lite
+    validations:
+      required: true
+  - type: input
+    id: source_package
+    attributes:
+      label: Source package or upstream reference
+      description: Include existing package ID, repo, or issue link when cloning/forking.
+      placeholder: builtin.hunger / github.com/org/rule-library / #123
+  - type: textarea
+    id: gameplay_goal
+    attributes:
+      label: Gameplay goal
+      description: What mechanic should the package add or change in the world simulation?
+      placeholder: Explain the player-facing behavior and simulation effect.
+    validations:
+      required: true
+  - type: textarea
+    id: package_shape
+    attributes:
+      label: Expected package shape
+      description: Describe expected stats, rules, event bindings, relations, and metadata.
+      placeholder: |
+        Include expected:
+        - tags and match_phrases
+        - patch operations
+        - review_status
+        - forked_from / suggested_pr_target metadata
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Clone/fork/PR workflow notes
+      description: Capture how this package should move through issue -> branch -> PR -> upstream.
+      placeholder: |
+        Example:
+        - Start from builtin.hunger
+        - Fork into community.hunger-lite
+        - Open PR against main package library after local validation
+    validations:
+      required: true
+  - type: textarea
+    id: multi_agent
+    attributes:
+      label: Multi-agent execution notes
+      description: Split research, package drafting, and validation into safe parallel work.
+      placeholder: |
+        Example:
+        - Agent A: inspect existing similar packages
+        - Agent B: draft schema-safe metadata and operations
+        - Agent C: verify docs, acceptance criteria, and validation steps
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Package matches `rule_package_v1`
+        - [ ] Metadata includes provenance and PR target when applicable
+        - [ ] Operations stay within approved safe patch ops
+        - [ ] Runtime/compiler behavior is validated
+        - [ ] PR includes reviewer-facing evidence
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation expectations
+      description: Include schema validation, compiler/runtime checks, and manual verification.
+      placeholder: |
+        - Validate against `godot-world/rules/schema/rule_package.schema.json`
+        - Confirm compile/load path for the package
+        - Describe expected in-game verification
+        - List screenshots/logs/test output needed in the PR
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety constraints
+      options:
+        - label: This request does not require arbitrary code execution inside a rule package.
+          required: true
+        - label: This request expects human review before merging non-trivial gameplay changes.
+          required: true

@@ -1,0 +1,88 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.hunger",
+  "display_name": "Hunger",
+  "description": "Adds a hunger need, food recovery hooks, and starvation pressure tied to health.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.hunger"
+  },
+  "tags": [
+    "survival",
+    "needs",
+    "food",
+    "hunger"
+  ],
+  "match_phrases": [
+    "hunger",
+    "food",
+    "eat",
+    "starvation",
+    "starving"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_stat",
+        "stat_id": "hunger",
+        "value_type": "float",
+        "default": 100.0,
+        "min": 0.0,
+        "max": 100.0,
+        "ui_group": "needs"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "hunger.decay",
+        "rule_type": "tick_delta",
+        "target_stat": "hunger",
+        "delta": -2.0,
+        "interval_seconds": 30.0
+      },
+      {
+        "op": "add_event_binding",
+        "binding_id": "hunger.consume_food",
+        "event": "consume_food",
+        "target_rule": "hunger.restore_from_food"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "hunger.restore_from_food",
+        "rule_type": "event_delta",
+        "event": "consume_food",
+        "target_stat": "hunger",
+        "delta": 25.0,
+        "clamp_to_stat_bounds": true
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "hunger.starvation_damage",
+        "rule_type": "threshold_effect",
+        "watch_stat": "hunger",
+        "comparator": "<=",
+        "value": 0.0,
+        "effects": [
+          {
+            "effect_type": "stat_delta",
+            "target_stat": "health",
+            "delta": -5.0,
+            "interval_seconds": 15.0
+          }
+        ]
+      }
+    ]
+  }
+}

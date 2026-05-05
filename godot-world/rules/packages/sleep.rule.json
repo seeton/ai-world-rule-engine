@@ -1,0 +1,87 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.sleep",
+  "display_name": "Sleep",
+  "description": "Adds energy depletion, sleeping recovery, and low-energy penalties for actors.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.sleep"
+  },
+  "tags": [
+    "survival",
+    "needs",
+    "sleep",
+    "energy"
+  ],
+  "match_phrases": [
+    "sleep",
+    "rest",
+    "tired",
+    "energy",
+    "bed"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_stat",
+        "stat_id": "energy",
+        "value_type": "float",
+        "default": 100.0,
+        "min": 0.0,
+        "max": 100.0,
+        "ui_group": "needs"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "sleep.energy_decay",
+        "rule_type": "tick_delta",
+        "target_stat": "energy",
+        "delta": -1.0,
+        "interval_seconds": 20.0
+      },
+      {
+        "op": "add_event_binding",
+        "binding_id": "sleep.start_sleeping",
+        "event": "sleep_started",
+        "target_rule": "sleep.recover_energy"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "sleep.recover_energy",
+        "rule_type": "stateful_recovery",
+        "active_event": "sleep_started",
+        "inactive_event": "sleep_stopped",
+        "target_stat": "energy",
+        "delta_per_second": 4.0
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "sleep.low_energy_penalty",
+        "rule_type": "threshold_effect",
+        "watch_stat": "energy",
+        "comparator": "<",
+        "value": 20.0,
+        "effects": [
+          {
+            "effect_type": "tag_state",
+            "tag": "drowsy",
+            "value": true
+          }
+        ]
+      }
+    ]
+  }
+}

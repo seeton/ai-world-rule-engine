@@ -1,0 +1,96 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.health",
+  "display_name": "Health",
+  "description": "Adds a core health stat, damage and healing bindings, and defeated state thresholds.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.health"
+  },
+  "tags": [
+    "combat",
+    "health",
+    "survival",
+    "damage"
+  ],
+  "match_phrases": [
+    "health",
+    "hp",
+    "damage",
+    "heal",
+    "injury"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_stat",
+        "stat_id": "health",
+        "value_type": "float",
+        "default": 100.0,
+        "min": 0.0,
+        "max": 100.0,
+        "ui_group": "vitals"
+      },
+      {
+        "op": "add_event_binding",
+        "binding_id": "health.take_damage",
+        "event": "damage_received",
+        "target_rule": "health.apply_damage"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "health.apply_damage",
+        "rule_type": "event_delta",
+        "event": "damage_received",
+        "target_stat": "health",
+        "delta": -10.0,
+        "delta_source_field": "amount",
+        "clamp_to_stat_bounds": true
+      },
+      {
+        "op": "add_event_binding",
+        "binding_id": "health.receive_healing",
+        "event": "healing_received",
+        "target_rule": "health.apply_healing"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "health.apply_healing",
+        "rule_type": "event_delta",
+        "event": "healing_received",
+        "target_stat": "health",
+        "delta": 10.0,
+        "delta_source_field": "amount",
+        "clamp_to_stat_bounds": true
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "health.defeated_state",
+        "rule_type": "threshold_effect",
+        "watch_stat": "health",
+        "comparator": "<=",
+        "value": 0.0,
+        "effects": [
+          {
+            "effect_type": "tag_state",
+            "tag": "defeated",
+            "value": true
+          }
+        ]
+      }
+    ]
+  }
+}

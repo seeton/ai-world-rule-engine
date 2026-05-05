@@ -1,0 +1,96 @@
+name: Feature request
+description: Plan scoped feature work for the Godot 4 simulation, repo workflow, or supporting tooling.
+title: "[Feature]: "
+labels:
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for planned work that should later be implemented via clone/branch/PR.
+
+        Scope this repo carefully:
+        - `godot-world/` for Godot 4 simulation work
+        - `godot-world/rules/` for safe rule packages
+        - legacy Node PoC only when directly relevant
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - godot-world runtime
+        - godot-world scene or UX
+        - rule package library
+        - rule compiler or integration
+        - docs or workflow
+        - legacy Node PoC
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What player, design, or workflow problem should this solve?
+      placeholder: Describe the desired gameplay or workflow outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the end state, not just the implementation idea.
+      placeholder: Players can..., contributors can..., maintainers can...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Proposed scope
+      description: Note the likely files, systems, and constraints.
+      placeholder: |
+        - Files or folders likely touched
+        - Rule package IDs or runtime systems involved
+        - Anything explicitly out of scope
+    validations:
+      required: true
+  - type: textarea
+    id: multi_agent
+    attributes:
+      label: Multi-agent execution notes
+      description: Split work so future agents can pick up parallelizable tasks safely.
+      placeholder: |
+        Example:
+        - Agent A: inspect runtime and affected scenes
+        - Agent B: draft rule package or schema-safe data changes
+        - Agent C: validate docs and acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use a checklist-style definition of done.
+      placeholder: |
+        - [ ] Behavior is implemented in the intended Godot system
+        - [ ] No arbitrary code is added to rule packages
+        - [ ] Docs/config are updated if workflow changes
+        - [ ] PR is ready for review with evidence
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation expectations
+      description: Specify tests, manual checks, or schema validation needed before merge.
+      placeholder: |
+        - Existing automated tests to run
+        - Manual Godot verification steps
+        - Rule package/schema checks
+        - Screenshots, recordings, or logs expected in the PR
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and blockers
+      placeholder: Issues, packages, scenes, assets, design decisions, or upstream repos this work depends on.

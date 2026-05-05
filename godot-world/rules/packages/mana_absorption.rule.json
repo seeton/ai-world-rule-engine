@@ -1,0 +1,88 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.mana_absorption",
+  "display_name": "Mana Absorption",
+  "description": "Adds mana gain from mana-rich zones, mana spending hooks, and overload caps.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.mana_absorption"
+  },
+  "tags": [
+    "magic",
+    "mana",
+    "resource",
+    "absorption"
+  ],
+  "match_phrases": [
+    "mana",
+    "magic",
+    "absorb mana",
+    "leyline",
+    "spell energy"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_stat",
+        "stat_id": "mana",
+        "value_type": "float",
+        "default": 0.0,
+        "min": 0.0,
+        "max": 100.0,
+        "ui_group": "magic"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "mana.absorb_from_zone",
+        "rule_type": "environment_delta",
+        "target_stat": "mana",
+        "environment_key": "mana_density",
+        "delta_per_point": 0.5,
+        "interval_seconds": 5.0
+      },
+      {
+        "op": "add_event_binding",
+        "binding_id": "mana.cast_spell",
+        "event": "spell_cast",
+        "target_rule": "mana.spend_on_spell"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "mana.spend_on_spell",
+        "rule_type": "event_delta",
+        "event": "spell_cast",
+        "target_stat": "mana",
+        "delta": -15.0,
+        "clamp_to_stat_bounds": true
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "mana.overload_penalty",
+        "rule_type": "threshold_effect",
+        "watch_stat": "mana",
+        "comparator": ">=",
+        "value": 100.0,
+        "effects": [
+          {
+            "effect_type": "tag_state",
+            "tag": "mana_overloaded",
+            "value": true
+          }
+        ]
+      }
+    ]
+  }
+}

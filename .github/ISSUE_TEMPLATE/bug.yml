@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a regression or incorrect behavior in the Godot simulation, rule workflow, or related tooling.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - godot-world runtime
+        - godot-world scene or UX
+        - rule package data
+        - rule compiler or integration
+        - docs or workflow
+        - legacy Node PoC
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug summary
+      placeholder: What is broken, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open...
+        2. Load...
+        3. Trigger...
+        4. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Suspected files or systems
+      placeholder: Include package IDs, scenes, scripts, or workflow steps if known.
+  - type: textarea
+    id: multi_agent
+    attributes:
+      label: Multi-agent execution notes
+      description: Suggest safe ways to split investigation and verification.
+      placeholder: |
+        Example:
+        - Agent A: isolate reproduction in Godot or Node
+        - Agent B: inspect package/schema or runtime logic
+        - Agent C: confirm fix validation and docs impact
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Repro no longer occurs
+        - [ ] Intended behavior is restored
+        - [ ] Adjacent rule/package behavior is not regressed
+        - [ ] PR includes validation evidence
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation expectations
+      placeholder: |
+        Include automated tests, manual gameplay checks, schema validation, logs, or screenshots expected before merge.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or additional context
+      render: shell

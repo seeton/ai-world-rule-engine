@@ -1,0 +1,23 @@
+; Engine configuration file.
+; Minimal desktop shell project created without the editor.
+
+config_version=5
+
+[application]
+config/name="Godot World"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.2")
+config/icon="res://icon.svg"
+
+[autoload]
+WorldState="*res://scripts/core/WorldState.gd"
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"

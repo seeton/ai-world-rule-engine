@@ -1,0 +1,382 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg: #f5efe3;
+  --panel: #fffdf8;
+  --line: #1f2937;
+  --accent: #ec7c4d;
+  --accent-dark: #d96436;
+  --grass: #9ed47b;
+  --sky: #cce9ff;
+  --chat-user: #d9edff;
+  --chat-assistant: #fff2d9;
+  --chat-system: #f8d7da;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #fff7ea 0%, var(--bg) 100%);
+  color: var(--line);
+}
+
+.app-shell {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1.1fr 0.9fr;
+}
+
+.scene-panel,
+.chat-panel {
+  background: var(--panel);
+  border: 2px solid #eadfca;
+  border-radius: 24px;
+  box-shadow: 0 18px 40px rgba(80, 58, 30, 0.08);
+}
+
+.scene-panel {
+  padding: 24px;
+}
+
+.scene-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b6c44;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+}
+
+.mode-detail {
+  margin: 8px 0 0;
+  max-width: 42ch;
+  line-height: 1.5;
+  color: #6f5a3e;
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #f4e6d0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scene {
+  position: relative;
+  overflow: hidden;
+  min-height: 520px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, var(--sky) 0%, #dcf1ff 64%, var(--grass) 64%, #7fc460 100%);
+}
+
+.sun {
+  position: absolute;
+  top: 32px;
+  right: 40px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #ffd864;
+  box-shadow: 0 0 0 12px rgba(255, 216, 100, 0.18);
+}
+
+.cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  width: 120px;
+  height: 42px;
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+}
+
+.cloud::before {
+  width: 50px;
+  height: 50px;
+  top: -22px;
+  left: 18px;
+}
+
+.cloud::after {
+  width: 56px;
+  height: 56px;
+  top: -24px;
+  right: 16px;
+}
+
+.cloud-left {
+  top: 86px;
+  left: 56px;
+}
+
+.cloud-right {
+  top: 146px;
+  right: 120px;
+}
+
+.house {
+  position: absolute;
+  left: 88px;
+  bottom: 96px;
+  width: 168px;
+  height: 148px;
+}
+
+.roof {
+  position: absolute;
+  inset: 0 auto auto 12px;
+  width: 0;
+  height: 0;
+  border-left: 72px solid transparent;
+  border-right: 72px solid transparent;
+  border-bottom: 74px solid #b45f35;
+}
+
+.house .body {
+  position: absolute;
+  left: 30px;
+  bottom: 0;
+  width: 120px;
+  height: 96px;
+  background: #ffe2b7;
+  border: 3px solid #935431;
+}
+
+.door {
+  position: absolute;
+  left: 74px;
+  bottom: 0;
+  width: 34px;
+  height: 58px;
+  background: #935431;
+}
+
+.villager-wrap {
+  position: absolute;
+  right: 96px;
+  bottom: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.speech-bubble {
+  position: relative;
+  max-width: 280px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid #eadfca;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+}
+
+.stickman {
+  position: relative;
+  width: 140px;
+  height: 220px;
+}
+
+.head {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 54px;
+  height: 54px;
+  margin-left: -27px;
+  border: 4px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.body-line {
+  position: absolute;
+  left: 50%;
+  height: 4px;
+  background: var(--line);
+  transform-origin: left center;
+}
+
+.body {
+  top: 68px;
+  width: 4px;
+  height: 86px;
+  margin-left: -2px;
+}
+
+.arm {
+  top: 92px;
+  width: 64px;
+}
+
+.arm-left {
+  transform: translateX(-2px) rotate(160deg);
+}
+
+.arm-right {
+  transform: translateX(2px) rotate(20deg);
+}
+
+.leg {
+  top: 150px;
+  width: 74px;
+}
+
+.leg-left {
+  transform: translateX(-1px) rotate(122deg);
+}
+
+.leg-right {
+  transform: translateX(1px) rotate(58deg);
+}
+
+.villager-name {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 680px;
+}
+
+.chat-log {
+  flex: 1;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.message {
+  max-width: 85%;
+  padding: 12px 14px;
+  border-radius: 18px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.message-user {
+  align-self: flex-end;
+  background: var(--chat-user);
+}
+
+.message-assistant {
+  align-self: flex-start;
+  background: var(--chat-assistant);
+}
+
+.message-system {
+  align-self: center;
+  background: var(--chat-system);
+}
+
+.chat-form {
+  padding: 0 22px 22px;
+  display: grid;
+  gap: 12px;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 2px solid #e2d6c1;
+  font: inherit;
+  background: #fffdfa;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 14px 20px;
+  font: inherit;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dark) 100%);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .scene {
+    min-height: 420px;
+  }
+
+  .house {
+    left: 32px;
+    transform: scale(0.88);
+    transform-origin: left bottom;
+  }
+
+  .villager-wrap {
+    right: 36px;
+    bottom: 28px;
+  }
+
+  .chat-panel {
+    min-height: 560px;
+  }
+}

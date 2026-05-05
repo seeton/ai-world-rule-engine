@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godot-world.local/rules/schema/rule_package.schema.json",
+  "title": "Godot World Rule Package",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "package_id",
+    "display_name",
+    "description",
+    "version",
+    "author",
+    "source_repo",
+    "source_ref",
+    "tags",
+    "match_phrases",
+    "community",
+    "patch"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rule_package_v1"
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]+$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "source_repo": {
+      "type": "string"
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "forked_from": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "package_id",
+        "source_repo",
+        "source_ref"
+      ],
+      "properties": {
+        "package_id": {
+          "type": "string"
+        },
+        "source_repo": {
+          "type": "string"
+        },
+        "source_ref": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "suggested_pr_target": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "repo",
+        "base_ref",
+        "package_id"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "base_ref": {
+          "type": "string"
+        },
+        "package_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "match_phrases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "community": {
+      "type": "object",
+      "required": [
+        "likes",
+        "dislikes",
+        "alternative_package_ids"
+      ],
+      "properties": {
+        "likes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dislikes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "alternative_package_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "required": [
+        "format",
+        "review_status",
+        "operations"
+      ],
+      "properties": {
+        "format": {
+          "const": "rule_patch_v1"
+        },
+        "review_status": {
+          "enum": [
+            "approved",
+            "needs_design_review",
+            "draft"
+          ]
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "enum": [
+                  "upsert_stat",
+                  "upsert_rule",
+                  "add_event_binding",
+                  "add_relation"
+                ]
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

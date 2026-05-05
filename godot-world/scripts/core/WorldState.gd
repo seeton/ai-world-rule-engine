@@ -75,10 +75,6 @@ func _reset_world() -> void:
 	_runtime = SimulationRuntimeScript.new(_available_templates)
 
 
-func talk_to_game_master(message: String) -> void:
-	pass
-
-
 func _ensure_runtime() -> void:
 	if _runtime == null:
 		_reset_world()

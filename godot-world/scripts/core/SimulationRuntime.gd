@@ -2,12 +2,41 @@ extends RefCounted
 class_name SimulationRuntime
 
 const DEFAULT_FIXED_STEP := 0.25
+const DEFAULT_LOCALE := "ja"
+
+const TEXT := {
+	"ja": {
+		"time_rule_already_active": "時間のルールはすでに有効です。",
+		"time_rule_installed": "時間のルールを作成しました。世界に戻ると右上に時計が表示されます。",
+		"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
+		"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
+		"help_prompt": "時間のルールを作成しろ、と言ってください。",
+		"player_name": "プレイヤー",
+		"gm_name": "ゲームマスター",
+		"player_task": "最初のルールを待っています",
+		"gm_task": "プレイヤーの依頼を待っています",
+		"world_bootstrap": "プレイヤーとゲームマスターがいる世界を初期化しました。"
+	},
+	"en": {
+		"time_rule_already_active": "The time rule is already active.",
+		"time_rule_installed": "The time rule has been created. Return to the world to see the clock in the top-right.",
+		"time_rule_install_failed": "Failed to apply the time rule: %s",
+		"time_rule_load_failed": "Failed to load the time rule definition.",
+		"help_prompt": "Ask me to create the time rule.",
+		"player_name": "Player",
+		"gm_name": "Game Master",
+		"player_task": "Waiting for the first rule",
+		"gm_task": "Waiting for the player's request",
+		"world_bootstrap": "Initialized the world with one player and one game master."
+	}
+}
 
 var fixed_step_seconds: float = DEFAULT_FIXED_STEP
 var _accumulator_seconds: float = 0.0
 var _world_state: Dictionary = {}
 var _template_index: Dictionary = {}
 var _clone_sequence: int = 0
+var _locale: String = DEFAULT_LOCALE
 
 
 func _init(rule_templates: Array = []) -> void:
@@ -58,23 +87,23 @@ func talk_to_game_master(message: String) -> Dictionary:
 	if matched:
 		var installed_rules: Dictionary = _world_state.get("installed_rules", {})
 		if installed_rules.has("time_counter"):
-			gm_response = "The time rule is already active."
+			gm_response = _text("time_rule_already_active")
 			action_taken = "none"
 		else:
 			var time_rule_patch: Dictionary = _load_time_rule_package()
 			if not time_rule_patch.is_empty():
 				var result := create_rule_from_patch(time_rule_patch)
 				if result.get("status", "") == "installed":
-					gm_response = "Time rule has been installed. The clock is now tracking elapsed time."
+					gm_response = _text("time_rule_installed")
 					action_taken = "installed_time_rule"
 				else:
-					gm_response = "Failed to install time rule: %s" % result.get("message", "unknown error")
+					gm_response = _text("time_rule_install_failed") % result.get("message", "unknown error")
 					action_taken = "error"
 			else:
-				gm_response = "Failed to load time rule package."
+				gm_response = _text("time_rule_load_failed")
 				action_taken = "error"
 	else:
-		gm_response = "I can help you create the time rule. Try saying 'create time rule'."
+		gm_response = _text("help_prompt")
 		action_taken = "none"
 	
 	conversation_log.append({
@@ -204,7 +233,7 @@ func _build_null_world() -> Dictionary:
 		"entities": {
 			"player_character": {
 				"id": "player_character",
-				"name": "Player Character",
+				"name": _text("player_name"),
 				"archetype": "player",
 				"tags": ["player", "mortal", "mutable"],
 				"components": {
@@ -216,13 +245,13 @@ func _build_null_world() -> Dictionary:
 						"focus": 50.0
 					},
 					"behavior": {
-						"current_task": "Awaiting the first installed rule"
+						"current_task": _text("player_task")
 					}
 				}
 			},
 			"game_master": {
 				"id": "game_master",
-				"name": "Game Master",
+				"name": _text("gm_name"),
 				"archetype": "gm",
 				"tags": ["gm", "immortal", "immutable"],
 				"components": {
@@ -230,7 +259,7 @@ func _build_null_world() -> Dictionary:
 						"authority": 100.0
 					},
 					"behavior": {
-						"current_task": "Listening to player requests"
+						"current_task": _text("gm_task")
 					}
 				}
 			}
@@ -241,7 +270,7 @@ func _build_null_world() -> Dictionary:
 		"event_log": [
 			{
 				"type": "world_initialized",
-				"message": "Bootstrapped a null world with a player character and a game master.",
+				"message": _text("world_bootstrap"),
 				"details": {}
 			}
 		]
@@ -581,3 +610,8 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 		"second": second,
 		"formatted": formatted
 	}
+
+
+func _text(key: String) -> String:
+	var table: Dictionary = TEXT.get(_locale, TEXT[DEFAULT_LOCALE])
+	return String(table.get(key, key))

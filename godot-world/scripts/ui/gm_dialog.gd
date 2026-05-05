@@ -2,12 +2,37 @@ extends Control
 
 signal closed
 
+const ACTIVE_LANGUAGE := "ja"
+const UI_TEXT := {
+	"ja": {
+		"title": "ゲームマスター",
+		"back": "← 戻る",
+		"input_label": "あなたの指示:",
+		"placeholder": "例: 時間のルールを作成しろ",
+		"send": "送信",
+		"welcome_1": "[color=cyan]ゲームマスター:[/color] ようこそ。私に世界のルール作成を依頼できます。",
+		"welcome_2": "例えば「時間のルールを作成しろ」と入力してみてください。",
+		"missing_worldstate": "[color=red]エラー:[/color] WorldStateが見つかりません。",
+		"clock_hint": "[color=cyan]ゲームマスター:[/color] 世界に戻ると右上に時計が表示されます。"
+	},
+	"en": {
+		"title": "Game Master",
+		"back": "<- Back",
+		"input_label": "Your request:",
+		"placeholder": "Example: create time rule",
+		"send": "Send",
+		"welcome_1": "[color=cyan]Game Master:[/color] Welcome. You can ask me to create world rules.",
+		"welcome_2": "Try entering 'create time rule'.",
+		"missing_worldstate": "[color=red]Error:[/color] WorldState was not found.",
+		"clock_hint": "[color=cyan]Game Master:[/color] Return to the world to see the clock in the top-right."
+	}
+}
+
 var _world_state: Node = null
 var _input_field: TextEdit
 var _response_panel: RichTextLabel
 var _back_button: Button
 var _send_button: Button
-var _pending_proposals: Array = []
 
 
 func _ready() -> void:
@@ -42,13 +67,13 @@ func _build_ui() -> void:
 	vbox.add_child(header)
 
 	var title := Label.new()
-	title.text = "ゲームマスター"
+	title.text = _text("title")
 	title.add_theme_font_size_override("font_size", 28)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
 	_back_button = Button.new()
-	_back_button.text = "← 戻る"
+	_back_button.text = _text("back")
 	_back_button.pressed.connect(_on_back_pressed)
 	header.add_child(_back_button)
 
@@ -72,7 +97,7 @@ func _build_ui() -> void:
 	response_margin.add_child(_response_panel)
 
 	var input_label := Label.new()
-	input_label.text = "あなたの指示:"
+	input_label.text = _text("input_label")
 	input_label.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(input_label)
 
@@ -88,7 +113,7 @@ func _build_ui() -> void:
 
 	_input_field = TextEdit.new()
 	_input_field.custom_minimum_size = Vector2(0, 80)
-	_input_field.placeholder_text = "例: 時間のルールを作成しろ"
+	_input_field.placeholder_text = _text("placeholder")
 	_input_field.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	input_margin.add_child(_input_field)
 
@@ -98,14 +123,14 @@ func _build_ui() -> void:
 	vbox.add_child(button_row)
 
 	_send_button = Button.new()
-	_send_button.text = "送信"
+	_send_button.text = _text("send")
 	_send_button.pressed.connect(_on_send_pressed)
 	button_row.add_child(_send_button)
 
 
 func _show_welcome_message() -> void:
-	_append_response("[color=cyan]ゲームマスター:[/color] ようこそ。世界のルールを作成したり、変更したりすることができます。")
-	_append_response("例えば「時間のルールを作成しろ」と入力してみてください。")
+	_append_response(_text("welcome_1"))
+	_append_response(_text("welcome_2"))
 
 
 func _on_back_pressed() -> void:
@@ -125,68 +150,16 @@ func _on_send_pressed() -> void:
 
 
 func _process_user_message(message: String) -> void:
-	if _world_state == null:
-		_append_response("[color=red]エラー:[/color] WorldStateが見つかりません。")
+	if _world_state == null or not _world_state.has_method("talk_to_game_master"):
+		_append_response(_text("missing_worldstate"))
 		return
 
-	var result: Dictionary = _world_state.submit_player_task(message)
-	var status := String(result.get("status", "unknown"))
-
-	if status == "proposal_ready":
-		var proposals: Array = result.get("proposals", [])
-		if proposals.is_empty():
-			_append_response("[color=orange]ゲームマスター:[/color] 提案が見つかりませんでした。")
-			return
-
-		_pending_proposals = proposals
-		_append_response("[color=cyan]ゲームマスター:[/color] 次のルールを提案します:")
-
-		for i in range(proposals.size()):
-			var prop: Dictionary = proposals[i]
-			var title := String(prop.get("title", "無題"))
-			var desc := String(prop.get("description", "説明なし"))
-			_append_response("  %d. [b]%s[/b]: %s" % [i + 1, title, desc])
-
-		if proposals.size() == 1:
-			_append_response("")
-			_install_proposal(0)
-		else:
-			_append_response("[color=cyan]番号を入力してインストールしてください。[/color]")
-
-	elif status == "needs_rule_patch":
-		_append_response("[color=orange]ゲームマスター:[/color] 該当するテンプレートが見つかりませんでした。")
-		_append_response("別の言い方で試してみてください。")
-
-	else:
-		_append_response("[color=red]エラー:[/color] 不明なステータス: " + status)
-
-
-func _install_proposal(index: int) -> void:
-	if index < 0 or index >= _pending_proposals.size():
-		_append_response("[color=red]エラー:[/color] 無効な番号です。")
-		return
-
-	var proposal: Dictionary = _pending_proposals[index]
-	var rule_patch: Dictionary = proposal.get("rule_patch", {})
-
-	if rule_patch.is_empty():
-		_append_response("[color=red]エラー:[/color] ルールパッチが空です。")
-		return
-
-	var install_result: Dictionary = _world_state.create_rule_from_patch(rule_patch)
-	var install_status := String(install_result.get("status", "unknown"))
-
-	if install_status == "installed":
-		var rule_name := String(proposal.get("title", "ルール"))
-		_append_response("[color=lime]成功:[/color] 「%s」をインストールしました！" % rule_name)
-		_append_response("[color=cyan]ゲームマスター:[/color] 世界に戻って変化を確認してください。")
-	elif install_status == "error":
-		var error_msg := String(install_result.get("message", "不明なエラー"))
-		_append_response("[color=red]エラー:[/color] " + error_msg)
-	else:
-		_append_response("[color=orange]警告:[/color] 予期しないステータス: " + install_status)
-
-	_pending_proposals.clear()
+	var result: Dictionary = _world_state.call("talk_to_game_master", message)
+	var gm_response := String(result.get("gm_response", result.get("reply", "")))
+	if not gm_response.is_empty():
+		_append_response("[color=cyan]ゲームマスター:[/color] " + gm_response)
+	if String(result.get("action", "")) == "installed_time_rule":
+		_append_response(_text("clock_hint"))
 
 
 func _append_response(text: String) -> void:
@@ -194,3 +167,8 @@ func _append_response(text: String) -> void:
 		_response_panel.text = text
 	else:
 		_response_panel.text += "\n\n" + text
+
+
+func _text(key: String) -> String:
+	var table: Dictionary = UI_TEXT.get(ACTIVE_LANGUAGE, UI_TEXT["ja"])
+	return String(table.get(key, key))

@@ -1,10 +1,9 @@
 extends Node
-class_name WorldState
 
 const SimulationRuntimeScript = preload("res://scripts/core/SimulationRuntime.gd")
 const RuleTemplatesScript = preload("res://scripts/core/RuleTemplates.gd")
 
-var _runtime: SimulationRuntime
+var _runtime
 var _available_templates: Array = []
 
 
@@ -74,6 +73,10 @@ func advance_tick(delta_seconds: float) -> void:
 func _reset_world() -> void:
 	_available_templates = RuleTemplatesScript.get_templates()
 	_runtime = SimulationRuntimeScript.new(_available_templates)
+
+
+func talk_to_game_master(message: String) -> void:
+	pass
 
 
 func _ensure_runtime() -> void:

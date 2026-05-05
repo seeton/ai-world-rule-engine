@@ -38,6 +38,11 @@ func submit_player_task(task_text: String) -> Dictionary:
 	return result
 
 
+func talk_to_game_master(message: String) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.talk_to_game_master(message)
+
+
 func clone_rule(rule_id: String) -> Dictionary:
 	_ensure_runtime()
 	return _runtime.clone_rule(rule_id)

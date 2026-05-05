@@ -26,6 +26,73 @@ func record_player_task(task_result: Dictionary) -> void:
 	_append_event("player_task_submitted", "Player submitted a task for rule proposal.", {"task": task_result.get("task_text", "")})
 
 
+func talk_to_game_master(message: String) -> Dictionary:
+	var normalized_message := message.strip_edges().to_lower()
+	var conversation_log: Array = _world_state.get("conversation_log", [])
+	
+	conversation_log.append({
+		"speaker": "player",
+		"text": message
+	})
+	
+	var gm_response := ""
+	var action_taken := ""
+	var time_rule_triggers := [
+		"create time rule",
+		"create the time rule",
+		"make time rule",
+		"install time rule",
+		"add time rule",
+		"時間のルールを作成",
+		"時間のルールを作成しろ",
+		"時間ルールを作成",
+		"タイムルールを作成"
+	]
+	
+	var matched := false
+	for trigger in time_rule_triggers:
+		if normalized_message.find(trigger.to_lower()) != -1:
+			matched = true
+			break
+	
+	if matched:
+		var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+		if installed_rules.has("time_counter"):
+			gm_response = "The time rule is already active."
+			action_taken = "none"
+		else:
+			var time_rule_patch: Dictionary = _load_time_rule_package()
+			if not time_rule_patch.is_empty():
+				var result := create_rule_from_patch(time_rule_patch)
+				if result.get("status", "") == "installed":
+					gm_response = "Time rule has been installed. The clock is now tracking elapsed time."
+					action_taken = "installed_time_rule"
+				else:
+					gm_response = "Failed to install time rule: %s" % result.get("message", "unknown error")
+					action_taken = "error"
+			else:
+				gm_response = "Failed to load time rule package."
+				action_taken = "error"
+	else:
+		gm_response = "I can help you create the time rule. Try saying 'create time rule'."
+		action_taken = "none"
+	
+	conversation_log.append({
+		"speaker": "gm",
+		"text": gm_response
+	})
+	
+	_world_state["conversation_log"] = conversation_log
+	_append_event("gm_conversation", "Player talked to Game Master.", {"message": message, "response": gm_response})
+	
+	return {
+		"status": "ok",
+		"action": action_taken,
+		"gm_response": gm_response,
+		"conversation_log": conversation_log.duplicate(true)
+	}
+
+
 func create_rule_from_patch(rule_patch: Dictionary) -> Dictionary:
 	var normalized_rule := _normalize_rule_patch(rule_patch)
 	if normalized_rule.is_empty():
@@ -108,6 +175,8 @@ func get_snapshot() -> Dictionary:
 	snapshot["world_name"] = "Null World"
 	snapshot["characters"] = _build_character_list(snapshot.get("entities", {}))
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
+	snapshot["conversation_log"] = snapshot.get("conversation_log", []).duplicate(true)
+	snapshot["clock"] = _build_clock_data(snapshot.get("entities", {}), installed_rules_by_id)
 	return snapshot
 
 
@@ -131,11 +200,11 @@ func _build_null_world() -> Dictionary:
 		"fixed_step_seconds": fixed_step_seconds,
 		"concepts": [],
 		"entities": {
-			"origin_entity": {
-				"id": "origin_entity",
-				"name": "Origin Entity",
-				"archetype": "origin",
-				"tags": ["origin", "mortal", "mutable"],
+			"player_character": {
+				"id": "player_character",
+				"name": "Player Character",
+				"archetype": "player",
+				"tags": ["player", "mortal", "mutable"],
 				"components": {
 					"needs": {},
 					"stats": {},
@@ -148,14 +217,29 @@ func _build_null_world() -> Dictionary:
 						"current_task": "Awaiting the first installed rule"
 					}
 				}
+			},
+			"game_master": {
+				"id": "game_master",
+				"name": "Game Master",
+				"archetype": "gm",
+				"tags": ["gm", "immortal", "immutable"],
+				"components": {
+					"traits": {
+						"authority": 100.0
+					},
+					"behavior": {
+						"current_task": "Listening to player requests"
+					}
+				}
 			}
 		},
 		"installed_rules": {},
 		"player_task_history": [],
+		"conversation_log": [],
 		"event_log": [
 			{
 				"type": "world_initialized",
-				"message": "Bootstrapped a null world with one mutable origin entity.",
+				"message": "Bootstrapped a null world with a player character and a game master.",
 				"details": {}
 			}
 		]
@@ -383,3 +467,67 @@ func _merge_dictionaries(base_value: Dictionary, patch_value: Dictionary) -> Dic
 			else:
 				merged[key] = incoming
 	return merged
+
+
+func _load_time_rule_package() -> Dictionary:
+	var time_package_path := "res://rules/packages/time.rule.json"
+	if not FileAccess.file_exists(time_package_path):
+		push_error("Time rule package not found at %s" % time_package_path)
+		return {}
+	
+	var file := FileAccess.open(time_package_path, FileAccess.READ)
+	if file == null:
+		push_error("Failed to open time rule package: %s" % FileAccess.get_open_error())
+		return {}
+	
+	var json_text := file.get_as_text()
+	file.close()
+	
+	var json := JSON.new()
+	var parse_result := json.parse(json_text)
+	if parse_result != OK:
+		push_error("Failed to parse time rule package JSON: %s" % json.get_error_message())
+		return {}
+	
+	var package_data: Dictionary = json.data if json.data is Dictionary else {}
+	return package_data.get("rule_patch", {})
+
+
+func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dictionary:
+	var time_rule_active := installed_rules.has("time_counter")
+	
+	if not time_rule_active:
+		return {
+			"visible": false,
+			"total_seconds": 0.0,
+			"day": 0,
+			"hour": 0,
+			"minute": 0,
+			"second": 0,
+			"formatted": ""
+		}
+	
+	var player_entity: Dictionary = entities.get("player_character", {})
+	var components: Dictionary = player_entity.get("components", {})
+	var time_component: Dictionary = components.get("time", {})
+	var total_seconds := float(time_component.get("elapsed_seconds", 0.0))
+	
+	var total_int := int(total_seconds)
+	var day := total_int / 86400
+	var remaining := total_int % 86400
+	var hour := remaining / 3600
+	remaining = remaining % 3600
+	var minute := remaining / 60
+	var second := remaining % 60
+	
+	var formatted := "%dd %02d:%02d:%02d" % [day, hour, minute, second]
+	
+	return {
+		"visible": true,
+		"total_seconds": total_seconds,
+		"day": day,
+		"hour": hour,
+		"minute": minute,
+		"second": second,
+		"formatted": formatted
+	}

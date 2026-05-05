@@ -47,6 +47,28 @@ Examples:
 - `fix/145-runtime-threshold-effects`
 - `docs/188-github-workflow`
 
+## Repo-local worktree workflow
+
+Avoid home-directory clones for agent work. Reuse repo-local worktrees instead:
+
+```bash
+npm run worktree:issue -- 10 feat/10-repo-worktree-tooling
+cd .agent-workspaces/issue-10
+```
+
+Conventions:
+
+- worktrees live under `.agent-workspaces/issue-<number>`
+- one issue should reuse the same worktree path across runs
+- keep one agent per issue branch/worktree
+- `.agent-workspaces/` stays git-ignored so the main product layout remains clean
+
+Helper commands:
+
+- `npm run worktree:issue -- <issue> <branch> [base]` — create or reuse an issue worktree
+- `npm run worktree:list` — show repo-local agent worktrees
+- `npm run worktree:remove -- <issue> [--force] [--delete-branch]` — remove a repo-local issue worktree safely
+
 ## Pull request expectations
 
 Every PR should be small enough to review and should include:

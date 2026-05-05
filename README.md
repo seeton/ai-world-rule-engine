@@ -38,5 +38,22 @@ Default development flow is **issue → branch → PR**.
 
 - Start from a GitHub issue before implementing.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
+- Create or reuse issue worktrees under `.agent-workspaces/` so agent checkouts stay repo-local and hidden from the main product layout.
 - Keep Godot 4 work under `godot-world/` unless the issue explicitly targets the legacy Node PoC.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+
+## Repo-local worktrees
+
+Use repo-local git worktrees for issue work instead of creating extra clones elsewhere.
+
+```bash
+npm run worktree:issue -- 10 feat/10-repo-worktree-tooling
+npm run worktree:list
+npm run worktree:remove -- 10
+```
+
+Conventions:
+
+- worktrees live under `.agent-workspaces/issue-<number>`
+- each issue keeps one branch/worktree pairing that can be reused across runs
+- `.agent-workspaces/` is git-ignored so agent workspaces stay out of the main product tree

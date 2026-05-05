@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "worktree:issue": "bash scripts/worktree.sh ensure",
+    "worktree:list": "bash scripts/worktree.sh list",
+    "worktree:remove": "bash scripts/worktree.sh remove"
   },
   "keywords": [],
   "author": "",

@@ -9,6 +9,8 @@ var _player_card: PanelContainer
 var _gm_card: PanelContainer
 var _player_name_label: Label
 var _player_status_label: Label
+var _gm_name_label: Label
+var _gm_status_label: Label
 var _auto_advance_timer: Timer
 
 var _conversation_history: Array = []
@@ -109,6 +111,9 @@ func _build_character_card(role: String, char_name: String, description: String)
 	if role == "Player":
 		_player_name_label = name_label
 		_player_status_label = status_label
+	elif role == "Game Master":
+		_gm_name_label = name_label
+		_gm_status_label = status_label
 
 	return panel
 
@@ -194,24 +199,19 @@ func _on_send_message(message: String) -> void:
 		return
 
 	_chat_input.clear()
-	_add_chat_message("You", trimmed, Color(0.5, 0.8, 1.0))
-
-	# Call WorldState API (with fallback)
-	var response := _send_to_gm(trimmed)
-	var gm_reply := response.get("reply", "The Game Master ponders your words...")
-	_add_chat_message("Game Master", gm_reply, Color(1.0, 0.9, 0.5))
-
+	_send_to_gm(trimmed)
 	_refresh_display()
 
 func _send_to_gm(message: String) -> Dictionary:
 	if _world_state != null and _world_state.has_method("talk_to_game_master"):
 		return _world_state.call("talk_to_game_master", message)
-	else:
-		# Fallback for testing before integration
-		return {
-			"reply": "I hear your request, though the world is still taking shape. [Integration pending]",
-			"status": "ok"
-		}
+
+	_add_chat_message("You", message, Color(0.5, 0.8, 1.0))
+	_add_chat_message("Game Master", "I hear your request, though the world is still taking shape.", Color(1.0, 0.9, 0.5))
+	return {
+		"gm_response": "I hear your request, though the world is still taking shape.",
+		"status": "ok"
+	}
 
 func _add_chat_message(speaker: String, text: String, color: Color) -> void:
 	var color_hex := color.to_html(false)
@@ -236,6 +236,7 @@ func _refresh_world_state_reference() -> void:
 func _update_player_info() -> void:
 	if _world_state == null or not _world_state.has_method("get_world_snapshot"):
 		_player_status_label.text = "Status: Awaiting world initialization..."
+		_gm_status_label.text = "Status: Awaiting world initialization..."
 		return
 
 	var snapshot = _world_state.call("get_world_snapshot")
@@ -243,24 +244,31 @@ func _update_player_info() -> void:
 		return
 
 	var entities = snapshot.get("entities", {})
-	if entities is Dictionary and entities.has("aria"):
-		var aria = entities.get("aria", {})
-		var components = aria.get("components", {})
-		var stats = components.get("stats", {})
-		var needs = components.get("needs", {})
+	if not (entities is Dictionary):
+		return
 
-		var status_parts: Array[String] = []
-		if stats.has("morale"):
-			status_parts.append("Morale: %d" % int(stats.get("morale", 0)))
-		if needs.has("hunger"):
-			status_parts.append("Hunger: %d" % int(needs.get("hunger", 0)))
+	var player_entity: Dictionary = entities.get("player_character", {})
+	if not player_entity.is_empty():
+		_player_name_label.text = str(player_entity.get("name", "Player Character"))
+		var player_components: Dictionary = player_entity.get("components", {})
+		var player_stats: Dictionary = player_components.get("stats", {})
+		var player_needs: Dictionary = player_components.get("needs", {})
+		var player_time: Dictionary = player_components.get("time", {})
+		var player_status_parts: Array[String] = []
+		if player_stats.has("morale"):
+			player_status_parts.append("Morale: %d" % int(player_stats.get("morale", 0)))
+		if player_needs.has("hunger"):
+			player_status_parts.append("Hunger: %d" % int(player_needs.get("hunger", 0)))
+		if player_time.has("elapsed_seconds"):
+			player_status_parts.append("Time: %ds" % int(player_time.get("elapsed_seconds", 0.0)))
+		_player_status_label.text = " | ".join(player_status_parts) if not player_status_parts.is_empty() else "Status: Active"
 
-		if not status_parts.is_empty():
-			_player_status_label.text = " | ".join(status_parts)
-		else:
-			_player_status_label.text = "Status: Active"
-	else:
-		_player_status_label.text = "Status: Active"
+	var gm_entity: Dictionary = entities.get("game_master", {})
+	if not gm_entity.is_empty():
+		_gm_name_label.text = str(gm_entity.get("name", "Game Master"))
+		var gm_components: Dictionary = gm_entity.get("components", {})
+		var gm_behavior: Dictionary = gm_components.get("behavior", {})
+		_gm_status_label.text = "Status: %s" % str(gm_behavior.get("current_task", "Listening"))
 
 func _update_clock() -> void:
 	if _world_state == null or not _world_state.has_method("get_world_snapshot"):
@@ -302,7 +310,7 @@ func _sync_conversation_log() -> void:
 		var entry = conversation_log[i]
 		if entry is Dictionary:
 			var speaker = entry.get("speaker", "Unknown")
-			var message = entry.get("message", "")
+			var message = entry.get("text", entry.get("message", ""))
 			var color = Color(0.8, 0.8, 0.8)
 
 			if speaker.to_lower().contains("game master") or speaker.to_lower().contains("gm"):

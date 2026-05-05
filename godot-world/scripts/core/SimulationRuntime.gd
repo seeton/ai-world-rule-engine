@@ -88,6 +88,7 @@ func talk_to_game_master(message: String) -> Dictionary:
 	return {
 		"status": "ok",
 		"action": action_taken,
+		"reply": gm_response,
 		"gm_response": gm_response,
 		"conversation_log": conversation_log.duplicate(true)
 	}
@@ -513,7 +514,7 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 	var total_seconds := float(time_component.get("elapsed_seconds", 0.0))
 	
 	var total_int := int(total_seconds)
-	var day := total_int / 86400
+	var day := (total_int / 86400) + 1
 	var remaining := total_int % 86400
 	var hour := remaining / 3600
 	remaining = remaining % 3600

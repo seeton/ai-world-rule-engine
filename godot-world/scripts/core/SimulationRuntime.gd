@@ -2,6 +2,7 @@ extends RefCounted
 class_name SimulationRuntime
 
 const DEFAULT_FIXED_STEP := 0.25
+const SNAPSHOT_FORMAT_VERSION := 1
 
 var fixed_step_seconds: float = DEFAULT_FIXED_STEP
 var _accumulator_seconds: float = 0.0
@@ -102,13 +103,51 @@ func get_snapshot() -> Dictionary:
 
 	snapshot["accumulator_seconds"] = _accumulator_seconds
 	snapshot["available_template_ids"] = template_ids
+	snapshot["clone_sequence"] = _clone_sequence
 	snapshot["installed_rules_by_id"] = installed_rules_by_id
 	snapshot["installed_rules"] = installed_rules
+	snapshot["snapshot_format_version"] = SNAPSHOT_FORMAT_VERSION
 	snapshot["tick"] = snapshot.get("tick_index", 0)
-	snapshot["world_name"] = "Null World"
+	snapshot["world_name"] = String(snapshot.get("world_name", "Null World"))
 	snapshot["characters"] = _build_character_list(snapshot.get("entities", {}))
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
 	return snapshot
+
+
+func restore_snapshot(snapshot: Dictionary) -> Dictionary:
+	if snapshot.is_empty():
+		return {
+			"status": "error",
+			"message": "Snapshot was empty."
+		}
+
+	if snapshot.has("snapshot_format_version"):
+		var snapshot_version := int(snapshot.get("snapshot_format_version", 0))
+		if snapshot_version != SNAPSHOT_FORMAT_VERSION:
+			return {
+				"status": "error",
+				"message": "Unsupported snapshot format version '%s'." % snapshot_version
+			}
+
+	var restored_state := _build_restored_world_state(snapshot)
+	if restored_state.is_empty():
+		return {
+			"status": "error",
+			"message": "Snapshot did not contain a restorable world state."
+		}
+
+	fixed_step_seconds = max(float(restored_state.get("fixed_step_seconds", DEFAULT_FIXED_STEP)), 0.0001)
+	restored_state["fixed_step_seconds"] = fixed_step_seconds
+	_accumulator_seconds = max(float(snapshot.get("accumulator_seconds", 0.0)), 0.0)
+	_clone_sequence = max(int(snapshot.get("clone_sequence", 0)), _estimate_clone_sequence(restored_state.get("installed_rules", {})))
+	_world_state = restored_state
+	for rule_id_variant in restored_state.get("installed_rules", {}).keys():
+		_initialize_rule_targets(restored_state["installed_rules"][rule_id_variant])
+
+	return {
+		"status": "restored",
+		"snapshot": get_snapshot()
+	}
 
 
 func advance_tick(delta_seconds: float) -> void:
@@ -160,6 +199,36 @@ func _build_null_world() -> Dictionary:
 			}
 		]
 	}
+
+
+func _build_restored_world_state(snapshot: Dictionary) -> Dictionary:
+	var restored_state := snapshot.duplicate(true)
+	restored_state.erase("accumulator_seconds")
+	restored_state.erase("available_rule_packages")
+	restored_state.erase("available_template_ids")
+	restored_state.erase("characters")
+	restored_state.erase("clone_sequence")
+	restored_state.erase("events")
+	restored_state.erase("installed_rules_by_id")
+	restored_state.erase("installed_rules")
+	restored_state.erase("snapshot_format_version")
+	restored_state.erase("tick")
+
+	if not snapshot.get("entities", {}) is Dictionary:
+		return {}
+
+	restored_state["world_id"] = String(snapshot.get("world_id", "null-world"))
+	restored_state["world_name"] = String(snapshot.get("world_name", "Null World"))
+	restored_state["runtime_choice"] = String(snapshot.get("runtime_choice", "godot-4-desktop"))
+	restored_state["elapsed_seconds"] = max(float(snapshot.get("elapsed_seconds", 0.0)), 0.0)
+	restored_state["tick_index"] = max(int(snapshot.get("tick_index", snapshot.get("tick", 0))), 0)
+	restored_state["fixed_step_seconds"] = max(float(snapshot.get("fixed_step_seconds", DEFAULT_FIXED_STEP)), 0.0001)
+	restored_state["concepts"] = _duplicate_array(snapshot.get("concepts", []))
+	restored_state["entities"] = snapshot.get("entities", {}).duplicate(true)
+	restored_state["installed_rules"] = _normalize_snapshot_rules(snapshot)
+	restored_state["player_task_history"] = _duplicate_array(snapshot.get("player_task_history", []))
+	restored_state["event_log"] = _duplicate_array(snapshot.get("event_log", []))
+	return restored_state
 
 
 func _run_tick(step_seconds: float) -> void:
@@ -341,7 +410,7 @@ func _build_character_list(entities: Dictionary) -> Array:
 			"name": entity.get("name", entity_id),
 			"hunger": needs.get("hunger", 0.0),
 			"health": stats.get("health", 100.0),
-			"energy": max(0.0, 100.0 - float(needs.get("sleep", 0.0))),
+			"energy": max(0.0, float(needs.get("energy", 100.0 - float(needs.get("sleep", 0.0))))),
 			"morale": traits.get("morale", 50.0),
 			"focus": traits.get("focus", 50.0),
 			"current_task": behavior.get("current_task", "Awaiting the next world rule")
@@ -358,6 +427,51 @@ func _build_event_messages(event_log: Array) -> Array:
 		else:
 			messages.append(String(event))
 	return messages
+
+
+func _normalize_snapshot_rules(snapshot: Dictionary) -> Dictionary:
+	var raw_rules: Variant = snapshot.get("installed_rules_by_id", snapshot.get("installed_rules", {}))
+	var normalized_rules: Dictionary = {}
+
+	if raw_rules is Array:
+		for raw_rule in raw_rules:
+			if not raw_rule is Dictionary:
+				continue
+			var rule_data: Dictionary = raw_rule.duplicate(true)
+			var rule_id := String(rule_data.get("id", ""))
+			if rule_id.is_empty():
+				continue
+			normalized_rules[rule_id] = _normalize_rule_patch(rule_data)
+	elif raw_rules is Dictionary:
+		for rule_id_variant in raw_rules.keys():
+			var rule_id := String(rule_id_variant)
+			var raw_rule = raw_rules[rule_id_variant]
+			if not raw_rule is Dictionary:
+				continue
+			var rule_data: Dictionary = raw_rule.duplicate(true)
+			rule_data["id"] = rule_id
+			normalized_rules[rule_id] = _normalize_rule_patch(rule_data)
+
+	return normalized_rules
+
+
+func _duplicate_array(value: Variant) -> Array:
+	if value is Array:
+		return value.duplicate(true)
+	return []
+
+
+func _estimate_clone_sequence(installed_rules: Dictionary) -> int:
+	var max_sequence := 0
+	for rule_id_variant in installed_rules.keys():
+		var rule_id := String(rule_id_variant)
+		var suffix_index := rule_id.rfind("_")
+		if suffix_index == -1:
+			continue
+		var suffix := rule_id.substr(suffix_index + 1)
+		if suffix.is_valid_int():
+			max_sequence = max(max_sequence, int(suffix))
+	return max_sequence
 
 
 func _make_unique_rule_id(base_id: String) -> String:

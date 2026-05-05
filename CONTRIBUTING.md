@@ -5,12 +5,25 @@
 This repository uses **issue-driven development**:
 
 1. Open or refine a GitHub issue before writing code.
-2. Create a branch for that issue.
-3. Implement the scoped change.
-4. Open a PR linked to the issue.
-5. Merge through PR review; do not merge direct-to-main changes by default.
+2. Create or reuse a repo-local git worktree under `.agent-workspaces/<issue-or-scope>/`.
+3. Create the issue branch in that worktree, or reuse the existing issue branch when the worktree already exists.
+4. Implement the scoped change.
+5. Open a PR linked to the issue.
+6. Merge through PR review; do not merge direct-to-main changes by default.
 
-`godot-world/` is the active Godot 4 project and the primary location for gameplay, runtime, and rule-package changes.
+`godot-world/` is the active Godot 4 project and the primary location for gameplay, runtime, and rule-package changes. Root-level changes should generally stay limited to repo docs, workflow metadata, or shared tooling.
+
+## Repo-local worktree convention
+
+Keep reusable contributor and agent workspaces inside the repository boundary:
+
+- preferred location: `.agent-workspaces/<issue-or-scope>/`
+- create once from the repo root with `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>`
+- reuse the same worktree for follow-up commits on that issue when practical
+- keep scratch notes, logs, and generated artifacts inside that worktree or other ignored repo-local paths
+- do **not** create extra clones or checkouts under `/Users/seeton`, `~`, or other home-directory locations
+
+This keeps parallel work visible, avoids stray home-directory clones, and makes cleanup predictable. `.agent-workspaces/` is gitignored and should remain uncommitted.
 
 ## Issue decomposition for multi-agent work
 
@@ -65,7 +78,7 @@ Call out scope clearly:
 
 ## Multi-agent integration rules
 
-- One agent per branch/PR.
+- One agent per worktree branch/PR.
 - Do not mix unrelated issue scopes in the same branch.
 - Rebase or merge the latest target branch before final validation.
 - The coordinator merges child PRs in dependency order, then closes the parent issue when integration is complete.

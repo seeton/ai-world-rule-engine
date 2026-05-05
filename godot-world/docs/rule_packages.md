@@ -36,6 +36,16 @@ If no strong package matches, or the player explicitly wants a new variant, the 
 - can optionally point to `forked_from`
 - can carry a `suggested_pr_target` for future upstream submission
 
+### 2a. Desktop shell review flow
+
+`res://scripts/ui/main_desktop.gd` now treats the latest task proposal as an editable review artifact:
+
+- the Proposal Review panel shows clone/fork metadata, source repo/ref, and suggested upstream PR targets
+- the package JSON is editable before install
+- the shell requires a local approval step before install when the edited draft changes
+- invalid JSON and changed-after-approval drafts are blocked until the player fixes and re-approves them
+- deferred operations remain visible during review so the player knows which parts will not apply directly at runtime today
+
 ### 3. Social workflow
 
 Packages support community metadata:
@@ -71,12 +81,18 @@ This allows a player to:
 
 ## GitHub contribution model
 
-Use package changes with the same default workflow as the rest of the repo: **issue → branch → PR**.
+Use package changes with the same default workflow as the rest of the repo: **issue → repo-local worktree → branch → PR**.
 
+- create or reuse `.agent-workspaces/<issue-or-scope>/` before editing package data
+- use `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>` when the worktree does not already exist
+- reuse that worktree for follow-up commits on the same issue when practical
+- do not create extra clones or checkouts in `/Users/seeton`, `~`, or other home-directory paths
 - clone an existing package when the mechanic already fits
 - fork it when you need a variant and set `forked_from`
 - preserve `source_repo` and `source_ref`
 - set `suggested_pr_target` when the package should be proposed upstream
+
+Before opening or updating a rule package PR, run the shared repo validator from `godot-world/` with `./scripts/validate_repo.sh`. It is the required package check for this project: it validates package JSON against `rules/schema/rule_package.schema.json`, enforces package metadata invariants such as filename and `package_id` alignment, and also catches broken static Godot references that package work can accidentally introduce elsewhere in the project. Use `python3 scripts/validate_repo.py --root <path-to-godot-world>` when validating another checkout or worktree.
 
 For rule package PRs, include:
 

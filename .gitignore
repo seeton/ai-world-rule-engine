@@ -1,4 +1,7 @@
+node_modules/
 .codex-schemas/
+.agent-workspaces/
 .godot/
 .DS_Store
+.env
 *.log

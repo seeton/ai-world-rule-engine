@@ -25,7 +25,7 @@
 - [ ] Godot runtime or scene behavior changed
 - [ ] Rule package data changed under `godot-world/rules/packages/`
 - [ ] Rule package schema or workflow docs changed
-- [ ] Legacy Node PoC changed
+- [ ] Repo-level docs or GitHub workflow templates changed
 
 If rule packages changed, summarize:
 
@@ -43,9 +43,10 @@ If rule packages changed, summarize:
 
 List exactly what you ran or verified.
 
-### Automated
+### Automated / file-level
 
-- [ ] `npm test`
+- [ ] Existing repo checks run where applicable
+- [ ] File-level validation only (docs/templates change)
 - [ ] Not applicable
 
 ### Manual / reviewer checks

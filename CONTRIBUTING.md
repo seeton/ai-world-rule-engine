@@ -10,7 +10,7 @@ This repository uses **issue-driven development**:
 4. Open a PR linked to the issue.
 5. Merge through PR review; do not merge direct-to-main changes by default.
 
-`godot-world/` is the active Godot 4 project. The root Node app is an older PoC and should remain intact unless an issue explicitly calls for changes there.
+This repository is centered on the Godot world-rule engine. Runtime, scene, and package changes live under `godot-world/`, while root-level docs and GitHub templates define the shared collaboration workflow.
 
 ## Issue decomposition for multi-agent work
 
@@ -22,7 +22,7 @@ Use one tracking issue for the larger goal, then split implementation into indep
   - Godot UI / scene work
   - simulation/runtime changes
   - rule package content
-  - docs
+  - docs and workflow
 - If two agents would touch the same files heavily, split the work differently or sequence it instead of running in parallel.
 
 Each child issue should include:
@@ -59,8 +59,8 @@ Every PR should be small enough to review and should include:
 
 Call out scope clearly:
 
+- whether the PR touches repo-level workflow docs or templates
 - whether the PR touches `godot-world/`
-- whether the legacy Node PoC was intentionally left unchanged
 - whether rule packages are new, cloned, or forks of existing packages
 
 ## Multi-agent integration rules

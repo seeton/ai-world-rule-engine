@@ -130,6 +130,7 @@ func _build_null_world() -> Dictionary:
 		"tick_index": 0,
 		"fixed_step_seconds": fixed_step_seconds,
 		"concepts": [],
+		"world_clock": {},
 		"entities": {
 			"origin_entity": {
 				"id": "origin_entity",
@@ -170,11 +171,23 @@ func _run_tick(step_seconds: float) -> void:
 	entity_ids.sort()
 	rule_ids.sort()
 
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules[rule_id]
+		if not bool(rule.get("enabled", true)):
+			continue
+		
+		var rule_scope := String(rule.get("scope", "entity"))
+		if rule_scope == "world":
+			_apply_world_rule(rule, step_seconds)
+
 	for entity_id in entity_ids:
 		var entity: Dictionary = entities[entity_id]
 		for rule_id in rule_ids:
 			var rule: Dictionary = installed_rules[rule_id]
 			if not bool(rule.get("enabled", true)):
+				continue
+			var rule_scope := String(rule.get("scope", "entity"))
+			if rule_scope != "entity":
 				continue
 			if not _entity_matches_rule(entity, rule):
 				continue
@@ -230,6 +243,42 @@ func _apply_rule(entity: Dictionary, rule: Dictionary, step_seconds: float) -> v
 		components[component_name] = component
 
 	entity["components"] = components
+
+
+func _apply_world_rule(rule: Dictionary, step_seconds: float) -> void:
+	var world_clock: Dictionary = _world_state.get("world_clock", {})
+	
+	for effect in rule.get("effects", []):
+		var component_name := String(effect.get("component", "world_clock"))
+		if component_name != "world_clock":
+			continue
+		
+		var field_name := String(effect.get("field", "value"))
+		var current_value := float(world_clock.get(field_name, effect.get("default", 0.0)))
+		var next_value := current_value
+		var operation := String(effect.get("op", "add"))
+		
+		match operation:
+			"set":
+				next_value = float(effect.get("value", effect.get("default", 0.0)))
+			"min":
+				next_value = min(current_value, float(effect.get("value", current_value)))
+			"max":
+				next_value = max(current_value, float(effect.get("value", current_value)))
+			_:
+				next_value = current_value + float(effect.get("value_per_second", 0.0)) * step_seconds
+		
+		if effect.has("min"):
+			next_value = max(next_value, float(effect["min"]))
+		if effect.has("max"):
+			next_value = min(next_value, float(effect["max"]))
+		
+		world_clock[field_name] = snappedf(next_value, 0.0001)
+	
+	if world_clock.has("total_ticks"):
+		world_clock["total_ticks"] = int(_world_state.get("tick_index", 0)) + 1
+	
+	_world_state["world_clock"] = world_clock
 
 
 func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:

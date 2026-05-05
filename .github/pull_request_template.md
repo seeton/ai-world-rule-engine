@@ -7,7 +7,9 @@
 ## Workflow
 
 - [ ] Work started from a tracked GitHub issue
+- [ ] Changes were made from a repo-local worktree under `.agent-workspaces/`
 - [ ] Changes were implemented on a dedicated branch
+- [ ] No home-directory clone instructions or artifacts were introduced
 - [ ] This PR is scoped to the issue acceptance criteria
 - [ ] Any follow-up work has been split into new issues instead of expanding scope
 
@@ -53,6 +55,7 @@ List exactly what you ran or verified.
 - [ ] Godot behavior verified manually
 - [ ] Rule package reviewed against `godot-world/rules/schema/rule_package.schema.json`
 - [ ] Clone/fork/PR metadata reviewed for correctness
+- [ ] Repo-local worktree guidance and templates reviewed when workflow docs changed
 - [ ] Screenshots, recordings, or logs attached when helpful
 
 ### Evidence

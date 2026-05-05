@@ -7,12 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this template for planned work that should later be implemented via clone/branch/PR.
+        Use this template for planned work that should later be implemented via repo-local worktree/branch/PR.
 
         Scope this repo carefully:
         - `godot-world/` for Godot 4 simulation work
         - `godot-world/rules/` for safe rule packages
         - legacy Node PoC only when directly relevant
+        - contributor workspaces belong under `.agent-workspaces/`, not home-directory clones
   - type: dropdown
     id: area
     attributes:

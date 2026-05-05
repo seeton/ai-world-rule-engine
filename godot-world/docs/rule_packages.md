@@ -71,8 +71,10 @@ This allows a player to:
 
 ## GitHub contribution model
 
-Use package changes with the same default workflow as the rest of the repo: **issue → branch → PR**.
+Use package changes with the same default workflow as the rest of the repo: **issue → repo-local worktree → branch → PR**.
 
+- create or reuse `.agent-workspaces/<issue-or-scope>/` before editing package data
+- do not create extra clones in `/Users/seeton`, `~`, or other home-directory paths
 - clone an existing package when the mechanic already fits
 - fork it when you need a variant and set `forked_from`
 - preserve `source_repo` and `source_ref`

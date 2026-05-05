@@ -4,6 +4,12 @@ title: "[Bug]: "
 labels:
   - bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for tracked regressions and workflow bugs.
+
+        Investigation and fixes should use repo-local worktrees under `.agent-workspaces/`, not home-directory clones.
   - type: dropdown
     id: area
     attributes:

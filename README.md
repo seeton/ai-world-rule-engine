@@ -34,9 +34,11 @@ npm start
 
 ## GitHub workflow
 
-Default development flow is **issue → branch → PR**.
+Default development flow is **issue → repo-local worktree → branch → PR**.
 
 - Start from a GitHub issue before implementing.
+- Create or reuse a repo-local git worktree under `.agent-workspaces/<issue-or-scope>/` and keep branch-specific artifacts there.
+- Do not create extra clones in `/Users/seeton`, `~`, or other home-directory paths.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
 - Keep Godot 4 work under `godot-world/` unless the issue explicitly targets the legacy Node PoC.
-- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for worktree setup, branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.

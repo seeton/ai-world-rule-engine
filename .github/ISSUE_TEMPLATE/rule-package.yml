@@ -13,6 +13,7 @@ body:
         - package files live in `godot-world/rules/packages/`
         - schema contract lives in `godot-world/rules/schema/rule_package.schema.json`
         - packages must not embed arbitrary GDScript
+        - contributor workspaces belong under `.agent-workspaces/`, not home-directory clones
   - type: dropdown
     id: request_type
     attributes:
@@ -62,9 +63,10 @@ body:
     id: workflow
     attributes:
       label: Clone/fork/PR workflow notes
-      description: Capture how this package should move through issue -> branch -> PR -> upstream.
+      description: Capture how this package should move through issue -> repo-local worktree -> branch -> PR -> upstream.
       placeholder: |
         Example:
+        - Reuse `.agent-workspaces/issue-123`
         - Start from builtin.hunger
         - Fork into community.hunger-lite
         - Open PR against main package library after local validation

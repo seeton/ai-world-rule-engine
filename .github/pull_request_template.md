@@ -7,9 +7,9 @@
 ## Workflow
 
 - [ ] Work started from a tracked GitHub issue
-- [ ] Changes were made from a repo-local worktree under `.agent-workspaces/`
+- [ ] Changes were made from a repo-local reusable worktree under `.agent-workspaces/`
 - [ ] Changes were implemented on a dedicated branch
-- [ ] No home-directory clone instructions or artifacts were introduced
+- [ ] No `/Users/seeton`, `~`, or other home-directory clone/checkouts were introduced
 - [ ] This PR is scoped to the issue acceptance criteria
 - [ ] Any follow-up work has been split into new issues instead of expanding scope
 

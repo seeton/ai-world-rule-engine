@@ -74,7 +74,9 @@ This allows a player to:
 Use package changes with the same default workflow as the rest of the repo: **issue → repo-local worktree → branch → PR**.
 
 - create or reuse `.agent-workspaces/<issue-or-scope>/` before editing package data
-- do not create extra clones in `/Users/seeton`, `~`, or other home-directory paths
+- use `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>` when the worktree does not already exist
+- reuse that worktree for follow-up commits on the same issue when practical
+- do not create extra clones or checkouts in `/Users/seeton`, `~`, or other home-directory paths
 - clone an existing package when the mechanic already fits
 - fork it when you need a variant and set `forked_from`
 - preserve `source_repo` and `source_ref`

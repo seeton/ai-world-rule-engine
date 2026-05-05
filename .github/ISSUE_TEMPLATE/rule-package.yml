@@ -13,7 +13,7 @@ body:
         - package files live in `godot-world/rules/packages/`
         - schema contract lives in `godot-world/rules/schema/rule_package.schema.json`
         - packages must not embed arbitrary GDScript
-        - contributor workspaces belong under `.agent-workspaces/`, not home-directory clones
+        - contributor workspaces belong under `.agent-workspaces/`, reusing the same issue worktree when practical and never using home-directory clones or checkouts
   - type: dropdown
     id: request_type
     attributes:

@@ -38,7 +38,8 @@ Default development flow is **issue → repo-local worktree → branch → PR**.
 
 - Start from a GitHub issue before implementing.
 - Create or reuse a repo-local git worktree under `.agent-workspaces/<issue-or-scope>/` and keep branch-specific artifacts there.
-- Do not create extra clones in `/Users/seeton`, `~`, or other home-directory paths.
+- Create the issue branch with `git worktree add .agent-workspaces/<issue-or-scope> -b <branch-name>` when needed, then reuse that worktree for follow-up commits.
+- Do not create extra clones or checkouts in `/Users/seeton`, `~`, or other home-directory paths.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
 - Keep Godot 4 work under `godot-world/` unless the issue explicitly targets the legacy Node PoC.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for worktree setup, branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.

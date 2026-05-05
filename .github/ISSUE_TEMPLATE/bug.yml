@@ -9,7 +9,7 @@ body:
       value: |
         Use this template for tracked regressions and workflow bugs.
 
-        Investigation and fixes should use repo-local worktrees under `.agent-workspaces/`, not home-directory clones.
+        Investigation and fixes should use repo-local reusable worktrees under `.agent-workspaces/`, never home-directory clones or checkouts.
   - type: dropdown
     id: area
     attributes:

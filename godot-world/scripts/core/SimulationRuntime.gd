@@ -440,6 +440,9 @@ func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:
 
 
 func _initialize_rule_targets(rule: Dictionary) -> void:
+	if String(rule.get("scope", "entity")) == "world":
+		return
+
 	var entities: Dictionary = _world_state.get("entities", {})
 	var entity_ids: Array = entities.keys()
 	entity_ids.sort()

@@ -67,13 +67,15 @@ func _update_interaction_hint() -> void:
 
 	var in_range := _is_player_in_range()
 	var should_show := (in_range or _is_hovering_gm) and _gm_dialog == null
-	interaction_hint.visible = should_show
 
 	if should_show:
+		interaction_hint.visible = true
 		interaction_hint.global_position = gm.global_position + Vector2(-40, -60)
 		interaction_hint.modulate.a = move_toward(interaction_hint.modulate.a, 1.0, 0.15)
 	else:
 		interaction_hint.modulate.a = move_toward(interaction_hint.modulate.a, 0.0, 0.2)
+		if is_zero_approx(interaction_hint.modulate.a):
+			interaction_hint.visible = false
 
 func _on_gm_interaction() -> void:
 	if not _is_player_in_range() or _gm_dialog != null:

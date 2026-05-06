@@ -1,0 +1,94 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/world_2d_scene.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/game/player_character_2d.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/game/game_master_2d.gd" id="3_gm"]
+
+[sub_resource type="RectangleShape2D" id="1_player_shape"]
+size = Vector2(44, 44)
+
+[sub_resource type="RectangleShape2D" id="2_gm_shape"]
+size = Vector2(68, 68)
+
+[node name="World2D" type="Node2D"]
+script = ExtResource("1_world")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1440.0
+offset_bottom = 900.0
+color = Color(0.968627, 0.972549, 0.984314, 1)
+mouse_filter = 2
+
+[node name="GroundStripe" type="ColorRect" parent="."]
+offset_left = 290.0
+offset_top = 210.0
+offset_right = 1150.0
+offset_bottom = 700.0
+color = Color(0.87451, 0.901961, 0.929412, 1)
+mouse_filter = 2
+
+[node name="WorldEntities" type="Node2D" parent="."]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(720, 277)
+script = ExtResource("2_player")
+
+[node name="Visual" type="ColorRect" parent="Player"]
+offset_left = -22.0
+offset_top = -22.0
+offset_right = 22.0
+offset_bottom = 22.0
+color = Color(0.2, 0.6, 1, 1)
+mouse_filter = 2
+
+[node name="Label" type="Label" parent="Player"]
+offset_left = -60.0
+offset_top = 28.0
+offset_right = 60.0
+offset_bottom = 48.0
+text = "プレイヤー"
+horizontal_alignment = 1
+mouse_filter = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+shape = SubResource("1_player_shape")
+
+[node name="GameMaster" type="Node2D" parent="."]
+position = Vector2(554, 534)
+script = ExtResource("3_gm")
+
+[node name="Visual" type="ColorRect" parent="GameMaster"]
+offset_left = -34.0
+offset_top = -34.0
+offset_right = 34.0
+offset_bottom = 34.0
+color = Color(1, 0.8, 0.2, 1)
+mouse_filter = 2
+
+[node name="Label" type="Label" parent="GameMaster"]
+offset_left = -70.0
+offset_top = 42.0
+offset_right = 70.0
+offset_bottom = 62.0
+text = "ゲームマスター"
+horizontal_alignment = 1
+mouse_filter = 2
+
+[node name="InteractionArea" type="Area2D" parent="GameMaster"]
+input_pickable = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="GameMaster/InteractionArea"]
+shape = SubResource("2_gm_shape")
+
+[node name="InteractionHint" type="Label" parent="."]
+modulate = Color(1, 1, 1, 0)
+offset_right = 260.0
+offset_bottom = 30.0
+text = "クリックして話す"
+theme_override_colors/font_color = Color(0.15, 0.15, 0.15, 1)
+theme_override_colors/font_shadow_color = Color(1, 1, 1, 0.65)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+mouse_filter = 2

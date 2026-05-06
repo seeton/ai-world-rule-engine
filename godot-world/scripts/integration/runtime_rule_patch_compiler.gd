@@ -10,6 +10,7 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 
 	var patch: Dictionary = rule_package.get("patch", {})
 	var operations: Array = patch.get("operations", [])
+	var runtime_rule: Dictionary = patch.get("runtime_rule", {})
 	var effects: Array = []
 	var deferred_operations: Array = []
 	var stat_components: Dictionary = {}
@@ -38,11 +39,11 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 	return {
 		"status": "compiled",
 		"runtime_patch": {
-			"id": "compiled_%s" % package_id.replace(".", "_"),
-			"name": "%s (Compiled)" % String(rule_package.get("display_name", package_id)),
-			"concept": concept,
-			"scope": "entity",
-			"target_tags": ["mortal"],
+			"id": String(runtime_rule.get("id", "compiled_%s" % package_id.replace(".", "_"))),
+			"name": String(runtime_rule.get("name", "%s (Compiled)" % String(rule_package.get("display_name", package_id)))),
+			"concept": String(runtime_rule.get("concept", concept)),
+			"scope": String(runtime_rule.get("scope", "entity")),
+			"target_tags": _normalize_string_array(runtime_rule.get("target_tags", ["mortal"])),
 			"requires_rule_kinds": _normalize_string_array(patch.get("requires_rule_kinds", [])),
 			"provides_rule_kinds": _normalize_string_array(patch.get("provides_rule_kinds", [])),
 			"install_actions": _duplicate_install_actions(patch.get("install_actions", [])),
@@ -88,6 +89,8 @@ func _compile_tick_delta(operation: Dictionary, stat_components: Dictionary) -> 
 	}
 
 func _resolve_component(stat_id: String, ui_group: String) -> String:
+	if not ui_group.is_empty():
+		return ui_group
 	if ui_group == "needs":
 		return "needs"
 	if stat_id in ["hunger", "sleep", "energy"]:

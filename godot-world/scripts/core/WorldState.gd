@@ -52,6 +52,11 @@ func submit_player_task(task_text: String) -> Dictionary:
 	return result
 
 
+func talk_to_game_master(message: String) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.talk_to_game_master(message)
+
+
 func clone_rule(rule_id: String) -> Dictionary:
 	_ensure_runtime()
 	return _runtime.clone_rule(rule_id)
@@ -61,7 +66,12 @@ func create_rule_from_patch(rule_patch: Dictionary) -> Dictionary:
 	_ensure_runtime()
 	var rule_package := _resolve_rule_package(rule_patch)
 	if not rule_package.is_empty():
-		return _install_rule_package(rule_package)
+		var review_result := review_rule_package_proposal(rule_package)
+		if String(review_result.get("status", "")) == "error":
+			return review_result
+		if String(review_result.get("status", "")) != "ready_for_install":
+			return review_result
+		return _install_rule_package(review_result.get("rule_package", rule_package))
 	return _runtime.create_rule_from_patch(rule_patch)
 
 
@@ -408,7 +418,9 @@ func _rule_package_to_template(rule_package: Dictionary, compilation: Dictionary
 func _looks_like_rule_package(candidate: Dictionary) -> bool:
 	if String(candidate.get("schema_version", "")) != RULE_PACKAGE_SCHEMA_VERSION:
 		return false
-	return typeof(candidate.get("patch", {})) == TYPE_DICTIONARY
+	if typeof(candidate.get("patch", {})) != TYPE_DICTIONARY:
+		return false
+	return _find_missing_rule_package_keys(candidate).is_empty()
 
 
 func _find_missing_rule_package_keys(rule_package: Dictionary) -> Array:

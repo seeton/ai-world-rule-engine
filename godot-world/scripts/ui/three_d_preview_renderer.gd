@@ -261,11 +261,14 @@ func _apply_lighting(lighting_data: Dictionary) -> void:
     var enabled := _variant_to_bool(lighting_data.get("enabled", false))
     _light.visible = enabled
     _light.shadow_enabled = enabled and _variant_to_bool(lighting_data.get("shadows_enabled", false))
-    _light.light_energy = float(lighting_data.get("energy", 1.5))
+    _light.light_energy = float(lighting_data.get("energy", lighting_data.get("intensity", 1.5)))
     _light.light_color = _color_from_variant(lighting_data.get("color", Color(1.0, 0.97, 0.92)), Color(1.0, 0.97, 0.92))
 
-    if lighting_data.has("rotation_degrees"):
-        _light.rotation_degrees = _vector3_from_variant(lighting_data.get("rotation_degrees"), Vector3(-50.0, -35.0, 0.0))
+    if lighting_data.has("rotation_degrees") or lighting_data.has("light_rotation_degrees"):
+        _light.rotation_degrees = _vector3_from_variant(
+            lighting_data.get("rotation_degrees", lighting_data.get("light_rotation_degrees")),
+            Vector3(-50.0, -35.0, 0.0)
+        )
         return
 
     var direction := _vector3_from_variant(
@@ -299,7 +302,7 @@ func _update_camera(camera_data: Dictionary, normalized_renderables: Array, floo
     if position.distance_to(target) < 0.25:
         position += Vector3(0.0, 1.0, 2.0)
 
-    _camera.fov = float(camera_data.get("fov", 65.0))
+    _camera.fov = float(camera_data.get("fov", camera_data.get("fov_degrees", 65.0)))
     _camera.position = position
     _camera.look_at(target, Vector3.UP)
 

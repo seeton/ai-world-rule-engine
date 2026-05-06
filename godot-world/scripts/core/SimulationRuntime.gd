@@ -3,6 +3,7 @@ class_name SimulationRuntime
 
 const DEFAULT_FIXED_STEP := 0.25
 const SNAPSHOT_FORMAT_VERSION := 1
+const DEFAULT_LOCALE := "ja"
 const DEFAULT_THREE_D_CAMERA := {
 	"position": {"x": 8.0, "y": 7.0, "z": 10.0},
 	"look_at": {"x": 0.0, "y": 1.0, "z": 0.0},
@@ -25,11 +26,39 @@ const CHARACTER_TAG_HINTS := ["agent", "character", "gm", "mortal", "npc", "pers
 const GM_ARCHETYPE_HINTS := ["director", "game_master", "gm"]
 const GM_TAG_HINTS := ["director", "game_master", "gm"]
 
+const TEXT := {
+	"ja": {
+		"time_rule_already_active": "時間のルールはすでに有効です。",
+		"time_rule_installed": "事前定義済みの時間ルール time_counter を適用しました。世界に戻ると右上に時計が表示されます。",
+		"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
+		"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
+		"help_prompt": "時間のルールを作成しろ、と言ってください。",
+		"player_name": "プレイヤー",
+		"gm_name": "ゲームマスター",
+		"player_task": "最初のルールを待っています",
+		"gm_task": "プレイヤーの依頼を待っています",
+		"world_bootstrap": "プレイヤーとゲームマスターがいる世界を初期化しました。"
+	},
+	"en": {
+		"time_rule_already_active": "The time rule is already active.",
+		"time_rule_installed": "Applied the predefined time rule 'time_counter'. Return to the world to see the clock in the top-right.",
+		"time_rule_install_failed": "Failed to apply the time rule: %s",
+		"time_rule_load_failed": "Failed to load the time rule definition.",
+		"help_prompt": "Ask me to create the time rule.",
+		"player_name": "Player",
+		"gm_name": "Game Master",
+		"player_task": "Waiting for the first rule",
+		"gm_task": "Waiting for the player's request",
+		"world_bootstrap": "Initialized the world with one player and one game master."
+	}
+}
+
 var fixed_step_seconds: float = DEFAULT_FIXED_STEP
 var _accumulator_seconds: float = 0.0
 var _world_state: Dictionary = {}
 var _template_index: Dictionary = {}
 var _clone_sequence: int = 0
+var _locale: String = DEFAULT_LOCALE
 
 
 func _init(rule_templates: Array = []) -> void:
@@ -46,6 +75,75 @@ func record_player_task(task_result: Dictionary) -> void:
 	history.append(task_result.duplicate(true))
 	_world_state["player_task_history"] = history
 	_append_event("player_task_submitted", "Player submitted a task for rule proposal.", {"task": task_result.get("task_text", "")})
+
+
+func talk_to_game_master(message: String) -> Dictionary:
+	var normalized_message := message.strip_edges().to_lower()
+	var conversation_log: Array = _world_state.get("conversation_log", [])
+	
+	conversation_log.append({
+		"speaker": "player",
+		"text": message
+	})
+	
+	var gm_response := ""
+	var action_taken := ""
+	var time_rule_triggers := [
+		"create time rule",
+		"create the time rule",
+		"make time rule",
+		"install time rule",
+		"add time rule",
+		"時間のルールを作成",
+		"時間のルールを作成しろ",
+		"時間ルールを作成",
+		"タイムルールを作成"
+	]
+	
+	var matched := false
+	for trigger in time_rule_triggers:
+		if normalized_message.find(trigger.to_lower()) != -1:
+			matched = true
+			break
+	
+	if matched:
+		var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+		if installed_rules.has("time_counter"):
+			gm_response = _text("time_rule_already_active")
+			action_taken = "none"
+		else:
+			var time_rule_patch: Dictionary = _load_time_rule_package()
+			if not time_rule_patch.is_empty():
+				var result := create_rule_from_patch(time_rule_patch)
+				if result.get("status", "") == "installed":
+					gm_response = _text("time_rule_installed")
+					action_taken = "installed_time_rule"
+				else:
+					gm_response = _text("time_rule_install_failed") % result.get("message", "unknown error")
+					action_taken = "error"
+			else:
+				gm_response = _text("time_rule_load_failed")
+				action_taken = "error"
+	else:
+		gm_response = _text("help_prompt")
+		action_taken = "none"
+	
+	conversation_log.append({
+		"speaker": "gm",
+		"text": gm_response
+	})
+	
+	_world_state["conversation_log"] = conversation_log
+	_append_event("gm_conversation", "Player talked to Game Master.", {"message": message, "response": gm_response})
+	
+	return {
+		"status": "ok",
+		"action": action_taken,
+		"reply": gm_response,
+		"gm_response": gm_response,
+		"installed_rule_id": "time_counter" if action_taken == "installed_time_rule" else "",
+		"conversation_log": conversation_log.duplicate(true)
+	}
 
 
 func create_rule_from_patch(rule_patch: Dictionary) -> Dictionary:
@@ -112,6 +210,8 @@ func get_snapshot() -> Dictionary:
 	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
+	snapshot["conversation_log"] = snapshot.get("conversation_log", []).duplicate(true)
+	snapshot["clock"] = _build_clock_data(snapshot.get("entities", {}), installed_rules_by_id)
 	return snapshot
 
 
@@ -171,12 +271,13 @@ func _build_null_world() -> Dictionary:
 		"fixed_step_seconds": fixed_step_seconds,
 		"concepts": [],
 		"preview_3d": _build_default_three_d_preview_state(),
+		"world_clock": {},
 		"entities": {
-			"origin_entity": {
-				"id": "origin_entity",
-				"name": "Origin Entity",
-				"archetype": "origin",
-				"tags": ["origin", "mortal", "mutable"],
+			"player_character": {
+				"id": "player_character",
+				"name": _text("player_name"),
+				"archetype": "player",
+				"tags": ["player", "character", "mortal", "mutable"],
 				"position": {
 					"x": 0.0,
 					"y": 0.9,
@@ -195,23 +296,68 @@ func _build_null_world() -> Dictionary:
 				"components": {
 					"needs": {},
 					"stats": {},
+					"time": {},
 					"traits": {
 						"curiosity": 1.0,
 						"morale": 50.0,
 						"focus": 50.0
 					},
 					"behavior": {
-						"current_task": "Awaiting the first installed rule"
+						"current_task": _text("player_task")
+					},
+					"physics": {
+						"dynamic": false,
+						"grounded": true,
+						"gravity_scale": 0.0,
+						"floor_offset_y": 0.9,
+						"velocity": {"x": 0.0, "y": 0.0, "z": 0.0}
+					}
+				}
+			},
+			"game_master": {
+				"id": "game_master",
+				"name": _text("gm_name"),
+				"archetype": "gm",
+				"tags": ["gm", "character", "immortal", "immutable"],
+				"position": {
+					"x": -2.5,
+					"y": 1.1,
+					"z": -1.5,
+					"location": "preview_overlook"
+				},
+				"render_3d": {
+					"kind": "gm",
+					"size": {
+						"x": 1.1,
+						"y": 2.2,
+						"z": 1.1
+					},
+					"color": "#f3c969"
+				},
+				"components": {
+					"traits": {
+						"authority": 100.0
+					},
+					"behavior": {
+						"current_task": _text("gm_task")
+					},
+					"physics": {
+						"dynamic": false,
+						"grounded": true,
+						"gravity_scale": 0.0,
+						"floor_offset_y": 1.1,
+						"velocity": {"x": 0.0, "y": 0.0, "z": 0.0}
 					}
 				}
 			}
 		},
 		"installed_rules": {},
 		"player_task_history": [],
+		"conversation_log": [],
 		"event_log": [
 			{
 				"type": "world_initialized",
-				"message": "Bootstrapped a null world with one mutable origin entity.",
+				"message": _text("world_bootstrap"),
 				"details": {}
 			}
 		]
@@ -231,7 +377,7 @@ func _build_restored_world_state(snapshot: Dictionary) -> Dictionary:
 	restored_state.erase("snapshot_format_version")
 	restored_state.erase("tick")
 
-	if not snapshot.get("entities", {}) is Dictionary:
+	if not (snapshot.get("entities", {}) is Dictionary):
 		return {}
 
 	restored_state["world_id"] = String(snapshot.get("world_id", "null-world"))
@@ -256,11 +402,23 @@ func _run_tick(step_seconds: float) -> void:
 	entity_ids.sort()
 	rule_ids.sort()
 
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules[rule_id]
+		if not bool(rule.get("enabled", true)):
+			continue
+		
+		var rule_scope := String(rule.get("scope", "entity"))
+		if rule_scope == "world":
+			_apply_world_rule(rule, step_seconds)
+
 	for entity_id in entity_ids:
 		var entity: Dictionary = entities[entity_id]
 		for rule_id in rule_ids:
 			var rule: Dictionary = installed_rules[rule_id]
 			if not bool(rule.get("enabled", true)):
+				continue
+			var rule_scope := String(rule.get("scope", "entity"))
+			if rule_scope != "entity":
 				continue
 			if not _entity_matches_rule(entity, rule):
 				continue
@@ -358,6 +516,41 @@ func _install_normalized_rule(normalized_rule: Dictionary) -> Dictionary:
 		"installed": true,
 		"rule": _world_state.get("installed_rules", {}).get(rule_id, {}).duplicate(true)
 	}
+
+func _apply_world_rule(rule: Dictionary, step_seconds: float) -> void:
+	var world_clock: Dictionary = _world_state.get("world_clock", {})
+	
+	for effect in rule.get("effects", []):
+		var component_name := String(effect.get("component", "world_clock"))
+		if component_name != "world_clock":
+			continue
+		
+		var field_name := String(effect.get("field", "value"))
+		var current_value := float(world_clock.get(field_name, effect.get("default", 0.0)))
+		var next_value := current_value
+		var operation := String(effect.get("op", "add"))
+		
+		match operation:
+			"set":
+				next_value = float(effect.get("value", effect.get("default", 0.0)))
+			"min":
+				next_value = min(current_value, float(effect.get("value", current_value)))
+			"max":
+				next_value = max(current_value, float(effect.get("value", current_value)))
+			_:
+				next_value = current_value + float(effect.get("value_per_second", 0.0)) * step_seconds
+		
+		if effect.has("min"):
+			next_value = max(next_value, float(effect["min"]))
+		if effect.has("max"):
+			next_value = min(next_value, float(effect["max"]))
+		
+		world_clock[field_name] = snappedf(next_value, 0.0001)
+	
+	if world_clock.has("total_ticks"):
+		world_clock["total_ticks"] = int(_world_state.get("tick_index", 0)) + 1
+	
+	_world_state["world_clock"] = world_clock
 
 
 func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:
@@ -505,6 +698,9 @@ func _refresh_rule_relationships() -> void:
 
 
 func _initialize_rule_targets(rule: Dictionary) -> void:
+	if String(rule.get("scope", "entity")) == "world":
+		return
+
 	var entities: Dictionary = _world_state.get("entities", {})
 	var entity_ids: Array = entities.keys()
 	entity_ids.sort()
@@ -1099,3 +1295,72 @@ func _merge_dictionaries(base_value: Dictionary, patch_value: Dictionary) -> Dic
 			else:
 				merged[key] = incoming
 	return merged
+
+
+func _load_time_rule_package() -> Dictionary:
+	var time_package_path := "res://rules/packages/time.rule.json"
+	if not FileAccess.file_exists(time_package_path):
+		push_error("Time rule package not found at %s" % time_package_path)
+		return {}
+	
+	var file := FileAccess.open(time_package_path, FileAccess.READ)
+	if file == null:
+		push_error("Failed to open time rule package: %s" % FileAccess.get_open_error())
+		return {}
+	
+	var json_text := file.get_as_text()
+	file.close()
+	
+	var json := JSON.new()
+	var parse_result := json.parse(json_text)
+	if parse_result != OK:
+		push_error("Failed to parse time rule package JSON: %s" % json.get_error_message())
+		return {}
+	
+	var package_data: Dictionary = json.data if json.data is Dictionary else {}
+	return package_data.get("rule_patch", {})
+
+
+func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dictionary:
+	var time_rule_active := installed_rules.has("time_counter")
+	
+	if not time_rule_active:
+		return {
+			"visible": false,
+			"total_seconds": 0.0,
+			"day": 0,
+			"hour": 0,
+			"minute": 0,
+			"second": 0,
+			"formatted": ""
+		}
+	
+	var player_entity: Dictionary = entities.get("player_character", {})
+	var components: Dictionary = player_entity.get("components", {})
+	var time_component: Dictionary = components.get("time", {})
+	var total_seconds := float(time_component.get("elapsed_seconds", 0.0))
+	
+	var total_int := int(total_seconds)
+	var day := (total_int / 86400) + 1
+	var remaining := total_int % 86400
+	var hour := remaining / 3600
+	remaining = remaining % 3600
+	var minute := remaining / 60
+	var second := remaining % 60
+	
+	var formatted := "%dd %02d:%02d:%02d" % [day, hour, minute, second]
+	
+	return {
+		"visible": true,
+		"total_seconds": total_seconds,
+		"day": day,
+		"hour": hour,
+		"minute": minute,
+		"second": second,
+		"formatted": formatted
+	}
+
+
+func _text(key: String) -> String:
+	var table: Dictionary = TEXT.get(_locale, TEXT[DEFAULT_LOCALE])
+	return String(table.get(key, key))

@@ -1401,7 +1401,7 @@ func _update_installed_rule_tree() -> void:
     if _installed_rule_cache.is_empty():
         var empty_item := _installed_rule_tree.create_item(root_item)
         empty_item.set_text(0, "No installed rules")
-        empty_item.set_text(1, "Install a template to populate the dependency tree.")
+        empty_item.set_text(1, "Install a package to populate the dependency tree.")
         return
 
     var dependency_model := _build_rule_dependency_model()
@@ -2152,16 +2152,16 @@ func _simulate_rule_clone(rule_data: Variant) -> Dictionary:
 
 func _build_fallback_rule_dependency_profile(template_id: String) -> Dictionary:
     match template_id:
-        "starter-farming":
+        "starter-farming", "fallback.starter_farming":
             return {
                 "provides_rule_kinds": ["food.production", "settlement.foundation"]
             }
-        "night-watch":
+        "night-watch", "fallback.night_watch":
             return {
                 "provides_rule_kinds": ["security.patrol"],
                 "requires_rule_kinds": ["settlement.foundation"]
             }
-        "shared-kitchen":
+        "shared-kitchen", "fallback.shared_kitchen":
             return {
                 "provides_rule_kinds": ["food.preparation"],
                 "requires_rule_kinds": ["food.production"]

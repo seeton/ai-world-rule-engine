@@ -29,21 +29,25 @@
     "dislikes": 0,
     "alternative_package_ids": []
   },
-  "rule_patch": {
-    "id": "time_counter",
-    "name": "Time Counter",
-    "concept": "time",
-    "enabled": true,
-    "scope": "entity",
-    "target_tags": ["player"],
-    "effects": [
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
       {
-        "component": "time",
-        "field": "elapsed_seconds",
-        "op": "add",
-        "value_per_second": 1.0,
+        "op": "upsert_stat",
+        "stat_id": "elapsed_seconds",
+        "value_type": "float",
         "default": 0.0,
-        "min": 0.0
+        "min": 0.0,
+        "ui_group": "time"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "time.tick_elapsed",
+        "rule_type": "tick_delta",
+        "target_stat": "elapsed_seconds",
+        "delta": 1.0,
+        "interval_seconds": 1.0
       }
     ]
   }

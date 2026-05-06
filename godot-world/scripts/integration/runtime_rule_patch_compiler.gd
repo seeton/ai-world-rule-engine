@@ -8,7 +8,8 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"message": "Rule package was empty."
 		}
 
-	var operations: Array = rule_package.get("patch", {}).get("operations", [])
+	var patch: Dictionary = rule_package.get("patch", {})
+	var operations: Array = patch.get("operations", [])
 	var effects: Array = []
 	var deferred_operations: Array = []
 	var stat_components: Dictionary = {}
@@ -42,6 +43,9 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"concept": concept,
 			"scope": "entity",
 			"target_tags": ["mortal"],
+			"requires_rule_kinds": _normalize_string_array(patch.get("requires_rule_kinds", [])),
+			"provides_rule_kinds": _normalize_string_array(patch.get("provides_rule_kinds", [])),
+			"install_actions": _duplicate_install_actions(patch.get("install_actions", [])),
 			"effects": effects,
 			"metadata": {
 				"package_id": package_id,
@@ -72,7 +76,7 @@ func _compile_tick_delta(operation: Dictionary, stat_components: Dictionary) -> 
 	if stat_id.is_empty():
 		return {}
 
-	var interval_seconds := max(float(operation.get("interval_seconds", 1.0)), 0.001)
+	var interval_seconds: float = max(float(operation.get("interval_seconds", 1.0)), 0.001)
 	return {
 		"component": stat_components.get(stat_id, _resolve_component(stat_id, "")),
 		"field": stat_id,
@@ -89,3 +93,21 @@ func _resolve_component(stat_id: String, ui_group: String) -> String:
 	if stat_id in ["hunger", "sleep", "energy"]:
 		return "needs"
 	return "stats"
+
+
+func _normalize_string_array(values: Array) -> Array:
+	var normalized: Array = []
+	for value in values:
+		var text := String(value).strip_edges()
+		if text.is_empty() or normalized.has(text):
+			continue
+		normalized.append(text)
+	return normalized
+
+
+func _duplicate_install_actions(raw_actions: Array) -> Array:
+	var duplicated_actions: Array = []
+	for raw_action in raw_actions:
+		if raw_action is Dictionary:
+			duplicated_actions.append(raw_action.duplicate(true))
+	return duplicated_actions

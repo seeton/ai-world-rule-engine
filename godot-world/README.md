@@ -36,6 +36,35 @@ Packages do **not** execute embedded scripts or arbitrary code. The compiler pro
 
 The core foundation starts from a null world with a mutable origin entity. Rules are additive data patches: AI proposes them, and the deterministic fixed-step runtime executes them without arbitrary code execution.
 
+## Desktop shell workflow
+
+The current Godot entry point is the desktop shell in `scenes/Main.tscn`.
+
+- submit a natural-language task from the **Player Task** panel
+- install a template package when a reusable mechanic already exists
+- inspect installed rules and world/object state
+- advance simulation time with **Advance Tick**
+
+This is the baseline PoC2 workflow and remains available.
+
+## Parallel 3D PoC
+
+The project also tracks a **parallel 3D PoC** alongside the simpler PoC2 desktop shell. It is an additional visualization path, not a replacement for the existing inspector-heavy flow.
+
+- the desktop shell is the expected place for a 3D preview capability to appear beside the current text/tree inspectors
+- characters and the GM are visualized as simple box-like 3D placeholders in this PoC
+- a `light` rule is used to demonstrate visible shadows
+- a `gravity` rule is used to demonstrate falling objects
+
+Expected exploration flow stays aligned with the current shell:
+
+1. launch the Godot desktop shell
+2. submit a task asking for a 3D view or for rules such as light/gravity
+3. inspect the resulting world snapshot/rules and, when available, the 3D preview
+4. advance ticks to observe rule-driven visual changes such as shadows or falling motion
+
+If a requested mechanic does not already map to a built-in package, it should still follow the existing safe rule-package/draft workflow rather than bypassing the data-driven runtime model.
+
 ### WorldState API
 
 - `submit_player_task(task_text: String) -> Dictionary`
@@ -125,3 +154,22 @@ Important constraints:
 - `scripts/ui/main_desktop.gd` intentionally falls back to a preview snapshot when `/root/WorldState` is unavailable. The UI can still render in that mode, so manual validation must confirm the status line says `WorldState autoload`.
 - `scripts/integration/runtime_rule_patch_compiler.gd` currently converts only `upsert_stat` operations and `upsert_rule` entries with `rule_type = "tick_delta"` into live runtime effects. Other package operations are preserved as `deferred_operations` and still need future runtime support.
 - Generated custom packages still carry `review_status = "needs_design_review"` and should be treated as review artifacts until a designer/runtime pass turns them into approved gameplay changes.
+
+### Desktop inspector (PoC2)
+
+`scripts/ui/main_desktop.gd` now derives richer presentation directly from `get_world_snapshot()` data.
+
+- Installed rules keep the flat list + raw JSON view and add a dependency tree derived client-side from snapshot metadata.
+- If rules expose `resolved_parent_rule_ids`, the tree nests children under their resolved parents.
+- If parent links are still unresolved, the tree falls back to `requires_rule_kinds` / `provides_rule_kinds` and calls out unmet required parent kinds.
+- The world panel now groups character-style entities vs object-style entities and surfaces common ownership/containment fields such as `owner_id`, `container_id`, `location_id`, and `contained_entity_ids`.
+
+### 3D preview runtime contract
+
+The runtime can also expose an optional preview payload at `snapshot["three_d_preview"]` for a separate 3D renderer path.
+
+- `enabled` — whether 3D preview rendering should be active.
+- `renderables` — deterministic box-style entity data with `id`, `name`, `kind`, `is_character`, `is_gm`, `position`, `size`, `color`, plus optional `physics` / `state`.
+- `lighting` — preview light settings including `enabled`, `shadows_enabled`, and `light_rotation_degrees`.
+- `gravity` — preview gravity settings including `enabled` and `floor_y`; dynamic entities can fall over runtime ticks.
+- `camera` — optional camera hint for the preview scene.

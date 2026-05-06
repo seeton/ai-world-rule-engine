@@ -1,5 +1,4 @@
 extends Node
-class_name WorldState
 
 const SimulationRuntimeScript = preload("res://scripts/core/SimulationRuntime.gd")
 const RulePackageRepositoryScript = preload("res://scripts/integration/rule_package_repository.gd")
@@ -7,10 +6,10 @@ const RuleCompilerScript = preload("res://scripts/integration/rule_compiler.gd")
 const RuntimeRulePatchCompilerScript = preload("res://scripts/integration/runtime_rule_patch_compiler.gd")
 const RULE_PACKAGE_SCHEMA_VERSION := "rule_package_v1"
 
-var _runtime: SimulationRuntime
-var _rule_package_repository: RulePackageRepository
-var _rule_compiler: RuleCompiler
-var _runtime_rule_patch_compiler: RuntimeRulePatchCompiler
+var _runtime = null
+var _rule_package_repository = null
+var _rule_compiler = null
+var _runtime_rule_patch_compiler = null
 var _available_rule_packages: Array = []
 var _available_templates: Array = []
 
@@ -30,7 +29,7 @@ func submit_player_task(task_text: String) -> Dictionary:
 			"message": "Task text was empty."
 		}
 
-	var resolution := _rule_compiler.resolve_player_task({
+	var resolution: Dictionary = _rule_compiler.resolve_player_task({
 		"title": normalized_task,
 		"prompt": normalized_task
 	})
@@ -106,7 +105,7 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
 			"rule_package": rule_package.duplicate(true)
 		}
 
-	var compilation := _runtime_rule_patch_compiler.compile_package(rule_package)
+	var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
 	if String(compilation.get("status", "")) != "compiled":
 		var error_result: Dictionary = compilation.duplicate(true)
 		error_result["rule_package"] = rule_package.duplicate(true)
@@ -137,7 +136,7 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
 
 func get_world_snapshot() -> Dictionary:
 	_ensure_runtime()
-	var snapshot := _runtime.get_snapshot()
+	var snapshot: Dictionary = _runtime.get_snapshot()
 	snapshot["available_rule_packages"] = get_available_rule_packages()
 	return snapshot
 
@@ -239,12 +238,18 @@ func advance_tick(delta_seconds: float) -> void:
 
 
 func _reset_world() -> void:
-	_rule_package_repository = RulePackageRepositoryScript.new()
-	_rule_compiler = RuleCompilerScript.new(_rule_package_repository)
-	_runtime_rule_patch_compiler = RuntimeRulePatchCompilerScript.new()
+	var rule_package_repository_script = load("res://scripts/integration/rule_package_repository.gd")
+	var rule_compiler_script = load("res://scripts/integration/rule_compiler.gd")
+	var runtime_rule_patch_compiler_script = load("res://scripts/integration/runtime_rule_patch_compiler.gd")
+	var simulation_runtime_script = load("res://scripts/core/SimulationRuntime.gd")
+
+	_rule_package_repository = rule_package_repository_script.new()
+	_rule_compiler = rule_compiler_script.new()
+	_rule_compiler.configure_repository(_rule_package_repository)
+	_runtime_rule_patch_compiler = runtime_rule_patch_compiler_script.new()
 	_available_rule_packages = _rule_compiler.list_available_rule_packages()
 	_available_templates = _build_available_templates()
-	_runtime = SimulationRuntimeScript.new(_available_templates)
+	_runtime = simulation_runtime_script.new(_available_templates)
 
 
 func _ensure_runtime() -> void:
@@ -279,7 +284,7 @@ func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:
 		var candidate_id := String(rule_patch.get(key, "")).strip_edges()
 		if candidate_id.is_empty():
 			continue
-		var package := _rule_package_repository.get_rule_package(candidate_id)
+		var package: Dictionary = _rule_package_repository.get_rule_package(candidate_id)
 		if not package.is_empty():
 			return package
 
@@ -287,11 +292,11 @@ func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:
 
 
 func _install_rule_package(rule_package: Dictionary) -> Dictionary:
-	var compilation := _runtime_rule_patch_compiler.compile_package(rule_package)
+	var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
 	if String(compilation.get("status", "")) != "compiled":
 		return compilation
 
-	var runtime_result := _runtime.create_rule_from_patch(compilation.get("runtime_patch", {}))
+	var runtime_result: Dictionary = _runtime.create_rule_from_patch(compilation.get("runtime_patch", {}))
 	var install_result: Dictionary = runtime_result.duplicate(true)
 	install_result["install_source"] = "rule_package"
 	install_result["package_id"] = rule_package.get("package_id", "")
@@ -318,7 +323,7 @@ func _build_task_proposals(resolution: Dictionary) -> Array:
 		"draft_custom_rule_patch":
 			var draft_package = resolution.get("draft_package", {})
 			if draft_package is Dictionary and not draft_package.is_empty():
-				var compilation := _runtime_rule_patch_compiler.compile_package(draft_package)
+				var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(draft_package)
 				proposals.append(_rule_package_to_template(draft_package, compilation))
 	return proposals
 
@@ -331,10 +336,10 @@ func _build_available_templates() -> Array:
 		var package_id := String(package_summary.get("package_id", ""))
 		if package_id.is_empty():
 			continue
-		var rule_package := _rule_package_repository.get_rule_package(package_id)
+		var rule_package: Dictionary = _rule_package_repository.get_rule_package(package_id)
 		if rule_package.is_empty():
 			continue
-		var compilation := _runtime_rule_patch_compiler.compile_package(rule_package)
+		var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
 		if String(compilation.get("status", "")) != "compiled":
 			continue
 		templates.append(_rule_package_to_template(rule_package, compilation))
@@ -366,11 +371,11 @@ func _package_summary_to_proposal(package_summary: Dictionary) -> Dictionary:
 	if package_id.is_empty():
 		return _package_summary_to_template(package_summary)
 
-	var rule_package := _rule_package_repository.get_rule_package(package_id)
+	var rule_package: Dictionary = _rule_package_repository.get_rule_package(package_id)
 	if rule_package.is_empty():
 		return _package_summary_to_template(package_summary)
 
-	var compilation := _runtime_rule_patch_compiler.compile_package(rule_package)
+	var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
 	return _rule_package_to_template(rule_package, compilation)
 
 

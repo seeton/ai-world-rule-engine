@@ -10,6 +10,7 @@ This repository uses **issue-driven development**:
 4. Implement the scoped change.
 5. Open a PR linked to the issue.
 6. Merge through PR review; do not merge direct-to-main changes by default.
+7. Close the issue through `bash scripts/close_issue.sh <issue-number>` from the repo root or another non-target worktree so local cleanup happens automatically.
 
 `godot-world/` is the active Godot 4 project and the primary location for gameplay, runtime, and rule-package changes. Root-level changes should generally stay limited to repo docs, workflow metadata, or shared tooling.
 
@@ -25,6 +26,13 @@ Keep reusable contributor and agent workspaces inside the repository boundary:
 - do **not** create extra clones or checkouts under `/Users/seeton`, `~`, or other home-directory locations
 
 This keeps parallel work visible, avoids stray home-directory clones, and makes cleanup predictable. `.agent-workspaces/` is gitignored and should remain uncommitted.
+
+## Issue close and cleanup
+
+- If an issue is ready to close, sync the repo root first with a clone/fetch/pull equivalent from the main repository context.
+- `bash scripts/close_issue.sh <issue-number>` is the supported close path. It fetches `origin` from the repo root, fast-forward pulls the default branch when the repo root is already a clean checkout of that branch, closes the issue through `gh`, releases claims for `.agent-workspaces/issue-<number>`, and removes that repo-local worktree.
+- Run the close helper from the repo root or another worktree, not from the worktree being removed.
+- If the issue was closed outside the helper flow, run `bash scripts/cleanup_closed_worktrees.sh` or `bash scripts/close_issue.sh <issue-number>` afterward.
 
 ## Issue decomposition for multi-agent work
 
@@ -76,6 +84,19 @@ Call out scope clearly:
 - whether the PR touches `godot-world/`
 - whether the PR stays within the intended `godot-world/` scope
 - whether rule packages are new, cloned, or forks of existing packages
+
+## Playable handoff rules
+
+When a change reaches a playable game state or completes a playable PoC slice:
+
+- open a PR linked to the issue before handing the work off as complete
+- include the exact game launch command(s) in the handoff note, not just prose instructions
+- include any additional run context the reviewer needs, for example the working directory, Godot entry path, or required flags
+
+Example launch commands for the active Godot project:
+
+- `godot --path godot-world`
+- `cd godot-world && godot`
 
 ## Multi-agent integration rules
 

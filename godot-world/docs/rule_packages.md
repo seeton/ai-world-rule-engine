@@ -20,6 +20,22 @@ Each package is a JSON document with:
 
 The `patch` block is intentionally limited to structured operations. This keeps the AI rule compiler safe and reviewable.
 
+Patch metadata can also declare:
+
+- `requires_rule_kinds`
+- `provides_rule_kinds`
+- `install_actions`
+
+This lets runtime-safe packages express semantic parent capabilities and one-time entity seeding/property setup without embedded scripts.
+
+## Desktop dependency inspector
+
+The PoC2 desktop shell derives its rule tree from ordinary world snapshot data instead of a dedicated UI endpoint.
+
+- `resolved_parent_rule_ids` lets the UI nest installed rules under their resolved parents.
+- `requires_rule_kinds` and `provides_rule_kinds` let the UI show unmet parent requirements when links are not resolved yet.
+- Missing fields are tolerated so older snapshots still render in the flat list/detail inspector.
+
 ## Player workflow
 
 ### 1. Clone an existing package
@@ -113,4 +129,5 @@ For rule package PRs, include:
 
 - `upsert_stat` compiles into baseline runtime effects with defaults and bounds
 - `upsert_rule` with `rule_type = "tick_delta"` compiles into `value_per_second`
+- `requires_rule_kinds`, `provides_rule_kinds`, and `install_actions` pass through to the runtime patch
 - event-driven, threshold, and environment operations are preserved as `deferred_operations` for future core support

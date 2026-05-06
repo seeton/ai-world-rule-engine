@@ -10,6 +10,8 @@ This repository uses **issue-driven development**:
 4. Open a PR linked to the issue.
 5. Merge through PR review; do not merge direct-to-main changes by default.
 
+Unless a change requires user-side validation, gameplay verification, or other proof that only the user can provide, do not stop at local edits. Complete the workflow through commit, push, and PR creation in the same session.
+
 `godot-world/` is the active Godot 4 project. The root Node app is an older PoC and should remain intact unless an issue explicitly calls for changes there.
 
 ## Issue decomposition for multi-agent work
@@ -62,6 +64,8 @@ Call out scope clearly:
 - whether the PR touches `godot-world/`
 - whether the legacy Node PoC was intentionally left unchanged
 - whether rule packages are new, cloned, or forks of existing packages
+
+For docs/code/config changes that do not need user-side proof, opening the PR is part of completing the task, not an optional follow-up.
 
 ## Multi-agent integration rules
 

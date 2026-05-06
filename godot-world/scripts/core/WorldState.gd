@@ -1,10 +1,9 @@
 extends Node
-class_name WorldState
 
 const SimulationRuntimeScript = preload("res://scripts/core/SimulationRuntime.gd")
 const RuleTemplatesScript = preload("res://scripts/core/RuleTemplates.gd")
 
-var _runtime: SimulationRuntime
+var _runtime
 var _available_templates: Array = []
 
 
@@ -36,6 +35,11 @@ func submit_player_task(task_text: String) -> Dictionary:
 	}
 	_runtime.record_player_task(result)
 	return result
+
+
+func talk_to_game_master(message: String) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.talk_to_game_master(message)
 
 
 func clone_rule(rule_id: String) -> Dictionary:

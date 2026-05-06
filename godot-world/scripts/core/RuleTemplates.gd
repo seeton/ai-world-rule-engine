@@ -5,6 +5,40 @@ class_name RuleTemplates
 static func get_templates() -> Array:
 	return [
 		{
+			"id": "world_time",
+			"name": "世界時刻",
+			"description": "世界に時間の概念を追加します。時刻が経過するにつれて秒とターンが進みます。",
+			"summary": "決定論的な時間システムを追加",
+			"keywords": ["時間", "時刻", "クロック", "タイム", "ルール", "作成", "時間のルール"],
+			"rule_patch": {
+				"id": "rule_world_time",
+				"name": "世界時刻ルール",
+				"concept": "time",
+				"scope": "world",
+				"target_tags": [],
+				"effects": [
+					{
+						"component": "world_clock",
+						"field": "elapsed_seconds",
+						"op": "add",
+						"default": 0.0,
+						"value_per_second": 1.0,
+						"min": 0.0,
+						"max": 999999999.0
+					},
+					{
+						"component": "world_clock",
+						"field": "total_ticks",
+						"op": "add",
+						"default": 0.0,
+						"value_per_second": 0.0,
+						"min": 0.0,
+						"max": 999999999.0
+					}
+				]
+			}
+		},
+		{
 			"id": "hunger",
 			"name": "Hunger",
 			"description": "Introduces hunger as a need that grows over time.",

@@ -10,7 +10,13 @@ const TEXT := {
 		"time_rule_installed": "事前定義済みの時間ルール time_counter を適用しました。世界に戻ると右上に時計が表示されます。",
 		"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
 		"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
-		"help_prompt": "時間のルールを作成しろ、と言ってください。",
+		"object_rule_already_active": "オブジェクトルールはすでに有効です。",
+		"object_rule_installed": "オブジェクトルールを適用しました。物体一覧とルールツリーにオブジェクト基礎が反映されます。",
+		"object_rule_install_failed": "オブジェクトルールの適用に失敗しました: %s",
+		"ownership_rule_already_active": "所有ルールはすでに有効です。",
+		"ownership_rule_installed": "所有ルールを適用しました。物体の所有者情報と親子ルール関係が更新されます。",
+		"ownership_rule_install_failed": "所有ルールの適用に失敗しました: %s",
+		"help_prompt": "「時間のルールを作成しろ」「オブジェクトルールを作成しろ」「所有ルールを作成しろ」と言ってください。",
 		"player_name": "プレイヤー",
 		"gm_name": "ゲームマスター",
 		"player_task": "最初のルールを待っています",
@@ -22,7 +28,13 @@ const TEXT := {
 		"time_rule_installed": "Applied the predefined time rule 'time_counter'. Return to the world to see the clock in the top-right.",
 		"time_rule_install_failed": "Failed to apply the time rule: %s",
 		"time_rule_load_failed": "Failed to load the time rule definition.",
-		"help_prompt": "Ask me to create the time rule.",
+		"object_rule_already_active": "The object rule is already active.",
+		"object_rule_installed": "Applied the object rule. The object list and rule tree now include the object-base capability.",
+		"object_rule_install_failed": "Failed to apply the object rule: %s",
+		"ownership_rule_already_active": "The ownership rule is already active.",
+		"ownership_rule_installed": "Applied the ownership rule. Object ownership data and rule parent-child links were updated.",
+		"ownership_rule_install_failed": "Failed to apply the ownership rule: %s",
+		"help_prompt": "Ask me to create the time rule, object rule, or ownership rule.",
 		"player_name": "Player",
 		"gm_name": "Game Master",
 		"player_task": "Waiting for the first rule",
@@ -52,20 +64,21 @@ func record_player_task(task_result: Dictionary) -> void:
 	var history: Array = _world_state.get("player_task_history", [])
 	history.append(task_result.duplicate(true))
 	_world_state["player_task_history"] = history
-	_append_event("player_task_submitted", "Player submitted a task for rule proposal.", {"task": task_result.get("task_text", "")})
+	_append_event("player_task_submitted", "プレイヤーがルール提案タスクを送信しました。", {"task": task_result.get("task_text", "")})
 
 
 func talk_to_game_master(message: String) -> Dictionary:
 	var normalized_message := message.strip_edges().to_lower()
 	var conversation_log: Array = _world_state.get("conversation_log", [])
-	
+
 	conversation_log.append({
 		"speaker": "player",
 		"text": message
 	})
-	
+
 	var gm_response := ""
-	var action_taken := ""
+	var action_taken := "none"
+	var installed_rule_id := ""
 	var time_rule_triggers := [
 		"create time rule",
 		"create the time rule",
@@ -77,18 +90,59 @@ func talk_to_game_master(message: String) -> Dictionary:
 		"時間ルールを作成",
 		"タイムルールを作成"
 	]
-	
-	var matched := false
-	for trigger in time_rule_triggers:
-		if normalized_message.find(trigger.to_lower()) != -1:
-			matched = true
-			break
-	
-	if matched:
+	var object_rule_triggers := [
+		"create object rule",
+		"make object rule",
+		"install object rule",
+		"add object rule",
+		"create object base",
+		"install object base",
+		"オブジェクトルールを作成",
+		"オブジェクトルールを作成しろ",
+		"オブジェクトルールを追加",
+		"オブジェクト基礎を作成",
+		"物体ルールを作成"
+	]
+	var ownership_rule_triggers := [
+		"create ownership rule",
+		"make ownership rule",
+		"install ownership rule",
+		"add ownership rule",
+		"オーナーシップルールを作成",
+		"所有ルールを作成",
+		"所有ルールを作成しろ",
+		"所有ルールを追加",
+		"所有関係ルールを作成"
+	]
+
+	if _message_has_trigger(normalized_message, ownership_rule_triggers):
+		var ownership_rule_result := _install_template_rule(
+			"ownership_links",
+			"rule_ownership_links",
+			"ownership_rule_already_active",
+			"ownership_rule_installed",
+			"ownership_rule_install_failed",
+			"installed_ownership_rule"
+		)
+		gm_response = String(ownership_rule_result.get("reply", ""))
+		action_taken = String(ownership_rule_result.get("action", "error"))
+		installed_rule_id = String(ownership_rule_result.get("installed_rule_id", ""))
+	elif _message_has_trigger(normalized_message, object_rule_triggers):
+		var object_rule_result := _install_template_rule(
+			"object_base",
+			"rule_object_base",
+			"object_rule_already_active",
+			"object_rule_installed",
+			"object_rule_install_failed",
+			"installed_object_rule"
+		)
+		gm_response = String(object_rule_result.get("reply", ""))
+		action_taken = String(object_rule_result.get("action", "error"))
+		installed_rule_id = String(object_rule_result.get("installed_rule_id", ""))
+	elif _message_has_trigger(normalized_message, time_rule_triggers):
 		var installed_rules: Dictionary = _world_state.get("installed_rules", {})
 		if installed_rules.has("time_counter"):
 			gm_response = _text("time_rule_already_active")
-			action_taken = "none"
 		else:
 			var time_rule_patch: Dictionary = _load_time_rule_package()
 			if not time_rule_patch.is_empty():
@@ -96,6 +150,7 @@ func talk_to_game_master(message: String) -> Dictionary:
 				if result.get("status", "") == "installed":
 					gm_response = _text("time_rule_installed")
 					action_taken = "installed_time_rule"
+					installed_rule_id = "time_counter"
 				else:
 					gm_response = _text("time_rule_install_failed") % result.get("message", "unknown error")
 					action_taken = "error"
@@ -105,22 +160,61 @@ func talk_to_game_master(message: String) -> Dictionary:
 	else:
 		gm_response = _text("help_prompt")
 		action_taken = "none"
-	
+
 	conversation_log.append({
 		"speaker": "gm",
 		"text": gm_response
 	})
-	
+
 	_world_state["conversation_log"] = conversation_log
-	_append_event("gm_conversation", "Player talked to Game Master.", {"message": message, "response": gm_response})
-	
+	_append_event("gm_conversation", "プレイヤーがゲームマスターに話しかけました。", {"message": message, "response": gm_response})
+
 	return {
 		"status": "ok",
 		"action": action_taken,
 		"reply": gm_response,
 		"gm_response": gm_response,
-		"installed_rule_id": "time_counter" if action_taken == "installed_time_rule" else "",
+		"installed_rule_id": installed_rule_id,
 		"conversation_log": conversation_log.duplicate(true)
+	}
+
+
+func _message_has_trigger(normalized_message: String, triggers: Array) -> bool:
+	for trigger in triggers:
+		if normalized_message.find(String(trigger).to_lower()) != -1:
+			return true
+	return false
+
+
+func _install_template_rule(
+	template_id: String,
+	rule_id: String,
+	already_active_text_key: String,
+	installed_text_key: String,
+	failed_text_key: String,
+	action_name: String
+) -> Dictionary:
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	if installed_rules.has(rule_id):
+		return {
+			"reply": _text(already_active_text_key),
+			"action": "none",
+			"installed_rule_id": ""
+		}
+
+	var result := create_rule_from_patch({"template_id": template_id})
+	if String(result.get("status", "")) == "installed":
+		return {
+			"reply": _text(installed_text_key),
+			"action": action_name,
+			"installed_rule_id": rule_id
+		}
+
+	return {
+		"reply": _text(failed_text_key) % result.get("message", "unknown error"),
+		"action": "error",
+		"installed_rule_id": "",
+		"result": result
 	}
 
 
@@ -129,28 +223,10 @@ func create_rule_from_patch(rule_patch: Dictionary) -> Dictionary:
 	if normalized_rule.is_empty():
 		return {
 			"status": "error",
-			"message": "Rule patch was empty or invalid."
+			"message": "ルールパッチが空、または不正です。"
 		}
 
-	var rule_id := String(normalized_rule.get("id", ""))
-	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
-	if installed_rules.has(rule_id):
-		return {
-			"status": "error",
-			"message": "Rule '%s' is already installed." % rule_id
-		}
-
-	installed_rules[rule_id] = normalized_rule
-	_world_state["installed_rules"] = installed_rules
-	_initialize_rule_targets(normalized_rule)
-	_append_concept(normalized_rule.get("concept", rule_id))
-	_append_event("rule_installed", "Installed rule '%s'." % rule_id, {"rule_id": rule_id})
-
-	return {
-		"status": "installed",
-		"installed": true,
-		"rule": normalized_rule.duplicate(true)
-	}
+	return _install_normalized_rule(normalized_rule)
 
 
 func clone_rule(rule_id: String) -> Dictionary:
@@ -159,31 +235,26 @@ func clone_rule(rule_id: String) -> Dictionary:
 		if _template_index.has(rule_id):
 			var template_rule: Dictionary = _template_index[rule_id].get("rule_patch", {}).duplicate(true)
 			template_rule["id"] = _make_unique_rule_id(String(template_rule.get("id", "rule_%s" % rule_id)))
-			template_rule["name"] = "%s (Installed)" % String(_template_index[rule_id].get("name", rule_id))
+			template_rule["name"] = "%s（導入済み）" % String(_template_index[rule_id].get("name", rule_id))
 			return create_rule_from_patch(template_rule)
 
 		return {
 			"status": "error",
-			"message": "Rule '%s' is not installed and no matching template exists." % rule_id
+			"message": "ルール '%s' は未導入で、対応するテンプレートもありません。" % rule_id
 		}
 
 	var cloned_rule: Dictionary = installed_rules[rule_id].duplicate(true)
 	var clone_id := _make_unique_rule_id("%s_clone" % rule_id)
 	cloned_rule["id"] = clone_id
-	cloned_rule["name"] = "%s (Clone)" % String(cloned_rule.get("name", rule_id))
+	cloned_rule["name"] = "%s（複製）" % String(cloned_rule.get("name", rule_id))
 	cloned_rule["source_rule_id"] = rule_id
 
-	installed_rules[clone_id] = cloned_rule
-	_world_state["installed_rules"] = installed_rules
-	_initialize_rule_targets(cloned_rule)
-	_append_event("rule_cloned", "Cloned rule '%s' into '%s'." % [rule_id, clone_id], {"rule_id": rule_id, "clone_id": clone_id})
-
-	return {
-		"status": "cloned",
-		"installed": true,
-		"rule": cloned_rule.duplicate(true),
-		"source_rule_id": rule_id
-	}
+	var install_result := create_rule_from_patch(cloned_rule)
+	if String(install_result.get("status", "")) == "installed":
+		install_result["status"] = "cloned"
+		install_result["source_rule_id"] = rule_id
+		_append_event("rule_cloned", "ルール '%s' を '%s' として複製しました。" % [rule_id, clone_id], {"rule_id": rule_id, "clone_id": clone_id})
+	return install_result
 
 
 func get_snapshot() -> Dictionary:
@@ -205,6 +276,8 @@ func get_snapshot() -> Dictionary:
 	snapshot["tick"] = snapshot.get("tick_index", 0)
 	snapshot["world_name"] = "Null World"
 	snapshot["characters"] = _build_character_list(snapshot.get("entities", {}))
+	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
+	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
 	snapshot["conversation_log"] = snapshot.get("conversation_log", []).duplicate(true)
 	snapshot["clock"] = _build_clock_data(snapshot.get("entities", {}), installed_rules_by_id)
@@ -219,6 +292,60 @@ func advance_tick(delta_seconds: float) -> void:
 	while _accumulator_seconds >= fixed_step_seconds:
 		_run_tick(fixed_step_seconds)
 		_accumulator_seconds -= fixed_step_seconds
+
+
+func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary:
+	if entity_id.is_empty():
+		return {}
+	var entities: Dictionary = _world_state.get("entities", {})
+	if not entities.has(entity_id):
+		return {}
+	var entity: Dictionary = entities[entity_id].duplicate(true)
+	var current_position: Dictionary = entity.get("position", {}).duplicate(true) if entity.get("position", {}) is Dictionary else {}
+	entity["position"] = _merge_dictionaries(current_position, position_patch)
+	entities[entity_id] = entity
+	_world_state["entities"] = entities
+	return entity.get("position", {}).duplicate(true)
+
+
+func _install_normalized_rule(normalized_rule: Dictionary) -> Dictionary:
+	var rule_id := String(normalized_rule.get("id", ""))
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	if installed_rules.has(rule_id):
+		return {
+			"status": "error",
+			"message": "ルール '%s' はすでに導入済みです。" % rule_id
+		}
+
+	var parent_resolution := _resolve_parent_rule_links(normalized_rule, installed_rules)
+	if String(parent_resolution.get("status", "")) == "error":
+		_append_event(
+			"rule_waiting_for_parent",
+			String(parent_resolution.get("message", "Missing required parent rule kinds.")),
+			{
+				"rule_id": rule_id,
+				"missing_required_rule_kinds": parent_resolution.get("missing_required_rule_kinds", []).duplicate(true)
+			}
+		)
+		return parent_resolution
+
+	normalized_rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
+	normalized_rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
+	normalized_rule["missing_required_rule_kinds"] = []
+
+	installed_rules[rule_id] = normalized_rule
+	_world_state["installed_rules"] = installed_rules
+	_apply_install_actions(normalized_rule)
+	_initialize_rule_targets(normalized_rule)
+	_append_concept(normalized_rule.get("concept", rule_id))
+	_refresh_rule_relationships()
+	_append_event("rule_installed", "ルール '%s' を導入しました。" % rule_id, {"rule_id": rule_id})
+
+	return {
+		"status": "installed",
+		"installed": true,
+		"rule": normalized_rule.duplicate(true)
+	}
 
 
 func _build_null_world() -> Dictionary:
@@ -290,7 +417,7 @@ func _run_tick(step_seconds: float) -> void:
 		var rule: Dictionary = installed_rules[rule_id]
 		if not bool(rule.get("enabled", true)):
 			continue
-		
+
 		var rule_scope := String(rule.get("scope", "entity"))
 		if rule_scope == "world":
 			_apply_world_rule(rule, step_seconds)
@@ -362,17 +489,17 @@ func _apply_rule(entity: Dictionary, rule: Dictionary, step_seconds: float) -> v
 
 func _apply_world_rule(rule: Dictionary, step_seconds: float) -> void:
 	var world_clock: Dictionary = _world_state.get("world_clock", {})
-	
+
 	for effect in rule.get("effects", []):
 		var component_name := String(effect.get("component", "world_clock"))
 		if component_name != "world_clock":
 			continue
-		
+
 		var field_name := String(effect.get("field", "value"))
 		var current_value := float(world_clock.get(field_name, effect.get("default", 0.0)))
 		var next_value := current_value
 		var operation := String(effect.get("op", "add"))
-		
+
 		match operation:
 			"set":
 				next_value = float(effect.get("value", effect.get("default", 0.0)))
@@ -382,17 +509,17 @@ func _apply_world_rule(rule: Dictionary, step_seconds: float) -> void:
 				next_value = max(current_value, float(effect.get("value", current_value)))
 			_:
 				next_value = current_value + float(effect.get("value_per_second", 0.0)) * step_seconds
-		
+
 		if effect.has("min"):
 			next_value = max(next_value, float(effect["min"]))
 		if effect.has("max"):
 			next_value = min(next_value, float(effect["max"]))
-		
+
 		world_clock[field_name] = snappedf(next_value, 0.0001)
-	
+
 	if world_clock.has("total_ticks"):
 		world_clock["total_ticks"] = int(_world_state.get("tick_index", 0)) + 1
-	
+
 	_world_state["world_clock"] = world_clock
 
 
@@ -413,9 +540,15 @@ func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:
 
 	merged_rule["enabled"] = bool(merged_rule.get("enabled", true))
 	merged_rule["scope"] = String(merged_rule.get("scope", "entity"))
+	merged_rule["requires_rule_kinds"] = _normalize_string_array(_extract_rule_array_metadata(merged_rule, "requires_rule_kinds"))
+	merged_rule["provides_rule_kinds"] = _normalize_string_array(_extract_rule_array_metadata(merged_rule, "provides_rule_kinds"))
+	merged_rule["install_actions"] = _normalize_install_actions(_extract_rule_array_metadata(merged_rule, "install_actions"))
+	merged_rule["resolved_parent_rule_ids"] = []
+	merged_rule["resolved_parent_rule_links"] = []
+	merged_rule["missing_required_rule_kinds"] = []
 	var target_tags: Array = []
 	for tag in merged_rule.get("target_tags", []):
-		target_tags.append(tag)
+		target_tags.append(String(tag))
 	merged_rule["target_tags"] = target_tags
 
 	var normalized_effects: Array = []
@@ -437,6 +570,99 @@ func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:
 	merged_rule["effects"] = normalized_effects
 
 	return merged_rule
+
+
+func _resolve_parent_rule_links(rule: Dictionary, installed_rules: Dictionary) -> Dictionary:
+	var required_rule_kinds: Array = rule.get("requires_rule_kinds", [])
+	var missing_rule_kinds: Array = []
+	var resolved_parent_rule_ids: Array = []
+	var resolved_parent_rule_links: Array = []
+	var installed_rule_ids: Array = installed_rules.keys()
+	installed_rule_ids.sort()
+	var rule_id := String(rule.get("id", ""))
+
+	for required_kind_variant in required_rule_kinds:
+		var required_kind := String(required_kind_variant).strip_edges()
+		if required_kind.is_empty():
+			continue
+
+		var matching_rule_ids: Array = []
+		for installed_rule_id in installed_rule_ids:
+			var candidate_rule: Dictionary = installed_rules[installed_rule_id]
+			if String(candidate_rule.get("id", installed_rule_id)) == rule_id:
+				continue
+			if _rule_provides_kind(candidate_rule, required_kind):
+				matching_rule_ids.append(installed_rule_id)
+				if not resolved_parent_rule_ids.has(installed_rule_id):
+					resolved_parent_rule_ids.append(installed_rule_id)
+		matching_rule_ids.sort()
+		resolved_parent_rule_links.append({
+			"required_kind": required_kind,
+			"rule_ids": matching_rule_ids.duplicate(true)
+		})
+		if matching_rule_ids.is_empty():
+			missing_rule_kinds.append(required_kind)
+
+	resolved_parent_rule_ids.sort()
+	if not missing_rule_kinds.is_empty():
+		return {
+			"status": "error",
+			"message": "ルール '%s' は親ルール種別 [%s] の導入後でないと適用できません。" % [rule_id, ", ".join(missing_rule_kinds)],
+			"rule_id": rule_id,
+			"requires_rule_kinds": required_rule_kinds.duplicate(true),
+			"missing_required_rule_kinds": missing_rule_kinds.duplicate(true)
+		}
+
+	return {
+		"status": "resolved",
+		"resolved_parent_rule_ids": resolved_parent_rule_ids.duplicate(true),
+		"resolved_parent_rule_links": resolved_parent_rule_links.duplicate(true),
+		"missing_required_rule_kinds": []
+	}
+
+
+func _rule_provides_kind(rule: Dictionary, required_kind: String) -> bool:
+	for provided_kind_variant in rule.get("provides_rule_kinds", []):
+		if String(provided_kind_variant).strip_edges() == required_kind:
+			return true
+	return false
+
+
+func _apply_install_actions(rule: Dictionary) -> void:
+	var entities: Dictionary = _world_state.get("entities", {})
+	for raw_action in rule.get("install_actions", []):
+		if not (raw_action is Dictionary):
+			continue
+		var action: Dictionary = raw_action
+		if String(action.get("op", "")) != "upsert_entities":
+			continue
+		for raw_entity_patch in action.get("entities", []):
+			if not (raw_entity_patch is Dictionary):
+				continue
+			var entity_patch: Dictionary = raw_entity_patch
+			var entity_id := String(entity_patch.get("id", ""))
+			if entity_id.is_empty():
+				continue
+			var existing_entity: Dictionary = entities.get(entity_id, {})
+			var merged_entity := _merge_dictionaries(existing_entity, entity_patch)
+			entities[entity_id] = _normalize_entity(merged_entity)
+	_world_state["entities"] = entities
+
+
+func _refresh_rule_relationships() -> void:
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	var rule_ids: Array = installed_rules.keys()
+	rule_ids.sort()
+
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules[rule_id]
+		var parent_resolution := _resolve_parent_rule_links(rule, installed_rules)
+		rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
+		rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
+		rule["missing_required_rule_kinds"] = parent_resolution.get("missing_required_rule_kinds", []).duplicate(true)
+		installed_rules[rule_id] = rule
+
+	_world_state["installed_rules"] = installed_rules
 
 
 func _initialize_rule_targets(rule: Dictionary) -> void:
@@ -517,6 +743,90 @@ func _build_character_list(entities: Dictionary) -> Array:
 	return characters
 
 
+func _build_object_list(entities: Dictionary) -> Array:
+	var objects: Array = []
+	var entity_ids: Array = entities.keys()
+	entity_ids.sort()
+
+	for entity_id in entity_ids:
+		var entity: Dictionary = entities[entity_id]
+		var entity_tags: Array = entity.get("tags", [])
+		if not entity_tags.has("object"):
+			continue
+		var components: Dictionary = entity.get("components", {})
+		var ownership: Dictionary = components.get("ownership", {})
+		objects.append({
+			"id": entity.get("id", entity_id),
+			"name": entity.get("name", entity_id),
+			"material": entity.get("material", ""),
+			"weight": entity.get("weight", 0.0),
+			"position": entity.get("position", {}).duplicate(true) if entity.get("position", {}) is Dictionary else entity.get("position", {}),
+			"portability": entity.get("portability", {}).duplicate(true) if entity.get("portability", {}) is Dictionary else entity.get("portability", {}),
+			"state": entity.get("state", {}).duplicate(true) if entity.get("state", {}) is Dictionary else entity.get("state", {}),
+			"owner": ownership.duplicate(true) if ownership is Dictionary else null
+		})
+	return objects
+
+
+func _build_rule_tree(installed_rules_by_id: Dictionary) -> Dictionary:
+	var rule_ids: Array = installed_rules_by_id.keys()
+	rule_ids.sort()
+	var nodes_by_rule_id: Dictionary = {}
+	var root_rule_ids: Array = []
+
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules_by_id[rule_id]
+		nodes_by_rule_id[rule_id] = {
+			"rule_id": rule_id,
+			"name": rule.get("name", rule_id),
+			"requires_rule_kinds": rule.get("requires_rule_kinds", []).duplicate(true),
+			"provides_rule_kinds": rule.get("provides_rule_kinds", []).duplicate(true),
+			"resolved_parent_rule_ids": rule.get("resolved_parent_rule_ids", []).duplicate(true),
+			"child_rule_ids": []
+		}
+
+	for rule_id in rule_ids:
+		var parent_rule_ids: Array = installed_rules_by_id[rule_id].get("resolved_parent_rule_ids", [])
+		if parent_rule_ids.is_empty():
+			root_rule_ids.append(rule_id)
+		for parent_rule_id in parent_rule_ids:
+			if not nodes_by_rule_id.has(parent_rule_id):
+				continue
+			var parent_node: Dictionary = nodes_by_rule_id[parent_rule_id]
+			var child_rule_ids: Array = parent_node.get("child_rule_ids", [])
+			if not child_rule_ids.has(rule_id):
+				child_rule_ids.append(rule_id)
+				child_rule_ids.sort()
+			parent_node["child_rule_ids"] = child_rule_ids
+			nodes_by_rule_id[parent_rule_id] = parent_node
+
+	root_rule_ids.sort()
+	var roots: Array = []
+	for root_rule_id in root_rule_ids:
+		roots.append(_build_rule_tree_node(root_rule_id, nodes_by_rule_id, []))
+
+	return {
+		"root_rule_ids": root_rule_ids,
+		"nodes_by_rule_id": nodes_by_rule_id,
+		"roots": roots
+	}
+
+
+func _build_rule_tree_node(rule_id: String, nodes_by_rule_id: Dictionary, ancestry: Array) -> Dictionary:
+	var node: Dictionary = nodes_by_rule_id.get(rule_id, {}).duplicate(true)
+	if ancestry.has(rule_id):
+		node["children"] = []
+		return node
+
+	var next_ancestry := ancestry.duplicate(true)
+	next_ancestry.append(rule_id)
+	var children: Array = []
+	for child_rule_id in node.get("child_rule_ids", []):
+		children.append(_build_rule_tree_node(String(child_rule_id), nodes_by_rule_id, next_ancestry))
+	node["children"] = children
+	return node
+
+
 func _build_event_messages(event_log: Array) -> Array:
 	var messages: Array = []
 	for event in event_log:
@@ -534,6 +844,57 @@ func _make_unique_rule_id(base_id: String) -> String:
 		_clone_sequence += 1
 		candidate = "%s_%d" % [base_id, _clone_sequence]
 	return candidate
+
+
+func _extract_rule_array_metadata(rule: Dictionary, key: String) -> Array:
+	if rule.has(key) and rule[key] is Array:
+		return rule[key]
+	var metadata: Dictionary = rule.get("metadata", {})
+	if metadata.has(key) and metadata[key] is Array:
+		return metadata[key]
+	return []
+
+
+func _normalize_string_array(values: Array) -> Array:
+	var normalized: Array = []
+	for value in values:
+		var normalized_value := String(value).strip_edges()
+		if normalized_value.is_empty() or normalized.has(normalized_value):
+			continue
+		normalized.append(normalized_value)
+	return normalized
+
+
+func _normalize_install_actions(raw_actions: Array) -> Array:
+	var normalized_actions: Array = []
+	for raw_action in raw_actions:
+		if not raw_action is Dictionary:
+			continue
+		var action: Dictionary = raw_action.duplicate(true)
+		action["op"] = String(action.get("op", ""))
+		var normalized_entities: Array = []
+		for raw_entity in action.get("entities", []):
+			if raw_entity is Dictionary:
+				normalized_entities.append(raw_entity.duplicate(true))
+		action["entities"] = normalized_entities
+		if not String(action.get("op", "")).is_empty():
+			normalized_actions.append(action)
+	return normalized_actions
+
+
+func _normalize_entity(entity: Dictionary) -> Dictionary:
+	var normalized_entity := entity.duplicate(true)
+	var entity_id := String(normalized_entity.get("id", ""))
+	if entity_id.is_empty():
+		return {}
+
+	normalized_entity["id"] = entity_id
+	normalized_entity["name"] = String(normalized_entity.get("name", entity_id))
+	normalized_entity["archetype"] = String(normalized_entity.get("archetype", "entity"))
+	normalized_entity["tags"] = _normalize_string_array(normalized_entity.get("tags", []))
+	if not normalized_entity.has("components") or not (normalized_entity["components"] is Dictionary):
+		normalized_entity["components"] = {}
+	return normalized_entity
 
 
 func _merge_dictionaries(base_value: Dictionary, patch_value: Dictionary) -> Dictionary:
@@ -557,28 +918,28 @@ func _load_time_rule_package() -> Dictionary:
 	if not FileAccess.file_exists(time_package_path):
 		push_error("Time rule package not found at %s" % time_package_path)
 		return {}
-	
+
 	var file := FileAccess.open(time_package_path, FileAccess.READ)
 	if file == null:
 		push_error("Failed to open time rule package: %s" % FileAccess.get_open_error())
 		return {}
-	
+
 	var json_text := file.get_as_text()
 	file.close()
-	
+
 	var json := JSON.new()
 	var parse_result := json.parse(json_text)
 	if parse_result != OK:
 		push_error("Failed to parse time rule package JSON: %s" % json.get_error_message())
 		return {}
-	
+
 	var package_data: Dictionary = json.data if json.data is Dictionary else {}
 	return package_data.get("rule_patch", {})
 
 
 func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dictionary:
 	var time_rule_active := installed_rules.has("time_counter")
-	
+
 	if not time_rule_active:
 		return {
 			"visible": false,
@@ -589,12 +950,12 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 			"second": 0,
 			"formatted": ""
 		}
-	
+
 	var player_entity: Dictionary = entities.get("player_character", {})
 	var components: Dictionary = player_entity.get("components", {})
 	var time_component: Dictionary = components.get("time", {})
 	var total_seconds := float(time_component.get("elapsed_seconds", 0.0))
-	
+
 	var total_int := int(total_seconds)
 	var day := (total_int / 86400) + 1
 	var remaining := total_int % 86400
@@ -602,9 +963,9 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 	remaining = remaining % 3600
 	var minute := remaining / 60
 	var second := remaining % 60
-	
+
 	var formatted := "%dd %02d:%02d:%02d" % [day, hour, minute, second]
-	
+
 	return {
 		"visible": true,
 		"total_seconds": total_seconds,

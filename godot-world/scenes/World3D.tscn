@@ -1,0 +1,94 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/world_3d_scene.gd" id="1_world"]
+
+[sub_resource type="Environment" id="1_environment"]
+background_mode = 1
+background_color = Color(0.635294, 0.733333, 0.870588, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.86, 0.88, 0.94, 1)
+ambient_light_energy = 0.72
+
+[sub_resource type="BoxShape3D" id="2_ground_shape"]
+size = Vector3(26, 0.2, 26)
+
+[sub_resource type="BoxMesh" id="3_ground_mesh"]
+size = Vector3(26, 0.2, 26)
+
+[sub_resource type="StandardMaterial3D" id="4_ground_material"]
+albedo_color = Color(0.337255, 0.388235, 0.352941, 1)
+roughness = 0.96
+
+[sub_resource type="BoxShape3D" id="5_player_shape"]
+size = Vector3(0.9, 1.8, 0.9)
+
+[sub_resource type="BoxMesh" id="6_player_mesh"]
+size = Vector3(0.9, 1.8, 0.9)
+
+[sub_resource type="StandardMaterial3D" id="7_player_material"]
+albedo_color = Color(0.333333, 0.54902, 0.968627, 1)
+roughness = 0.72
+
+[sub_resource type="BoxShape3D" id="8_gm_shape"]
+size = Vector3(1.2, 2.2, 1.2)
+
+[sub_resource type="BoxMesh" id="9_gm_mesh"]
+size = Vector3(1.2, 2.2, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="10_gm_material"]
+albedo_color = Color(0.952941, 0.788235, 0.411765, 1)
+roughness = 0.72
+
+[node name="World3D" type="Node3D"]
+script = ExtResource("1_world")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("1_environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-58, 36, 0)
+light_color = Color(1, 0.964706, 0.87451, 1)
+light_energy = 1.45
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("2_ground_shape")
+
+[node name="Visual" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("3_ground_mesh")
+material_override = SubResource("4_ground_material")
+cast_shadow = 0
+
+[node name="WorldObjects" type="Node3D" parent="."]
+
+[node name="Player" type="CharacterBody3D" parent="."]
+position = Vector3(0, 0.9, -3.2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("5_player_shape")
+
+[node name="Visual" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("6_player_mesh")
+material_override = SubResource("7_player_material")
+
+[node name="GameMaster" type="Area3D" parent="."]
+position = Vector3(3.2, 1.1, 0.8)
+input_ray_pickable = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GameMaster"]
+shape = SubResource("8_gm_shape")
+
+[node name="Visual" type="MeshInstance3D" parent="GameMaster"]
+mesh = SubResource("9_gm_mesh")
+material_override = SubResource("10_gm_material")
+
+[node name="CameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+near = 0.1
+far = 200.0
+fov = 60.0

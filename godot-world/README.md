@@ -2,25 +2,34 @@
 
 This folder contains the current Godot 4 desktop PoC for the repository.
 
-## What the PoC does
+## Default flow: PoC2 (2D playable, Japanese-first)
 
-The default scene starts a plain white 2D world with exactly two actors:
+The default scene starts in a **2D playable world**.
 
-- one player character
-- one game master
+1. Move with the arrow keys.
+2. Approach the **ゲームマスター** and click or press `E`.
+3. In the Japanese GM overlay, progress through:
+   - `物体基礎を有効化`
+   - `所有関係を有効化`
+   - `親子ツリーを有効化`
+4. Return to the world and click visible objects to inspect their Japanese state.
 
-The player can move around the scene and can only talk to the game master. Opening the game master screen uses the Japanese PoC flow by default, and the player can always return to the 2D world. When the user asks the game master to create the time rule, the game master deterministically installs the predefined time rule from `rules/packages/time.rule.json`. After returning to the scene, a clock appears in the top-right and advances in fixed day / hour / minute / second units.
+PoC2 is considered successful when the player can, in the 2D flow, inspect:
 
-The PoC intentionally does **not** define morning, noon, aging, or other time-derived world concepts.
+- Object Rule
+- Ownership Rule
+- parent-child rule tree
+- object ownership / placement state
 
-## Main folders
+The time rule remains available as a supporting proof, but it is no longer the only guided path.
 
-- `scenes/` — Godot scenes, including the default playable PoC scene
-- `scripts/core/` — world state and deterministic simulation runtime
-- `scripts/game/` — 2D world scene controller and character scripts
-- `scripts/ui/` — game master interaction UI
-- `rules/packages/` — predefined rule data, including the time rule
-- `docs/` — supporting workflow notes
+## Secondary flow: PoC3 (partial 3D proof)
+
+The GM overlay also exposes **PoC3 3D途中証明**.
+
+- This path is **secondary**.
+- It exists to keep the 3D proof available.
+- The primary success path remains the 2D PoC2 flow.
 
 ## Runtime overview
 
@@ -29,24 +38,10 @@ The PoC intentionally does **not** define morning, noon, aging, or other time-de
 - Autoload singleton: `scripts/core/WorldState.gd`
 - Runtime model: `scripts/core/SimulationRuntime.gd`
 
-### WorldState API
-
-- `talk_to_game_master(message: String) -> Dictionary`
-- `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary`
-- `get_world_snapshot() -> Dictionary`
-- `advance_tick(delta_seconds: float) -> void`
-
-`get_world_snapshot()` exposes the data needed by the PoC UI, including:
-
-- `entities`
-- `conversation_log`
-- `clock`
-
 ## Running locally
 
 1. Install Godot 4 locally.
 2. Open `godot-world/project.godot` in the Godot editor, or run `godot --path godot-world` from the repository root.
 3. Launch the default scene.
-4. Move the player in the white 2D scene and click the game master when you are close enough.
-5. In the Japanese game master screen, send a message such as `時間のルールを作成しろ`.
-6. Return to the 2D scene and confirm that the clock appears in the top-right and starts advancing.
+4. Follow the PoC2 2D flow first.
+5. Optionally open the PoC3 3D proof from the GM overlay.

@@ -72,7 +72,7 @@ func _compile_tick_delta(operation: Dictionary, stat_components: Dictionary) -> 
 	if stat_id.is_empty():
 		return {}
 
-	var interval_seconds := max(float(operation.get("interval_seconds", 1.0)), 0.001)
+	var interval_seconds: float = max(float(operation.get("interval_seconds", 1.0)), 0.001)
 	return {
 		"component": stat_components.get(stat_id, _resolve_component(stat_id, "")),
 		"field": stat_id,

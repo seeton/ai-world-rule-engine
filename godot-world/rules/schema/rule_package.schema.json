@@ -144,6 +144,28 @@
             "draft"
           ]
         },
+        "requires_rule_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provides_rule_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "install_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "op"
+            ],
+            "additionalProperties": true
+          }
+        },
         "operations": {
           "type": "array",
           "items": {

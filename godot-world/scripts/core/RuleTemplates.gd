@@ -39,6 +39,115 @@ static func get_templates() -> Array:
 			}
 		},
 		{
+			"id": "object_base",
+			"name": "オブジェクト基礎",
+			"description": "物体エンティティを追加し、object-base 親種別を提供します。",
+			"summary": "持ち運べる物体と重い物体を配置し、オブジェクト系ルールの土台を作ります。",
+			"keywords": ["オブジェクト", "物体", "アイテム", "道具", "object", "item", "tool", "crate"],
+			"rule_patch": {
+				"id": "rule_object_base",
+				"name": "オブジェクト基礎ルール",
+				"concept": "objects",
+				"scope": "entity",
+				"provides_rule_kinds": ["object-base"],
+				"install_actions": [
+					{
+						"op": "upsert_entities",
+						"entities": [
+							{
+								"id": "object_kettle",
+								"name": "湯沸かしケトル",
+								"archetype": "object",
+								"tags": ["object", "non_person", "portable"],
+								"material": "iron",
+								"weight": 2.5,
+								"position": {
+									"x": 2.0,
+									"y": 0.0,
+									"z": 1.0,
+									"location": "campfire"
+								},
+								"portability": {
+									"portable": true,
+									"carry_style": "handheld"
+								},
+								"state": {
+									"condition": "使い込み",
+									"status": "水入り"
+								}
+							},
+							{
+								"id": "object_grain_crate",
+								"name": "穀物箱",
+								"archetype": "object",
+								"tags": ["object", "non_person", "storage"],
+								"material": "wood",
+								"weight": 18.0,
+								"position": {
+									"x": -3.0,
+									"y": 0.0,
+									"z": 4.0,
+									"location": "storehouse"
+								},
+								"portability": {
+									"portable": false,
+									"reason": "一人では重すぎる"
+								},
+								"state": {
+									"condition": "頑丈",
+									"status": "封印済み"
+								}
+							}
+						]
+					}
+				],
+				"effects": []
+			}
+		},
+		{
+			"id": "ownership_links",
+			"name": "所有関係",
+			"description": "object-base があるとき、既存の物体へ所有情報を追加します。",
+			"summary": "object-base を前提に、ワールド内の物体へ所有者を割り当てます。",
+			"keywords": ["所有", "所有者", "持ち主", "ownership", "owner", "belong"],
+			"rule_patch": {
+				"id": "rule_ownership_links",
+				"name": "所有関係ルール",
+				"concept": "ownership",
+				"scope": "entity",
+				"requires_rule_kinds": ["object-base"],
+				"provides_rule_kinds": ["ownership-base"],
+				"install_actions": [
+					{
+						"op": "upsert_entities",
+						"entities": [
+							{
+								"id": "object_kettle",
+								"components": {
+									"ownership": {
+										"owner_entity_id": "player_character",
+										"owner_name": "プレイヤー",
+										"relationship": "caretaker"
+									}
+								}
+							},
+							{
+								"id": "object_grain_crate",
+								"components": {
+									"ownership": {
+										"owner_entity_id": "player_character",
+										"owner_name": "プレイヤー",
+										"relationship": "quartermaster"
+									}
+								}
+							}
+						]
+					}
+				],
+				"effects": []
+			}
+		},
+		{
 			"id": "hunger",
 			"name": "Hunger",
 			"description": "Introduces hunger as a need that grows over time.",

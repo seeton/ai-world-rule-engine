@@ -37,9 +37,16 @@ var _send_button: Button
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modulate.a = 0.0
 	_world_state = get_node("/root/WorldState")
 	_build_ui()
 	_show_welcome_message()
+	_fade_in()
+
+
+func _fade_in() -> void:
+	var tween := create_tween()
+	tween.tween_property(self, "modulate:a", 1.0, 0.25)
 
 
 func _build_ui() -> void:
@@ -134,8 +141,12 @@ func _show_welcome_message() -> void:
 
 
 func _on_back_pressed() -> void:
-	closed.emit()
-	queue_free()
+	var tween := create_tween()
+	tween.tween_property(self, "modulate:a", 0.0, 0.18)
+	tween.tween_callback(func():
+		closed.emit()
+		queue_free()
+	)
 
 
 func _on_send_pressed() -> void:

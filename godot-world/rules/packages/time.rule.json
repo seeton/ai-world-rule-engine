@@ -1,0 +1,50 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.time",
+  "display_name": "Time",
+  "description": "Adds a deterministic elapsed time counter that updates each tick.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.time"
+  },
+  "tags": [
+    "time",
+    "clock",
+    "progression"
+  ],
+  "match_phrases": [
+    "time",
+    "clock",
+    "timer",
+    "elapsed"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "rule_patch": {
+    "id": "time_counter",
+    "name": "Time Counter",
+    "concept": "time",
+    "enabled": true,
+    "scope": "entity",
+    "target_tags": ["player"],
+    "effects": [
+      {
+        "component": "time",
+        "field": "elapsed_seconds",
+        "op": "add",
+        "value_per_second": 1.0,
+        "default": 0.0,
+        "min": 0.0
+      }
+    ]
+  }
+}

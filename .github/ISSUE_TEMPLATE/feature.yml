@@ -12,7 +12,7 @@ body:
         Scope this repo carefully:
         - `godot-world/` for Godot 4 simulation work
         - `godot-world/rules/` for safe rule packages
-        - legacy Node PoC only when directly relevant
+        - root-level changes only for repo docs or workflow metadata
   - type: dropdown
     id: area
     attributes:
@@ -23,7 +23,7 @@ body:
         - rule package library
         - rule compiler or integration
         - docs or workflow
-        - legacy Node PoC
+        - repo docs or workflow
     validations:
       required: true
   - type: textarea

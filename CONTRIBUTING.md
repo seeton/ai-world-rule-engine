@@ -85,6 +85,11 @@ Call out scope clearly:
 - whether the PR stays within the intended `godot-world/` scope
 - whether rule packages are new, cloned, or forks of existing packages
 
+### Language expectations
+
+- contributor-facing artifacts should be written in Japanese by default
+- this includes PR titles, PR bodies, handoff notes, and operational summaries unless the issue explicitly requires another language
+
 ## Playable handoff rules
 
 When a change reaches a playable game state or completes a playable PoC slice:
@@ -92,11 +97,12 @@ When a change reaches a playable game state or completes a playable PoC slice:
 - open a PR linked to the issue before handing the work off as complete
 - include the exact game launch command(s) in the handoff note, not just prose instructions
 - include any additional run context the reviewer needs, for example the working directory, Godot entry path, or required flags
+- when handing off a repo-local worktree or non-default branch, prefer absolute paths so the reviewer can run the correct build without ambiguity
 
 Example launch commands for the active Godot project:
 
-- `godot --path godot-world`
-- `cd godot-world && godot`
+- `/opt/homebrew/bin/godot --path /absolute/path/to/godot-world`
+- `cd /absolute/path/to/godot-world && /opt/homebrew/bin/godot`
 
 ## Multi-agent integration rules
 

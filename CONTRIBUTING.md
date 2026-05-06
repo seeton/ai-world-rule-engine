@@ -98,6 +98,8 @@ When a change reaches a playable game state or completes a playable PoC slice:
 - include the exact game launch command(s) in the handoff note, not just prose instructions
 - include any additional run context the reviewer needs, for example the working directory, Godot entry path, or required flags
 - when handing off a repo-local worktree or non-default branch, prefer absolute paths so the reviewer can run the correct build without ambiguity
+- provide launch commands as copy-pasteable single-line commands
+- do not split an option and its value across lines, for example `--path` and the target directory must stay on the same line
 
 Example launch commands for the active Godot project:
 

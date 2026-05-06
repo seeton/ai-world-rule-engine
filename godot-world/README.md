@@ -36,6 +36,17 @@ Packages do **not** execute embedded scripts or arbitrary code. The compiler pro
 
 The core foundation starts from a null world with a mutable origin entity. Rules are additive data patches: AI proposes them, and the deterministic fixed-step runtime executes them without arbitrary code execution.
 
+## Rule model
+
+- Rules form a strict parent/child tree.
+- A child rule only applies after its parent side of the tree is already active.
+- Parent parts of the tree cannot be skipped when applying child rules.
+- Deeper descendants can be understood as rules nested under a child rule, or simply as a child rule's child rule.
+- Every rule always owns a `Representation`, even when that representation is intentionally not visible in the world.
+- Visible rules such as time use their `Representation` for rendering, while invisible rules such as gravity still keep an internal `Representation` so systems can treat all rules consistently.
+
+See `docs/rule_model.md` for the detailed rule and representation invariants.
+
 ### WorldState API
 
 - `submit_player_task(task_text: String) -> Dictionary`

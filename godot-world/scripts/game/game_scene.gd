@@ -14,7 +14,7 @@ const UI_TEXT := {
 		"clock_prefix": "時計 ",
 		"player_label": "プレイヤー",
 		"gm_label": "ゲームマスター",
-		"goal": "矢印キーで移動し、ゲームマスターに近づいてクリックしてください。",
+		"goal": "矢印キーで移動し、ゲームマスターに近づいてクリックまたはEキーで話しかけてください。",
 		"subgoal": "時間のルールを作成しろ、と頼んでから戻ると時計が表示されます。"
 	},
 	"en": {
@@ -22,7 +22,7 @@ const UI_TEXT := {
 		"clock_prefix": "Clock ",
 		"player_label": "Player",
 		"gm_label": "Game Master",
-		"goal": "Move with the arrow keys and click the game master when close.",
+		"goal": "Move with the arrow keys and click the game master or press E when close.",
 		"subgoal": "Ask for the time rule, then return to reveal the clock."
 	}
 }
@@ -52,6 +52,14 @@ func _process(delta: float) -> void:
 		_world_state.call("advance_tick", delta)
 	_update_interaction_hint()
 	_update_clock()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _gm_dialog != null:
+		return
+	if event.is_action_pressed("ui_accept") or (event is InputEventKey and event.pressed and event.keycode == KEY_E):
+		if _is_player_in_range():
+			_on_gm_interaction()
 
 func _update_interaction_hint() -> void:
 	if not player or not gm:
@@ -99,6 +107,7 @@ func _setup_clock_ui() -> void:
 	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_clock_label.add_theme_font_size_override("font_size", 22)
 	_clock_label.add_theme_color_override("font_color", Color.BLACK)
+	_clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_clock_label.visible = false
 	_clock_layer.add_child(_clock_label)
 
@@ -110,6 +119,7 @@ func _setup_goal_hint() -> void:
 	_goal_hint.text = "%s\n%s" % [_text("goal"), _text("subgoal")]
 	_goal_hint.add_theme_font_size_override("font_size", 16)
 	_goal_hint.add_theme_color_override("font_color", Color(0.15, 0.15, 0.15, 1.0))
+	_goal_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_goal_hint)
 
 

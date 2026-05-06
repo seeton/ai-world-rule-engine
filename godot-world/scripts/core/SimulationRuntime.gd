@@ -7,7 +7,7 @@ const DEFAULT_LOCALE := "ja"
 const TEXT := {
 	"ja": {
 		"time_rule_already_active": "時間のルールはすでに有効です。",
-		"time_rule_installed": "時間のルールを作成しました。世界に戻ると右上に時計が表示されます。",
+		"time_rule_installed": "事前定義済みの時間ルール time_counter を適用しました。世界に戻ると右上に時計が表示されます。",
 		"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
 		"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
 		"help_prompt": "時間のルールを作成しろ、と言ってください。",
@@ -19,7 +19,7 @@ const TEXT := {
 	},
 	"en": {
 		"time_rule_already_active": "The time rule is already active.",
-		"time_rule_installed": "The time rule has been created. Return to the world to see the clock in the top-right.",
+		"time_rule_installed": "Applied the predefined time rule 'time_counter'. Return to the world to see the clock in the top-right.",
 		"time_rule_install_failed": "Failed to apply the time rule: %s",
 		"time_rule_load_failed": "Failed to load the time rule definition.",
 		"help_prompt": "Ask me to create the time rule.",
@@ -119,6 +119,7 @@ func talk_to_game_master(message: String) -> Dictionary:
 		"action": action_taken,
 		"reply": gm_response,
 		"gm_response": gm_response,
+		"installed_rule_id": "time_counter" if action_taken == "installed_time_rule" else "",
 		"conversation_log": conversation_log.duplicate(true)
 	}
 

@@ -5,23 +5,26 @@ const DEFAULT_FIXED_STEP := 0.25
 const DEFAULT_LOCALE := "ja"
 
 const TEXT := {
-	"ja": {
-		"time_rule_already_active": "時間のルールはすでに有効です。",
-		"time_rule_installed": "事前定義済みの時間ルール time_counter を適用しました。世界に戻ると右上に時計が表示されます。",
-		"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
-		"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
+		"ja": {
+			"time_rule_already_active": "時間のルールはすでに有効です。",
+			"time_rule_installed": "事前定義済みの時間ルール time_counter を適用しました。世界に戻ると右上に時計が表示されます。",
+			"time_rule_install_failed": "時間のルールの適用に失敗しました: %s",
+			"time_rule_load_failed": "時間のルール定義を読み込めませんでした。",
 		"object_rule_already_active": "オブジェクトルールはすでに有効です。",
 		"object_rule_installed": "オブジェクトルールを適用しました。物体一覧とルールツリーにオブジェクト基礎が反映されます。",
 		"object_rule_install_failed": "オブジェクトルールの適用に失敗しました: %s",
-		"ownership_rule_already_active": "所有ルールはすでに有効です。",
-		"ownership_rule_installed": "所有ルールを適用しました。物体の所有者情報と親子ルール関係が更新されます。",
-		"ownership_rule_install_failed": "所有ルールの適用に失敗しました: %s",
-		"help_prompt": "「時間のルールを作成しろ」「オブジェクトルールを作成しろ」「所有ルールを作成しろ」と言ってください。",
-		"player_name": "プレイヤー",
-		"gm_name": "ゲームマスター",
-		"player_task": "最初のルールを待っています",
-		"gm_task": "プレイヤーの依頼を待っています",
-		"world_bootstrap": "プレイヤーとゲームマスターがいる世界を初期化しました。"
+			"ownership_rule_already_active": "所有ルールはすでに有効です。",
+			"ownership_rule_installed": "所有ルールを適用しました。物体の所有者情報と親子ルール関係が更新されます。",
+			"ownership_rule_install_failed": "所有ルールの適用に失敗しました: %s",
+			"parent_tree_rule_already_active": "親子ツリールールはすでに有効です。",
+			"parent_tree_rule_installed": "親子ツリールールを適用しました。ベリー束→道具袋、水瓶→倉庫 の関係がルールツリーと物体状態に反映されます。",
+			"parent_tree_rule_install_failed": "親子ツリールールの適用に失敗しました: %s",
+			"help_prompt": "「時間のルールを作成しろ」「オブジェクトルールを作成しろ」「所有ルールを作成しろ」「親子ツリーを作成しろ」と言ってください。",
+			"player_name": "プレイヤー",
+			"gm_name": "ゲームマスター",
+			"player_task": "最初のルールを待っています",
+			"gm_task": "プレイヤーの依頼を待っています",
+			"world_bootstrap": "プレイヤーとゲームマスターがいる世界を初期化しました。"
 	},
 	"en": {
 		"time_rule_already_active": "The time rule is already active.",
@@ -30,16 +33,19 @@ const TEXT := {
 		"time_rule_load_failed": "Failed to load the time rule definition.",
 		"object_rule_already_active": "The object rule is already active.",
 		"object_rule_installed": "Applied the object rule. The object list and rule tree now include the object-base capability.",
-		"object_rule_install_failed": "Failed to apply the object rule: %s",
-		"ownership_rule_already_active": "The ownership rule is already active.",
-		"ownership_rule_installed": "Applied the ownership rule. Object ownership data and rule parent-child links were updated.",
-		"ownership_rule_install_failed": "Failed to apply the ownership rule: %s",
-		"help_prompt": "Ask me to create the time rule, object rule, or ownership rule.",
-		"player_name": "Player",
-		"gm_name": "Game Master",
-		"player_task": "Waiting for the first rule",
-		"gm_task": "Waiting for the player's request",
-		"world_bootstrap": "Initialized the world with one player and one game master."
+			"object_rule_install_failed": "Failed to apply the object rule: %s",
+			"ownership_rule_already_active": "The ownership rule is already active.",
+			"ownership_rule_installed": "Applied the ownership rule. Object ownership data and rule parent-child links were updated.",
+			"ownership_rule_install_failed": "Failed to apply the ownership rule: %s",
+			"parent_tree_rule_already_active": "The parent-child tree rule is already active.",
+			"parent_tree_rule_installed": "Applied the parent-child tree rule. Berry bundle → satchel and water jar → storehouse links now appear in the rule tree and object state.",
+			"parent_tree_rule_install_failed": "Failed to apply the parent-child tree rule: %s",
+			"help_prompt": "Ask me to create the time rule, object rule, ownership rule, or parent-child tree rule.",
+			"player_name": "Player",
+			"gm_name": "Game Master",
+			"player_task": "Waiting for the first rule",
+			"gm_task": "Waiting for the player's request",
+			"world_bootstrap": "Initialized the world with one player and one game master."
 	}
 }
 
@@ -114,8 +120,32 @@ func talk_to_game_master(message: String) -> Dictionary:
 		"所有ルールを追加",
 		"所有関係ルールを作成"
 	]
+	var parent_tree_rule_triggers := [
+		"create parent tree rule",
+		"create parent-child rule",
+		"install parent tree rule",
+		"install parent-child rule",
+		"add parent tree rule",
+		"親子ツリーを作成",
+		"親子ツリーを作成しろ",
+		"親子ルールを作成",
+		"親子ルールを追加",
+		"ツリーを作成"
+	]
 
-	if _message_has_trigger(normalized_message, ownership_rule_triggers):
+	if _message_has_trigger(normalized_message, parent_tree_rule_triggers):
+		var parent_tree_rule_result := _install_template_rule(
+			"parent_child_tree",
+			"rule_parent_child_tree",
+			"parent_tree_rule_already_active",
+			"parent_tree_rule_installed",
+			"parent_tree_rule_install_failed",
+			"installed_parent_tree_rule"
+		)
+		gm_response = String(parent_tree_rule_result.get("reply", ""))
+		action_taken = String(parent_tree_rule_result.get("action", "error"))
+		installed_rule_id = String(parent_tree_rule_result.get("installed_rule_id", ""))
+	elif _message_has_trigger(normalized_message, ownership_rule_triggers):
 		var ownership_rule_result := _install_template_rule(
 			"ownership_links",
 			"rule_ownership_links",
@@ -744,7 +774,7 @@ func _build_character_list(entities: Dictionary) -> Array:
 
 
 func _build_object_list(entities: Dictionary) -> Array:
-	var objects: Array = []
+	var objects_by_id: Dictionary = {}
 	var entity_ids: Array = entities.keys()
 	entity_ids.sort()
 
@@ -755,7 +785,7 @@ func _build_object_list(entities: Dictionary) -> Array:
 			continue
 		var components: Dictionary = entity.get("components", {})
 		var ownership: Dictionary = components.get("ownership", {})
-		objects.append({
+		objects_by_id[entity_id] = {
 			"id": entity.get("id", entity_id),
 			"name": entity.get("name", entity_id),
 			"material": entity.get("material", ""),
@@ -763,8 +793,54 @@ func _build_object_list(entities: Dictionary) -> Array:
 			"position": entity.get("position", {}).duplicate(true) if entity.get("position", {}) is Dictionary else entity.get("position", {}),
 			"portability": entity.get("portability", {}).duplicate(true) if entity.get("portability", {}) is Dictionary else entity.get("portability", {}),
 			"state": entity.get("state", {}).duplicate(true) if entity.get("state", {}) is Dictionary else entity.get("state", {}),
-			"owner": ownership.duplicate(true) if ownership is Dictionary else null
-		})
+			"owner": ownership.duplicate(true) if ownership is Dictionary else {},
+			"container_id": "",
+			"location_id": "",
+			"child_ids": []
+		}
+
+	for entity_id in entity_ids:
+		var entity: Dictionary = entities[entity_id]
+		var entity_tags: Array = entity.get("tags", [])
+		if not entity_tags.has("object") or not objects_by_id.has(entity_id):
+			continue
+
+		var components: Dictionary = entity.get("components", {})
+		var containment: Dictionary = components.get("containment", {})
+		var placement: Dictionary = components.get("placement", {})
+		var position_value = entity.get("position", {})
+		var position: Dictionary = {}
+		if position_value is Dictionary:
+			position = position_value.duplicate(true)
+		var container_id := String(containment.get("container_entity_id", ""))
+		var location_id := String(placement.get("location_entity_id", position.get("location", "")))
+		var object_entry: Dictionary = objects_by_id[entity_id]
+		object_entry["container_id"] = container_id
+		object_entry["location_id"] = location_id
+		objects_by_id[entity_id] = object_entry
+
+		if not container_id.is_empty() and objects_by_id.has(container_id):
+			var container_entry: Dictionary = objects_by_id[container_id]
+			var container_child_ids: Array = container_entry.get("child_ids", [])
+			if not container_child_ids.has(entity_id):
+				container_child_ids.append(entity_id)
+				container_child_ids.sort()
+			container_entry["child_ids"] = container_child_ids
+			objects_by_id[container_id] = container_entry
+
+		if not location_id.is_empty() and objects_by_id.has(location_id):
+			var location_entry: Dictionary = objects_by_id[location_id]
+			var location_child_ids: Array = location_entry.get("child_ids", [])
+			if not location_child_ids.has(entity_id):
+				location_child_ids.append(entity_id)
+				location_child_ids.sort()
+			location_entry["child_ids"] = location_child_ids
+			objects_by_id[location_id] = location_entry
+
+	var objects: Array = []
+	for entity_id in entity_ids:
+		if objects_by_id.has(entity_id):
+			objects.append(objects_by_id[entity_id])
 	return objects
 
 

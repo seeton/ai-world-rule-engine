@@ -129,7 +129,8 @@ func _ready() -> void:
 
 func get_poc_snapshot() -> Dictionary:
     var world_snapshot := _get_world_state_snapshot()
-    var entities := _build_entities()
+    _sync_progress_from_world_snapshot(world_snapshot)
+    var entities := _build_entities(world_snapshot)
     var selected_entity := _find_entity(entities, _selected_entity_id)
     if selected_entity.is_empty():
         selected_entity = _find_entity(entities, "player_character")
@@ -165,6 +166,7 @@ func submit_gm_message(message: String) -> Dictionary:
     return result
 
 func perform_gm_action(action_id: String, _message: String = "") -> Dictionary:
+    _sync_progress_from_world_snapshot(_get_world_state_snapshot())
     var gm_response := ""
     var close_after_action := false
 
@@ -173,27 +175,33 @@ func perform_gm_action(action_id: String, _message: String = "") -> Dictionary:
             if _progress.object_base:
                 gm_response = "オブジェクト基礎ルールはすでに有効です。2D世界で物体をクリックして状態を確認してください。"
             else:
-                _progress.object_base = true
-                _selected_entity_id = "tool_satchel"
-                gm_response = "オブジェクト基礎ルールを有効化しました。2D世界に道具袋・ベリー束・倉庫・水瓶が現れます。"
+                gm_response = _install_rule_template(
+                    "object_base",
+                    "tool_satchel",
+                    "オブジェクト基礎ルールを有効化しました。2D世界に道具袋・ベリー束・倉庫・水瓶が現れます。"
+                )
         ACTION_OWNERSHIP:
             if not _progress.object_base:
                 gm_response = "先にオブジェクト基礎ルールを有効化してください。物体が現れてから所有関係を結びます。"
             elif _progress.ownership:
                 gm_response = "所有関係ルールはすでに有効です。道具袋と水瓶の所有者がプレイヤーとして表示されています。"
             else:
-                _progress.ownership = true
-                _selected_entity_id = "water_jar"
-                gm_response = "所有関係ルールを追加しました。道具袋と水瓶がプレイヤーの持ち物として見えるようになりました。"
+                gm_response = _install_rule_template(
+                    "ownership_links",
+                    "water_jar",
+                    "所有関係ルールを追加しました。道具袋と水瓶がプレイヤーの持ち物として見えるようになりました。"
+                )
         ACTION_PARENT_TREE:
             if not _progress.ownership:
                 gm_response = "先に所有関係ルールまで進めてください。その後で親子ツリーをつなげます。"
             elif _progress.parent_tree:
                 gm_response = "親子ツリールールはすでに有効です。ベリー束→道具袋、水瓶→倉庫 を確認できます。"
             else:
-                _progress.parent_tree = true
-                _selected_entity_id = "berry_bundle"
-                gm_response = "親子ツリールールを追加しました。ベリー束は道具袋の子、水瓶は倉庫に配置された物体として追跡できます。PoC2 の本筋は達成です。"
+                gm_response = _install_rule_template(
+                    "parent_child_tree",
+                    "berry_bundle",
+                    "親子ツリールールを追加しました。ベリー束は道具袋の子、水瓶は倉庫に配置された物体として追跡できます。PoC2 の本筋は達成です。"
+                )
         ACTION_TIME:
             gm_response = _install_time_rule()
         ACTION_GO_TO_3D:
@@ -223,7 +231,7 @@ func switch_world(mode: String) -> void:
     _emit_snapshot_changed()
 
 func set_selected_entity(entity_id: String) -> void:
-    var entities := _build_entities()
+    var entities := _build_entities(_get_world_state_snapshot())
     for entity in entities:
         if String(entity.get("id", "")) == entity_id and bool(entity.get("visible", false)):
             _selected_entity_id = entity_id
@@ -243,8 +251,8 @@ func _switch_world(mode: String) -> void:
     if _active_world.has_signal("gm_interaction_requested"):
         _active_world.gm_interaction_requested.connect(_on_gm_interaction_requested)
     _active_mode = mode
-    if _gm_dialog == null and _active_world.has_method("set_interaction_paused"):
-        _active_world.call("set_interaction_paused", false)
+    if _active_world.has_method("set_interaction_paused"):
+        _active_world.call("set_interaction_paused", _gm_dialog != null)
 
 func _on_gm_interaction_requested() -> void:
     if _gm_dialog != null:
@@ -311,21 +319,35 @@ func _success_summary() -> String:
     return "PoC2 の成功条件: 2D世界で Object Rule / Ownership Rule / parent-child rule tree / object ownership state を確認できること。"
 
 func _build_installed_rules(world_snapshot: Dictionary) -> Array:
+    var installed_rules_by_id := _installed_rules_by_id(world_snapshot)
     var rules: Array = []
-    if _progress.object_base:
-        rules.append(_build_rule_entry(DEMO_RULES[ACTION_OBJECT_BASE]))
-    if _progress.ownership:
-        rules.append(_build_rule_entry(DEMO_RULES[ACTION_OWNERSHIP]))
-    if _progress.parent_tree:
-        rules.append(_build_rule_entry(DEMO_RULES[ACTION_PARENT_TREE]))
-    if _time_rule_active(world_snapshot):
-        rules.append({
-            "id": "time_counter",
-            "name": "時間ルール",
-            "description": "右上の時計を進める補助ルールです。PoC2 の本筋ではなく補助確認用です。",
-            "status": "時計が表示され、固定刻みで時刻が進行中です。",
-            "parent_rule_ids": []
-        })
+    if installed_rules_by_id.has("rule_object_base"):
+        rules.append(_build_rule_entry_from_runtime(
+            installed_rules_by_id["rule_object_base"],
+            DEMO_RULES[ACTION_OBJECT_BASE]
+        ))
+    if installed_rules_by_id.has("rule_ownership_links"):
+        rules.append(_build_rule_entry_from_runtime(
+            installed_rules_by_id["rule_ownership_links"],
+            DEMO_RULES[ACTION_OWNERSHIP]
+        ))
+    if installed_rules_by_id.has("rule_parent_child_tree"):
+        rules.append(_build_rule_entry_from_runtime(
+            installed_rules_by_id["rule_parent_child_tree"],
+            DEMO_RULES[ACTION_PARENT_TREE]
+        ))
+    if installed_rules_by_id.has("time_counter") or installed_rules_by_id.has("rule_world_time"):
+        var time_rule: Dictionary = installed_rules_by_id.get("time_counter", installed_rules_by_id.get("rule_world_time", {}))
+        rules.append(_build_rule_entry_from_runtime(
+            time_rule,
+            {
+                "id": "time_counter",
+                "name": "時間ルール",
+                "description": "右上の時計を進める補助ルールです。PoC2 の本筋ではなく補助確認用です。",
+                "status": "時計が表示され、固定刻みで時刻が進行中です。",
+                "parent_rule_ids": []
+            }
+        ))
     return rules
 
 func _build_rule_entry(source: Dictionary) -> Dictionary:
@@ -337,23 +359,44 @@ func _build_rule_entry(source: Dictionary) -> Dictionary:
         "parent_rule_ids": source.get("parent_rule_ids", []).duplicate(true)
     }
 
-func _build_entities() -> Array:
+func _build_rule_entry_from_runtime(runtime_rule: Dictionary, fallback: Dictionary) -> Dictionary:
+    return {
+        "id": String(runtime_rule.get("id", fallback.get("id", ""))),
+        "name": String(runtime_rule.get("name", fallback.get("name", ""))),
+        "description": String(runtime_rule.get("description", fallback.get("description", ""))),
+        "status": String(fallback.get("status", "導入済み")),
+        "parent_rule_ids": runtime_rule.get("resolved_parent_rule_ids", fallback.get("parent_rule_ids", [])).duplicate(true)
+    }
+
+func _build_entities(world_snapshot: Dictionary) -> Array:
+    var object_map := _object_snapshot_map(world_snapshot)
     var entities: Array = []
-    entities.append(_build_character_entity("player_character"))
-    entities.append(_build_character_entity("game_master"))
-    entities.append(_build_object_entity("tool_satchel"))
-    entities.append(_build_object_entity("berry_bundle"))
-    entities.append(_build_object_entity("storehouse"))
-    entities.append(_build_object_entity("water_jar"))
+    entities.append(_build_character_entity("player_character", object_map))
+    entities.append(_build_character_entity("game_master", object_map))
+    entities.append(_build_object_entity("tool_satchel", object_map))
+    entities.append(_build_object_entity("berry_bundle", object_map))
+    entities.append(_build_object_entity("storehouse", object_map))
+    entities.append(_build_object_entity("water_jar", object_map))
     return entities
 
-func _build_character_entity(entity_id: String) -> Dictionary:
+func _build_character_entity(entity_id: String, object_map: Dictionary) -> Dictionary:
     var source: Dictionary = ENTITY_DEFINITIONS[entity_id]
     var inspector_lines: Array = []
     inspector_lines.append_array(source.get("base_lines", []))
     inspector_lines.append_array(source.get("state_lines", []))
-    if entity_id == "player_character" and _progress.ownership:
-        inspector_lines.append("所有中: 道具袋 / 水瓶")
+    var owned_ids: Array = []
+    if entity_id == "player_character":
+        for object_id in object_map.keys():
+            var object_entry := _coerce_dictionary(object_map.get(object_id, {}))
+            var owner := _coerce_dictionary(object_entry.get("owner", {}))
+            if String(owner.get("owner_entity_id", "")) == entity_id:
+                owned_ids.append(object_id)
+        owned_ids.sort()
+        if not owned_ids.is_empty():
+            var owned_names: Array = []
+            for owned_id_variant in owned_ids:
+                owned_names.append(_entity_display_name(String(owned_id_variant)))
+            inspector_lines.append("所有中: %s" % " / ".join(owned_names))
     return {
         "id": entity_id,
         "name": String(source.get("name", entity_id)),
@@ -368,38 +411,34 @@ func _build_character_entity(entity_id: String) -> Dictionary:
         "container_id": "",
         "location_id": "",
         "child_ids": [],
-        "owned_ids": ["tool_satchel", "water_jar"] if _progress.ownership and entity_id == "player_character" else [],
+        "owned_ids": owned_ids,
         "inspector_lines": inspector_lines,
         "summary": "プレイヤー" if entity_id == "player_character" else "GM"
     }
 
-func _build_object_entity(entity_id: String) -> Dictionary:
+func _build_object_entity(entity_id: String, object_map: Dictionary) -> Dictionary:
     var source: Dictionary = ENTITY_DEFINITIONS[entity_id]
-    var visible: bool = bool(_progress.get("object_base", false))
-    var owner_id := ""
-    var container_id := ""
-    var location_id := ""
-    var child_ids: Array = []
+    var object_state := _coerce_dictionary(object_map.get(entity_id, {}))
+    var visible: bool = not object_state.is_empty()
+    var owner := _coerce_dictionary(object_state.get("owner", {}))
+    var owner_id := String(owner.get("owner_entity_id", ""))
+    var container_id := String(object_state.get("container_id", ""))
+    var location_id := String(object_state.get("location_id", ""))
+    var child_ids: Array = object_state.get("child_ids", []).duplicate(true) if object_state.get("child_ids", []) is Array else []
     var inspector_lines: Array = []
     inspector_lines.append_array(source.get("base_lines", []))
 
-    if _progress.ownership and entity_id in ["tool_satchel", "water_jar"]:
-        owner_id = "player_character"
-        inspector_lines.append("所有者: プレイヤー")
-
-    if _progress.parent_tree:
-        if entity_id == "tool_satchel":
-            child_ids.append("berry_bundle")
-            inspector_lines.append("子: ベリー束")
-        elif entity_id == "berry_bundle":
-            container_id = "tool_satchel"
-            inspector_lines.append("親 / 入れ物: 道具袋")
-        elif entity_id == "water_jar":
-            location_id = "storehouse"
-            inspector_lines.append("配置先: 倉庫")
-        elif entity_id == "storehouse":
-            child_ids.append("water_jar")
-            inspector_lines.append("配置中: 水瓶")
+    if owner_id != "":
+        inspector_lines.append("所有者: %s" % _entity_display_name(owner_id))
+    if container_id != "":
+        inspector_lines.append("親 / 入れ物: %s" % _entity_display_name(container_id))
+    if location_id != "":
+        inspector_lines.append("配置先: %s" % _entity_display_name(location_id))
+    for child_id_variant in child_ids:
+        var child_id := String(child_id_variant)
+        if child_id.is_empty():
+            continue
+        inspector_lines.append("子: %s" % _entity_display_name(child_id))
 
     return {
         "id": entity_id,
@@ -423,17 +462,32 @@ func _build_object_entity(entity_id: String) -> Dictionary:
 func _entity_summary(owner_id: String, container_id: String, location_id: String, child_ids: Array) -> String:
     var parts: Array = []
     if owner_id != "":
-        parts.append("所有者: プレイヤー")
+        parts.append("所有者: %s" % _entity_display_name(owner_id))
     if container_id != "":
-        parts.append("入れ物: 道具袋")
+        parts.append("入れ物: %s" % _entity_display_name(container_id))
     if location_id != "":
-        parts.append("配置先: 倉庫")
+        parts.append("配置先: %s" % _entity_display_name(location_id))
     if not child_ids.is_empty():
-        if child_ids.has("berry_bundle"):
-            parts.append("子: ベリー束")
-        if child_ids.has("water_jar"):
-            parts.append("配置: 水瓶")
+        var child_names: Array = []
+        for child_id_variant in child_ids:
+            child_names.append(_entity_display_name(String(child_id_variant)))
+        parts.append("子: %s" % " / ".join(child_names))
     return " / ".join(parts) if not parts.is_empty() else "物体として確認可能"
+
+func _install_rule_template(template_id: String, selected_entity_id: String, success_message: String) -> String:
+    if _world_state == null or not _world_state.has_method("create_rule_from_patch"):
+        return "WorldState が見つからないため、ルールを適用できません。"
+    var result_variant = _world_state.call("create_rule_from_patch", {"template_id": template_id})
+    if result_variant is Dictionary:
+        var result: Dictionary = result_variant
+        if String(result.get("status", "")) == "installed":
+            _selected_entity_id = selected_entity_id
+            _sync_progress_from_world_snapshot(_get_world_state_snapshot())
+            return success_message
+        var message := String(result.get("message", ""))
+        if not message.is_empty():
+            return message
+    return "ルールの適用に失敗しました。"
 
 func _install_time_rule() -> String:
     if _world_state != null and _world_state.has_method("talk_to_game_master"):
@@ -483,6 +537,40 @@ func _get_world_state_snapshot() -> Dictionary:
         if snapshot_variant is Dictionary:
             return snapshot_variant
     return {}
+
+func _installed_rules_by_id(world_snapshot: Dictionary) -> Dictionary:
+    var installed_rules_variant: Variant = world_snapshot.get("installed_rules_by_id", {})
+    if installed_rules_variant is Dictionary:
+        return installed_rules_variant
+    var installed_rules: Dictionary = {}
+    for raw_rule in world_snapshot.get("installed_rules", []):
+        if raw_rule is Dictionary:
+            var rule: Dictionary = raw_rule
+            installed_rules[String(rule.get("id", ""))] = rule
+    return installed_rules
+
+func _sync_progress_from_world_snapshot(world_snapshot: Dictionary) -> void:
+    var installed_rules := _installed_rules_by_id(world_snapshot)
+    _progress.object_base = installed_rules.has("rule_object_base")
+    _progress.ownership = installed_rules.has("rule_ownership_links")
+    _progress.parent_tree = installed_rules.has("rule_parent_child_tree")
+
+func _object_snapshot_map(world_snapshot: Dictionary) -> Dictionary:
+    var object_map: Dictionary = {}
+    for raw_object in world_snapshot.get("objects", []):
+        if raw_object is Dictionary:
+            var object_dict: Dictionary = raw_object
+            object_map[String(object_dict.get("id", ""))] = object_dict
+    return object_map
+
+func _entity_display_name(entity_id: String) -> String:
+    if ENTITY_DEFINITIONS.has(entity_id):
+        return String(ENTITY_DEFINITIONS[entity_id].get("name", entity_id))
+    if entity_id == "player_character":
+        return "プレイヤー"
+    if entity_id == "game_master":
+        return "ゲームマスター"
+    return entity_id
 
 func _find_entity(entities: Array, entity_id: String) -> Dictionary:
     for entity in entities:

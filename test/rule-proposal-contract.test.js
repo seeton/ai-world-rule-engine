@@ -194,7 +194,7 @@ test("proposal validation rejects schema-unsafe operations", () => {
   const problems = validateAgainstSchema(proposal, schema);
 
   assert.ok(problems.some((problem) => problem.includes("expected one of")));
-  assert.ok(problems.some((problem) => problem.includes("run_script")));
+  assert.ok(problems.some((problem) => problem.includes("$.patch.operations[2].op")));
 });
 
 test("proposal validation rejects unexpected root properties", () => {

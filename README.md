@@ -45,6 +45,6 @@ This repository uses **issue -> branch -> PR** as the default development flow.
 
 - Start from a GitHub issue before implementing.
 - Keep changes scoped to one issue per branch/worktree.
-- Open a PR for review instead of merging direct to `main`.
+- Open a PR for review instead of merging directly to `main`.
 - Keep gameplay, runtime, and rule-package work under `godot-world/`.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed branch, PR, and coordination rules.

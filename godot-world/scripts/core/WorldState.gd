@@ -3,7 +3,7 @@ extends Node
 const SimulationRuntimeScript = preload("res://scripts/core/SimulationRuntime.gd")
 const RuleTemplatesScript = preload("res://scripts/core/RuleTemplates.gd")
 
-var _runtime
+var _runtime = null
 var _available_templates: Array = []
 
 
@@ -37,11 +37,6 @@ func submit_player_task(task_text: String) -> Dictionary:
 	return result
 
 
-func talk_to_game_master(message: String) -> Dictionary:
-	_ensure_runtime()
-	return _runtime.talk_to_game_master(message)
-
-
 func clone_rule(rule_id: String) -> Dictionary:
 	_ensure_runtime()
 	return _runtime.clone_rule(rule_id)
@@ -68,6 +63,11 @@ func get_available_rule_templates() -> Array:
 func advance_tick(delta_seconds: float) -> void:
 	_ensure_runtime()
 	_runtime.advance_tick(delta_seconds)
+
+
+func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.set_entity_position(entity_id, position_patch)
 
 
 func _reset_world() -> void:

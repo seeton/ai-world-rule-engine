@@ -17,7 +17,7 @@ This folder contains a data-driven rule package workflow for a Godot 4 simulatio
 
 ## Repository validation
 
-Contributors can validate rule package data and static Godot file references without installing Godot. You do need Python 3 available on your shell `PATH` because the wrapper invokes `python3`.
+Contributors can validate rule package data and static Godot file references without installing Godot. You do need a Python 3 interpreter available on your shell `PATH` as `python3`, because the wrapper invokes that command directly.
 
 Run this from the repository root inside your issue worktree:
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
 import json
@@ -7,7 +6,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 DEFAULT_ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -48,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def read_json_file(path: Path, problems: list[ValidationProblem]) -> Any:
+def read_json_file(path: Path, problems: List[ValidationProblem]) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -88,10 +87,10 @@ def describe_type(type_name: str) -> str:
 
 def validate_against_schema(
     value: Any,
-    schema: dict[str, Any],
+    schema: Dict[str, Any],
     file_path: Path,
     location: str,
-    problems: list[ValidationProblem],
+    problems: List[ValidationProblem],
 ) -> None:
     expected_types = schema.get("type")
     if expected_types is not None:
@@ -187,7 +186,7 @@ def validate_against_schema(
             validate_against_schema(item, item_schema, file_path, f"{location}[{index}]", problems)
 
 
-def validate_rule_packages(root_dir: Path, problems: list[ValidationProblem]) -> int:
+def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) -> int:
     schema_path = root_dir / SCHEMA_RELATIVE_PATH
     schema = read_json_file(schema_path, problems)
     if schema is None:
@@ -206,7 +205,7 @@ def validate_rule_packages(root_dir: Path, problems: list[ValidationProblem]) ->
         problems.append(ValidationProblem(package_dir, "No rule package files were found."))
         return 0
 
-    package_ids: dict[str, Path] = {}
+    package_ids: Dict[str, Path] = {}
     for package_path in package_paths:
         package_data = read_json_file(package_path, problems)
         if package_data is None:
@@ -233,9 +232,9 @@ def validate_rule_packages(root_dir: Path, problems: list[ValidationProblem]) ->
 
 
 def validate_scene_ext_resources(
-    root_dir: Path, scene_path: Path, text: str, problems: list[ValidationProblem]
+    root_dir: Path, scene_path: Path, text: str, problems: List[ValidationProblem]
 ) -> None:
-    ext_resources: dict[str, str] = {}
+    ext_resources: Dict[str, str] = {}
     for line_number, line in enumerate(text.splitlines(), start=1):
         stripped_line = line.strip()
         if not stripped_line.startswith("[ext_resource "):
@@ -288,8 +287,14 @@ def validate_scene_ext_resources(
         )
 
 
-def resolve_repository_reference(root_dir: Path, reference: str) -> tuple[Path | None, str | None]:
-    relative_path = Path(reference.removeprefix("res://"))
+def resolve_repository_reference(
+    root_dir: Path, reference: str
+) -> Tuple[Optional[Path], Optional[str]]:
+    relative_reference = reference
+    if reference.startswith("res://"):
+        relative_reference = reference[len("res://") :]
+
+    relative_path = Path(relative_reference)
     if ".." in relative_path.parts:
         return None, f"{reference} is not a valid repository reference."
 
@@ -302,8 +307,8 @@ def resolve_repository_reference(root_dir: Path, reference: str) -> tuple[Path |
     return target_path, None
 
 
-def validate_reference_files(root_dir: Path, problems: list[ValidationProblem]) -> int:
-    reference_files: set[Path] = set()
+def validate_reference_files(root_dir: Path, problems: List[ValidationProblem]) -> int:
+    reference_files: Set[Path] = set()
     for pattern in REFERENCE_GLOBS:
         for path in root_dir.glob(pattern):
             if path.is_file():
@@ -337,7 +342,7 @@ def main() -> int:
     args = parse_args()
     root_dir = Path(args.root).expanduser().resolve()
 
-    problems: list[ValidationProblem] = []
+    problems: List[ValidationProblem] = []
     package_count = validate_rule_packages(root_dir, problems)
     reference_file_count = validate_reference_files(root_dir, problems)
 

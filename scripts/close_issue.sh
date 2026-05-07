@@ -13,7 +13,7 @@ Usage:
 
 Closes a GitHub issue through the local repository workflow:
   1. fetch the repo root from origin
-  2. fast-forward pull the repo root when it is a clean checkout of the default branch
+  2. fast-forward pull the repo root when it is on the default branch with no tracked changes or unmerged paths (untracked files are allowed)
   3. close the issue via gh
   4. release issue/PR/worktree claims for the issue worktree
   5. remove the repo-local worktree for the issue

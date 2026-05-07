@@ -196,10 +196,11 @@ sync_repo_root() {
 }
 
 ensure_worktree() {
-  local issue_number branch_name base_ref target_path current_branch
+  local issue_number branch_name base_ref default_branch target_path current_branch
   issue_number="$(resolve_issue "${1:-}")"
   branch_name="${2:-}"
-  base_ref="${3:-HEAD}"
+  default_branch="$(repo_root_default_branch)"
+  base_ref="${3:-origin/${default_branch}}"
   [[ -n "${branch_name}" ]] || die "Branch name is required."
 
   mkdir -p "${workspace_root}"
@@ -216,10 +217,10 @@ ensure_worktree() {
     die "${target_path} exists but is not a registered git worktree."
   fi
 
-  if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
-    git worktree add "${target_path}" "${branch_name}"
+  if git -C "${repo_root}" show-ref --verify --quiet "refs/heads/${branch_name}"; then
+    git -C "${repo_root}" worktree add "${target_path}" "${branch_name}"
   else
-    git worktree add -b "${branch_name}" "${target_path}" "${base_ref}"
+    git -C "${repo_root}" worktree add -b "${branch_name}" "${target_path}" "${base_ref}"
   fi
 
   printf 'Created %s on %s\n' "${target_path}" "${branch_name}"
@@ -272,10 +273,10 @@ remove_worktree() {
   worktree_exists "${target_path}" || die "No registered worktree at ${target_path}"
 
   branch_name="$(git -C "${target_path}" rev-parse --abbrev-ref HEAD)"
-  git worktree remove ${force_flag} "${target_path}"
+  git -C "${repo_root}" worktree remove ${force_flag} "${target_path}"
 
   if [[ "${delete_branch}" -eq 1 && "${branch_name}" != "HEAD" ]]; then
-    git branch -D "${branch_name}"
+    git -C "${repo_root}" branch -D "${branch_name}"
   fi
 
   printf 'Removed %s\n' "${target_path}"

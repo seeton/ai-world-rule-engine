@@ -1,6 +1,12 @@
 name: Request Copilot review
 
 on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
   pull_request_target:
     types:
       - opened

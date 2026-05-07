@@ -175,7 +175,7 @@ func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dicti
 
 func _reset_world() -> void:
     _rule_package_repository = RulePackageRepositoryScript.new()
-    _rule_compiler = RuleCompilerScript.new()
+    _rule_compiler = RuleCompilerScript.new(_rule_package_repository)
     _runtime_rule_patch_compiler = RuntimeRulePatchCompilerScript.new()
     _available_rule_packages = _rule_compiler.list_available_rule_packages()
     _available_templates = RuleTemplatesScript.get_templates()
@@ -183,6 +183,15 @@ func _reset_world() -> void:
 
 
 func _ensure_runtime() -> void:
+    if _rule_package_repository == null or _rule_compiler == null:
+        _rule_package_repository = RulePackageRepositoryScript.new()
+        _rule_compiler = RuleCompilerScript.new(_rule_package_repository)
+    if _runtime_rule_patch_compiler == null:
+        _runtime_rule_patch_compiler = RuntimeRulePatchCompilerScript.new()
+    if _available_rule_packages.is_empty():
+        _available_rule_packages = _rule_compiler.list_available_rule_packages()
+    if _available_templates.is_empty():
+        _available_templates = RuleTemplatesScript.get_templates()
     if _runtime == null:
         _reset_world()
 

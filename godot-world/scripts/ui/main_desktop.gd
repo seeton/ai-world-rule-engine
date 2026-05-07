@@ -65,6 +65,7 @@ const CHARACTER_ARCHETYPE_HINTS: Array = ["actor", "character", "npc", "origin",
 const CHARACTER_TAG_HINTS: Array = ["agent", "character", "human", "mortal", "npc", "person", "villager"]
 const OBJECT_ARCHETYPE_HINTS: Array = ["container", "item", "location", "object", "place", "prop", "resource", "structure", "tool"]
 const OBJECT_TAG_HINTS: Array = ["container", "item", "location", "object", "portable", "prop", "resource", "structure", "tool"]
+const PROPOSAL_REVIEW_DEBOUNCE_SECONDS := 0.35
 
 var _world_state: Node = null
 var _task_input: TextEdit
@@ -72,6 +73,7 @@ var _proposal_selector: OptionButton
 var _proposal_review_summary_label: Label
 var _proposal_metadata_view: TextEdit
 var _proposal_editor: TextEdit
+var _proposal_review_timer: Timer
 var _reset_proposal_button: Button
 var _approve_proposal_button: Button
 var _install_proposal_button: Button
@@ -424,6 +426,12 @@ func _build_proposal_panel() -> Control:
     _proposal_editor.text_changed.connect(_on_proposal_editor_changed)
     body.add_child(_proposal_editor)
 
+    _proposal_review_timer = Timer.new()
+    _proposal_review_timer.one_shot = true
+    _proposal_review_timer.wait_time = PROPOSAL_REVIEW_DEBOUNCE_SECONDS
+    _proposal_review_timer.timeout.connect(_on_proposal_review_timer_timeout)
+    body.add_child(_proposal_review_timer)
+
     return panel
 
 func _build_template_panel() -> Control:
@@ -726,6 +734,8 @@ func _update_proposal_panel() -> void:
         _proposal_selector.add_item(_format_proposal_option_label(_proposal_cache[index], index))
 
     if _proposal_cache.is_empty():
+        if _proposal_review_timer != null:
+            _proposal_review_timer.stop()
         _selected_proposal_index = -1
         _loaded_proposal_key = ""
         _selected_proposal_original_text = ""
@@ -759,6 +769,8 @@ func _update_proposal_panel() -> void:
     _update_proposal_views()
 
 func _load_selected_proposal_into_editor() -> void:
+    if _proposal_review_timer != null:
+        _proposal_review_timer.stop()
     var proposal := _current_selected_proposal()
     _loaded_proposal_key = _build_proposal_key(proposal, _selected_proposal_index)
     _approved_proposal_text = ""
@@ -801,6 +813,22 @@ func _refresh_current_proposal_review(append_errors: bool) -> Dictionary:
                 _append_log("提案レビューに失敗しました。", review_result)
             return review_result
     return _build_local_proposal_review(rule_package)
+
+func _build_editor_change_review_state() -> Dictionary:
+    var parsed_result := _parse_editor_rule_package()
+    if String(parsed_result.get("status", "")) == "error":
+        return parsed_result
+
+    var rule_package: Dictionary = parsed_result.get("rule_package", {})
+    if _world_state == null or not _world_state.has_method("review_rule_package_proposal"):
+        return _build_local_proposal_review(rule_package)
+
+    return {
+        "status": "review_pending",
+        "message": "入力停止後に提案レビューを更新します。",
+        "review_status": String(rule_package.get("patch", {}).get("review_status", "draft")),
+        "rule_package": rule_package.duplicate(true)
+    }
 
 func _parse_editor_rule_package() -> Dictionary:
     var raw_text := _proposal_editor.text.strip_edges()
@@ -907,6 +935,8 @@ func _update_proposal_views() -> void:
         summary_segments.append("編集中")
     if _proposal_requires_reapproval():
         summary_segments.append("再承認が必要")
+    if String(_current_proposal_review.get("status", "")) == "review_pending":
+        summary_segments.append("レビュー更新待ち")
     if String(_current_proposal_review.get("status", "")) == "error":
         summary_segments.append("JSON要修正")
     _proposal_review_summary_label.text = " | ".join(summary_segments)
@@ -961,6 +991,8 @@ func _update_proposal_views() -> void:
 
     if String(_current_proposal_review.get("status", "")) == "error":
         metadata_lines.append("レビューエラー: %s" % str(_current_proposal_review.get("message", "不明なレビューエラーです。")))
+    elif String(_current_proposal_review.get("status", "")) == "review_pending":
+        metadata_lines.append("レビュー状態: %s" % str(_current_proposal_review.get("message", "入力停止後にレビューを更新します。")))
     elif _proposal_requires_reapproval():
         metadata_lines.append("承認状態: 承認後に内容が変わりました。再承認してから導入してください。")
     elif not _approved_proposal_text.is_empty():
@@ -1189,6 +1221,12 @@ func _on_proposal_selected(index: int) -> void:
 func _on_proposal_editor_changed() -> void:
     if _is_updating_proposal_editor:
         return
+    _current_proposal_review = _build_editor_change_review_state()
+    _update_proposal_views()
+    if _proposal_review_timer != null and String(_current_proposal_review.get("status", "")) != "error":
+        _proposal_review_timer.start()
+
+func _on_proposal_review_timer_timeout() -> void:
     _current_proposal_review = _refresh_current_proposal_review(false)
     _update_proposal_views()
 

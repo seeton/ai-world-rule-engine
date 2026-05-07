@@ -15,6 +15,8 @@ func _run_smoke(world_state: Node) -> void:
 	_test_clone_candidate_review(world_state)
 	_test_custom_draft_approval(world_state)
 	_test_install_actions_trace(world_state)
+	_test_runtime_helpers_reinitialize(world_state)
+	_test_invalid_install_actions_fail_fast(world_state)
 
 	if _failures.is_empty():
 		print("issue_9_workflow_smoke: ok")
@@ -125,6 +127,69 @@ func _test_install_actions_trace(world_state: Node) -> void:
 	var snapshot: Dictionary = world_state.call("get_world_snapshot")
 	var preview: Dictionary = snapshot.get("three_d_preview", {})
 	_expect(bool(preview.get("enabled", false)), "Declarative install_actions should update the world snapshot state.")
+
+
+func _test_runtime_helpers_reinitialize(world_state: Node) -> void:
+	world_state.call("get_world_snapshot")
+	var compiler = world_state.get("_rule_compiler")
+	var repository = world_state.get("_rule_package_repository")
+	_expect(compiler != null, "WorldState should initialize a rule compiler.")
+	_expect(repository != null, "WorldState should initialize a shared rule package repository.")
+	if compiler != null and repository != null:
+		_expect(compiler.get("_repository") == repository, "WorldState should share one repository between package lookup and task resolution.")
+
+	world_state.set("_rule_package_repository", null)
+	world_state.set("_rule_compiler", null)
+	world_state.set("_runtime_rule_patch_compiler", null)
+
+	var result: Dictionary = world_state.call("submit_player_task", "hunger food eat starvation")
+	_expect(String(result.get("status", "")) == "proposal_ready", "submit_player_task should restore helper dependencies when runtime already exists.")
+
+	var proposals: Array = result.get("proposals", [])
+	if proposals.is_empty():
+		return
+	var proposal: Dictionary = proposals[0]
+	var rule_package: Dictionary = proposal.get("rule_package", {})
+	world_state.set("_runtime_rule_patch_compiler", null)
+	var review: Dictionary = world_state.call("review_rule_package_proposal", rule_package)
+	_expect(String(review.get("status", "")) == "ready_for_install", "review_rule_package_proposal should restore the runtime patch compiler when it was cleared.")
+
+
+func _test_invalid_install_actions_fail_fast(world_state: Node) -> void:
+	var rule_package := {
+		"schema_version": "rule_package_v1",
+		"package_id": "draft.custom.invalid_install_actions",
+		"display_name": "Invalid Install Actions",
+		"description": "Contains malformed install_actions entries.",
+		"version": "0.1.0-draft",
+		"author": "smoke-test",
+		"source_repo": "local://smoke-tests",
+		"source_ref": "issue-9",
+		"forked_from": null,
+		"suggested_pr_target": null,
+		"tags": ["smoke", "install-actions"],
+		"match_phrases": ["invalid install actions"],
+		"community": {
+			"likes": 0,
+			"dislikes": 0,
+			"alternative_package_ids": []
+		},
+		"patch": {
+			"format": "rule_patch_v1",
+			"review_status": "approved",
+			"install_actions": [
+				"not-a-dictionary"
+			],
+			"operations": []
+		}
+	}
+
+	var review: Dictionary = world_state.call("review_rule_package_proposal", rule_package)
+	_expect(String(review.get("status", "")) == "error", "Malformed install_actions should fail review instead of being silently ignored.")
+	_expect(String(review.get("message", "")).find("install_actions") != -1, "Malformed install_actions should report a helpful validation error.")
+
+	var install_result: Dictionary = world_state.call("create_rule_from_patch", rule_package)
+	_expect(String(install_result.get("status", "")) == "error", "Malformed install_actions should fail installation before runtime apply.")
 
 
 func _expect(condition: bool, message: String) -> void:

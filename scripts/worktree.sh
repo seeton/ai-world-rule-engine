@@ -202,6 +202,19 @@ worktree_changed_paths() {
   } | awk 'NF' | sort -u
 }
 
+portable_stat_mtime_epoch() {
+  local target_path="$1"
+  local epoch
+
+  if epoch="$(stat -c %Y "${target_path}" 2>/dev/null)"; then
+    printf '%s\n' "${epoch}"
+  elif epoch="$(stat -f '%m' "${target_path}" 2>/dev/null)"; then
+    printf '%s\n' "${epoch}"
+  else
+    printf '0\n'
+  fi
+}
+
 worktree_latest_changed_path_epoch() {
   local target_path="$1"
   local changed_path
@@ -212,7 +225,7 @@ worktree_latest_changed_path_epoch() {
     local path_epoch
     absolute_path="${target_path}/${changed_path}"
     if [[ -e "${absolute_path}" ]]; then
-      path_epoch="$(stat -f '%m' "${absolute_path}" 2>/dev/null || printf '0\n')"
+      path_epoch="$(portable_stat_mtime_epoch "${absolute_path}")"
       if (( path_epoch > max_epoch )); then
         max_epoch="${path_epoch}"
       fi
@@ -243,8 +256,15 @@ worktree_last_update_epoch() {
 
 epoch_to_iso_utc() {
   local epoch="$1"
+  local formatted
   if [[ "${epoch}" =~ ^[0-9]+$ ]] && (( epoch > 0 )); then
-    date -u -r "${epoch}" +"%Y-%m-%dT%H:%M:%SZ"
+    if formatted="$(date -u -d "@${epoch}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)"; then
+      printf '%s\n' "${formatted}"
+    elif formatted="$(date -u -r "${epoch}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)"; then
+      printf '%s\n' "${formatted}"
+    else
+      printf 'unknown\n'
+    fi
   else
     printf 'unknown\n'
   fi
@@ -513,7 +533,7 @@ show_worktree_status() {
   )
 
   if (( found == 0 )); then
-    echo "No repo-local issue worktrees found under ${workspace_root}"
+    echo "No repo-local issue worktrees found under ${workspace_root}" >&2
   fi
 }
 

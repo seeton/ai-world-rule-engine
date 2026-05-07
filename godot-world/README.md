@@ -121,7 +121,26 @@ If a requested mechanic does not already map to a built-in package, it should st
     "elapsed_seconds": 0.0,
     "tick_index": 0,
     "concepts": ["main_scene_2d_start", "gm_in_world"],
-    "preview_3d": {},
+    "preview_3d": {
+      "enabled": false,
+      "lighting": {
+        "enabled": false,
+        "shadows_enabled": false,
+        "light_rotation_degrees": { "x": -58.0, "y": 36.0, "z": 0.0 },
+        "color": "#fff1cf",
+        "intensity": 1.4
+      },
+      "gravity": {
+        "enabled": false,
+        "floor_y": 0.0,
+        "acceleration": 9.8
+      },
+      "camera": {
+        "position": { "x": 6.6, "y": 6.0, "z": -7.4 },
+        "look_at": { "x": 0.0, "y": 1.4, "z": 0.4 },
+        "fov_degrees": 60.0
+      }
+    },
     "entities": [{ "id": "origin_entity" }],
     "installed_rules": [{ "id": "rule_hunger", "metadata": {} }],
     "player_task_history": [],
@@ -132,6 +151,7 @@ If a requested mechanic does not already map to a built-in package, it should st
 
 - `runtime` stores the deterministic counters needed to resume ticking without resetting the fixed-step accumulator.
 - `template_catalog.available_template_ids` records which built-in templates were available when the save was created; installed rules themselves are restored from the snapshot payload, so package metadata on saved rules survives reload.
+- `world.preview_3d` is always serialized with normalized defaults for `enabled`, `lighting`, `gravity`, and `camera`, even when the world is currently running in 2D mode.
 - `world.entities` and `world.installed_rules` are saved as stable arrays sorted by id so the JSON stays data-driven and diff-friendly.
 
 ## Snapshot limitations

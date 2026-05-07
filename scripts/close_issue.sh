@@ -9,7 +9,7 @@ die() {
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/close_issue.sh <issue-number> [--reason completed|not planned] [--repo owner/name] [--delete-branch] [--force-remove]
+  scripts/close_issue.sh <issue-number> [--reason completed|not-planned] [--repo owner/name] [--delete-branch] [--force-remove]
 
 Closes a GitHub issue through the local repository workflow:
   1. fetch the repo root from origin
@@ -55,25 +55,28 @@ root_is_clean() {
 
 maybe_pull_repo_root() {
   local default_branch="$1"
-  local current_branch
+  bash "${script_dir}/agent_guard.sh" run-exclusive git-sync-root -- \
+    bash -lc '
+      repo_root="$1"
+      default_branch="$2"
 
-  current_branch="$(git -C "${repo_root}" branch --show-current)"
-  if [[ "${current_branch}" != "${default_branch}" ]]; then
-    echo "Skipping repo-root pull because ${repo_root} is on ${current_branch}, not ${default_branch}." >&2
-    return 0
-  fi
+      current_branch="$(git -C "$repo_root" branch --show-current 2>/dev/null || true)"
+      if [[ "$current_branch" != "$default_branch" ]]; then
+        echo "Skipping repo-root pull because ${repo_root} is on ${current_branch:-HEAD}, not ${default_branch}." >&2
+        exit 0
+      fi
 
-  if ! root_is_clean; then
-    echo "Skipping repo-root pull because ${repo_root} has tracked changes or unresolved conflicts." >&2
-    return 0
-  fi
+      if [[ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]]; then
+        echo "Skipping repo-root pull because ${repo_root} has tracked changes or unresolved conflicts." >&2
+        exit 0
+      fi
 
-  if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
-    echo "Repo-root has only untracked files; continuing with ff-only pull." >&2
-  fi
+      if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
+        echo "Repo-root has only untracked files; continuing with ff-only pull." >&2
+      fi
 
-  bash "${script_dir}/agent_guard.sh" run-exclusive git-pull -- \
-    git -C "${repo_root}" pull --ff-only origin "${default_branch}"
+      git -C "$repo_root" pull --ff-only origin "$default_branch"
+    ' -- "${repo_root}" "${default_branch}"
 }
 
 close_issue() {
@@ -137,7 +140,10 @@ while [[ $# -gt 0 ]]; do
     --reason)
       [[ $# -ge 2 ]] || die "--reason requires a value"
       reason="$2"
-      [[ "${reason}" == "completed" || "${reason}" == "not planned" ]] || die "--reason must be 'completed' or 'not planned'"
+      if [[ "${reason}" == "not-planned" ]]; then
+        reason="not planned"
+      fi
+      [[ "${reason}" == "completed" || "${reason}" == "not planned" ]] || die "--reason must be 'completed', 'not-planned', or quoted 'not planned'"
       shift 2
       ;;
     --repo)

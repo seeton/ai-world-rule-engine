@@ -174,19 +174,25 @@ show_repo_root_status() {
 
 sync_repo_root() {
   local target_branch="${1:-$(repo_root_default_branch)}"
-  local current_branch
+  bash "${repo_root}/scripts/agent_guard.sh" run-exclusive git-sync-root -- \
+    bash -lc '
+      repo_root="$1"
+      target_branch="$2"
 
-  current_branch="$(repo_root_branch)"
-  [[ "${current_branch}" == "${target_branch}" ]] || die "Repo root is on ${current_branch:-HEAD}, expected ${target_branch}."
+      current_branch="$(git -C "$repo_root" branch --show-current 2>/dev/null || true)"
+      if [[ "$current_branch" != "$target_branch" ]]; then
+        echo "Error: Repo root is on ${current_branch:-HEAD}, expected ${target_branch}." >&2
+        exit 1
+      fi
 
-  if [[ -n "$(git -C "${repo_root}" status --porcelain --untracked-files=no)" ]]; then
-    die "Repo root has tracked changes or unresolved conflicts. Move them to an issue worktree before syncing."
-  fi
+      if [[ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]]; then
+        echo "Error: Repo root has tracked changes or unresolved conflicts. Move them to an issue worktree before syncing." >&2
+        exit 1
+      fi
 
-  bash "${repo_root}/scripts/agent_guard.sh" run-exclusive git-fetch -- \
-    git -C "${repo_root}" fetch --prune origin
-  bash "${repo_root}/scripts/agent_guard.sh" run-exclusive git-pull -- \
-    git -C "${repo_root}" pull --ff-only origin "${target_branch}"
+      git -C "$repo_root" fetch --prune origin
+      git -C "$repo_root" pull --ff-only origin "$target_branch"
+    ' -- "${repo_root}" "${target_branch}"
 }
 
 ensure_worktree() {

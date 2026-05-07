@@ -59,8 +59,11 @@ fi
 
 if [[ "${#issue_numbers[@]}" -eq 0 ]]; then
   while IFS= read -r path; do
-    if [[ "${path}" =~ ${workspace_root}/issue-([0-9]+)$ ]]; then
-      issue_numbers+=("${BASH_REMATCH[1]}")
+    if [[ "${path}" == "${workspace_root}/issue-"* ]]; then
+      issue_number="${path#"${workspace_root}/issue-"}"
+      if [[ "${issue_number}" =~ ^[0-9]+$ ]]; then
+        issue_numbers+=("${issue_number}")
+      fi
     fi
   done < <(git -C "${repo_root}" worktree list --porcelain | awk '/^worktree / { print substr($0, 10) }')
 fi

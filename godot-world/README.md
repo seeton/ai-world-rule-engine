@@ -38,10 +38,12 @@ The core foundation starts from a null world with a mutable origin entity. Rules
 
 ## Rule model
 
-- Rules form a strict parent/child tree.
-- A child rule only applies after its parent side of the tree is already active.
-- Parent parts of the tree cannot be skipped when applying child rules.
-- Deeper descendants can be understood as rules nested under a child rule, or simply as a child rule's child rule.
+- Rules form a directed acyclic parent/child prerequisite graph (DAG) rather than a strict tree.
+- Rules with no prerequisites act as root rules.
+- A child rule may depend on one or more parent rules.
+- A child rule only applies after all of its parent rules are already active.
+- Required parent prerequisites cannot be skipped when applying child rules.
+- Deeper descendants can sit behind multiple parent chains in the same graph.
 - Every rule always owns a `Representation`, even when that representation is intentionally not visible in the world.
 - Visible rules such as time use their `Representation` for rendering, while invisible rules such as gravity still keep an internal `Representation` so systems can treat all rules consistently.
 

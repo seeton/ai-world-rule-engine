@@ -6,16 +6,18 @@ This document describes the gameplay-facing rule model that the runtime and tool
 
 A rule can be a root rule or a child rule.
 
-- Rules form a strict tree.
-- A child rule can only apply after its parent side of the tree is already applied.
-- Parent parts of the tree cannot be skipped in order to apply a deeper child rule.
+- Rules form a directed acyclic prerequisite graph (DAG) rather than a strict tree.
+- A root rule has no parent prerequisites.
+- A child rule can depend on one or more parent rules.
+- A child rule can only apply after all of its parent rules are already applied.
+- Required parent prerequisites cannot be skipped in order to apply a deeper child rule.
 
-In practice, this means progression must move through the tree in order: root first, then its children, then deeper descendants.
+In practice, progression must move through the prerequisite graph in order: rules without prerequisites can apply first, and each dependent child rule unlocks only after every required parent is already active. A descendant may therefore sit behind multiple parent chains while still remaining a single rule node in the shared model.
 
-A descendant can be described in two equivalent ways:
+A descendant can therefore be described in equivalent ways:
 
-- as a rule nested inside a child rule
-- as a child rule's child rule
+- as a rule that sits behind one or more prerequisite parent rules
+- as a child rule that may be shared by multiple parent branches in the same graph
 
 ## Representation contract
 
@@ -46,7 +48,7 @@ Systems should therefore treat visibility and existence as separate concepts:
 When a new rule is added or an existing rule is changed, document:
 
 1. whether it is a root rule or a child rule
-2. where it sits in the parent/child tree and which parent chain must already be active
+2. which prerequisite parent rules must already be active, including every required parent when there is more than one
 3. whether its `Representation` is visible, internal-only, or conditionally visible
 
 This keeps runtime behavior, tools, and future UI work aligned around the same rule invariants.

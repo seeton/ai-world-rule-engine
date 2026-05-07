@@ -24,13 +24,14 @@ The `patch` block is intentionally limited to structured operations. This keeps 
 
 Rule packages eventually compile into the runtime's shared rule model, so package authors should follow these invariants:
 
-- rules form a strict parent/child tree
-- child rules only apply after their parent side of the tree is already applied
-- parent parts of the tree cannot be skipped
-- deeper descendants are nested under child rules in the same tree
+- rules form a directed acyclic parent/child prerequisite graph (DAG) rather than a strict tree
+- child rules may depend on multiple parent rules
+- child rules only apply after all of their parent rules are already applied
+- required parent prerequisites cannot be skipped
+- deeper descendants can be shared across multiple parent chains in the same graph
 - every rule owns a `Representation`, even if that representation is internal-only and not visibly rendered
 
-See `rule_model.md` for the detailed parent/child and `Representation` rules.
+See `rule_model.md` for the detailed prerequisite-graph and `Representation` rules.
 
 ## Player workflow
 

@@ -18,6 +18,10 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: request-copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
 jobs:
   request-copilot-review:
     name: Request Copilot code review
@@ -29,7 +33,7 @@ jobs:
       - name: Request Copilot as reviewer
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         run: |
           set -euo pipefail
 
@@ -43,5 +47,5 @@ jobs:
           if gh pr edit "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-reviewer "@copilot"; then
             echo "Copilot code review requested."
           else
-            echo "::warning::Could not request Copilot code review. Confirm that Copilot code review is enabled for this repository/user and that the GitHub token can request reviewers."
+            echo "::warning::Could not request Copilot code review. Confirm repository/user Copilot review settings and reviewer-request permissions."
           fi

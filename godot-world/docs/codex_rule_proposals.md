@@ -4,6 +4,8 @@ PoC4 uses Codex to draft player-requested rule ideas, but Codex output is not tr
 
 Every generated response must first be normalized into a `codex_rule_proposal_v1` proposal and pass the proposal validation gate. Only validated proposal data may be shown for player review or converted into a GitHub issue body.
 
+This contract does not restrict what a user may ask their own local Codex session to do on their own machine. It only defines what this repository accepts as durable proposal data before converting generated output into rule packages, GitHub issues, branches, or PRs.
+
 ## Contract file
 
 The checked-in proposal schema lives at:
@@ -35,7 +37,7 @@ A proposal may advance only after passing these gates:
 1. **Schema validation**: the proposal matches `rule_proposal.schema.json`.
 2. **Patch operation validation**: `patch.operations[*].op` uses the same allowed operation set as `rule_package.schema.json`.
 3. **Semantic validation**: the proposal declares which runtime surfaces it expects to touch.
-4. **Safety validation**: the proposal does not ask the project to run scripts, expose secrets, bypass review, or post externally outside the approved issue flow.
+4. **Persistence validation**: the proposal does not claim authority to bypass review, write directly to GitHub, install a rule package, or persist credentials outside the configured flow.
 
 Validation produces one of these statuses:
 
@@ -69,20 +71,34 @@ GitHub issue creation must use the structured `issue` block from the proposal. T
 
 The issue must make clear that the proposal is for human review before implementation.
 
-## Safety boundary
+## Local Codex autonomy
 
-Raw Codex text must not be treated as executable instructions.
+A user-owned local Codex session may read files, edit files, run commands, use an authenticated `gh` session, or use an authenticated `codex` session according to the user's local approval mode and local environment.
 
-Reject or hold for review any response that attempts to:
+That local autonomy is outside this proposal contract. The proposal contract starts when the project wants to persist generated output as durable repository data, such as:
 
-- include arbitrary script execution
-- request local files or secrets
+- a rule proposal JSON document
+- a rule package patch
+- a GitHub issue body
+- a branch or PR handoff record
+
+At that boundary, raw Codex output must be normalized into the proposal schema. The project may record summaries, touched surfaces, validation results, and review status, but should not persist secrets, raw auth material, or arbitrary local filesystem details into repository artifacts.
+
+## Persistence boundary
+
+Raw Codex text must not be treated as repository-authoritative data.
+
+Reject or hold for review any generated proposal that attempts to:
+
+- include arbitrary script execution as rule package data
+- persist credentials, tokens, secrets, or raw local auth material into repo artifacts
+- persist arbitrary local filesystem paths that are not necessary for review
 - change the target repository outside the configured flow
 - create a GitHub issue before explicit player consent
 - bypass validation, review, branch, or PR steps
 - introduce schema fields that are not part of the proposal contract
 
-This keeps the PoC4 flow data-driven and reviewable while still allowing Codex to help draft rule ideas.
+This keeps the PoC4 flow data-driven and reviewable without trying to police what the user may do with their own local Codex session.
 
 ## Related issues
 

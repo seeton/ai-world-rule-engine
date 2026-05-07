@@ -27,6 +27,7 @@ Helper commands:
 
 - `bash scripts/agent_guard.sh status` — includes repo-root tracked/untracked state
 - `bash scripts/worktree.sh root-status` — prints only the repo-root checkout state
+- `bash scripts/worktree.sh status --stale-days 14` — lists issue worktrees with issue state, dirty state, claim state, and stale status
 - `bash scripts/worktree.sh sync-root` — fast-forwards the repo-root default branch when tracked files are clean
 
 ## Issue decomposition for multi-agent work

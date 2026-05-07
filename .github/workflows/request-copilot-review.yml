@@ -1,0 +1,47 @@
+name: Request Copilot review
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to request Copilot review for
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-copilot-review:
+    name: Request Copilot code review
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.draft == false
+    steps:
+      - name: Request Copilot as reviewer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "::error::PR_NUMBER was not resolved."
+            exit 1
+          fi
+
+          echo "Requesting Copilot code review for PR #${PR_NUMBER}."
+
+          if gh pr edit "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-reviewer "@copilot"; then
+            echo "Copilot code review requested."
+          else
+            echo "::warning::Could not request Copilot code review. Confirm that Copilot code review is enabled for this repository/user and that the GitHub token can request reviewers."
+          fi

@@ -88,6 +88,7 @@ The launcher resolves `godot-world` inside `.agent-workspaces/issue-<number>/`, 
 
 - move the in-world player directly inside a simple 2D plaza first
 - approach the in-world GM and interact with `E` or left click
+- GM画面で相談を送ると、提案されたルールパッチを JSON とメタデータ付きで確認し、承認してから導入できます
 - add `時間ルール` from the GM screen when you want the playable 2D/3D world HUD to expose the shared `elapsed_seconds` clock
 - press `T` in either the 2D or 3D world to toggle the live rule tree overlay
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
@@ -117,9 +118,11 @@ If a requested mechanic does not already map to a built-in package, it should st
 ### WorldState API
 
 - `submit_player_task(task_text: String) -> Dictionary`
+- `review_rule_package_proposal(rule_package: Dictionary) -> Dictionary`
 - `clone_rule(rule_id: String) -> Dictionary`
-- `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary`
+- `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary` — accepts either a runtime rule patch or a reviewed rule package proposal
 - `get_world_snapshot() -> Dictionary`
+- `get_available_rule_packages() -> Array`
 - `create_world_snapshot() -> Dictionary`
 - `restore_world_snapshot(snapshot_data: Dictionary) -> Dictionary`
 - `save_world_snapshot(file_path: String) -> Dictionary`

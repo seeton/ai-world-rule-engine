@@ -8,11 +8,23 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"message": "Rule package was empty."
 		}
 
-	var patch: Dictionary = rule_package.get("patch", {})
-	var operations: Array = patch.get("operations", [])
+	var patch_variant = rule_package.get("patch", null)
+	if not (patch_variant is Dictionary):
+		return {
+			"status": "error",
+			"message": "Rule package patch must be a dictionary."
+		}
+	var patch: Dictionary = patch_variant
+	var operations_result := _validate_operations(patch.get("operations", []))
+	if String(operations_result.get("status", "")) == "error":
+		return operations_result
+	var operations: Array = operations_result.get("operations", [])
 	var effects: Array = []
 	var deferred_operations: Array = []
 	var stat_definitions: Dictionary = {}
+	var install_actions_result := _validate_install_actions(patch.get("install_actions", []))
+	if String(install_actions_result.get("status", "")) == "error":
+		return install_actions_result
 
 	for operation in operations:
 		var op: Dictionary = operation
@@ -53,6 +65,7 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"target_tags": _normalize_string_array(patch.get("target_tags", ["mortal"])),
 			"requires_rule_kinds": _normalize_string_array(patch.get("requires_rule_kinds", [])),
 			"provides_rule_kinds": _normalize_string_array(patch.get("provides_rule_kinds", [])),
+			"install_actions": install_actions_result.get("install_actions", []).duplicate(true),
 			"effects": effects,
 			"metadata": {
 				"package_id": package_id,
@@ -131,3 +144,107 @@ func _normalize_string_array(value: Variant) -> Array:
 		if not text.is_empty():
 			values.append(text)
 	return values
+
+
+func _validate_install_actions(raw_actions: Variant) -> Dictionary:
+	if raw_actions == null:
+		return {
+			"status": "ok",
+			"install_actions": []
+		}
+	if not (raw_actions is Array):
+		return {
+			"status": "error",
+			"message": "Rule package patch.install_actions must be an array."
+		}
+
+	var validated_actions: Array = []
+	for action_index in range(raw_actions.size()):
+		var raw_action = raw_actions[action_index]
+		if not (raw_action is Dictionary):
+			return {
+				"status": "error",
+				"message": "Rule package patch.install_actions[%d] must be a dictionary." % action_index
+			}
+
+		var action: Dictionary = raw_action.duplicate(true)
+		var op := String(action.get("op", "")).strip_edges()
+		if op.is_empty():
+			return {
+				"status": "error",
+				"message": "Rule package patch.install_actions[%d] must include a non-empty op." % action_index
+			}
+
+		match op:
+			"merge_world_state":
+				if action.has("path") and not (action.get("path", "") is String):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d].path must be a string when provided." % action_index
+					}
+				if String(action.get("path", "")).strip_edges().is_empty() and not (action.get("value", {}) is Dictionary):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d] must provide a dictionary value when path is omitted." % action_index
+					}
+			"upsert_entities":
+				var entities = action.get("entities", null)
+				if not (entities is Array):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d].entities must be an array." % action_index
+					}
+				for entity_index in range(entities.size()):
+					var raw_entity = entities[entity_index]
+					if not (raw_entity is Dictionary):
+						return {
+							"status": "error",
+							"message": "Rule package patch.install_actions[%d].entities[%d] must be a dictionary." % [action_index, entity_index]
+						}
+					if String(raw_entity.get("id", "")).strip_edges().is_empty():
+						return {
+							"status": "error",
+							"message": "Rule package patch.install_actions[%d].entities[%d] must include a non-empty id." % [action_index, entity_index]
+						}
+			_:
+				return {
+					"status": "error",
+					"message": "Rule package patch.install_actions[%d] uses unsupported op '%s'." % [action_index, op]
+				}
+
+		action["op"] = op
+		validated_actions.append(action)
+
+	return {
+		"status": "ok",
+		"install_actions": validated_actions
+	}
+
+
+func _validate_operations(raw_operations: Variant) -> Dictionary:
+	if not (raw_operations is Array):
+		return {
+			"status": "error",
+			"message": "Rule package patch operations must be an array."
+		}
+
+	var operations: Array = raw_operations
+	for operation_index in range(operations.size()):
+		var raw_operation = operations[operation_index]
+		if not (raw_operation is Dictionary):
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must be a dictionary." % operation_index
+			}
+
+		var operation: Dictionary = raw_operation
+		if String(operation.get("op", "")).strip_edges().is_empty():
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must include a non-empty op." % operation_index
+			}
+
+	return {
+		"status": "ok",
+		"operations": operations
+	}

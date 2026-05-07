@@ -119,6 +119,15 @@ func _normalize_string_array(value: Variant) -> Array:
 	if value is Array:
 		for entry in value:
 			var text := String(entry).strip_edges()
-			if not text.is_empty():
+			if not text.is_empty() and not values.has(text):
 				values.append(text)
+	elif value is PackedStringArray:
+		for entry in value:
+			var text := String(entry).strip_edges()
+			if not text.is_empty() and not values.has(text):
+				values.append(text)
+	elif value is String:
+		var text := String(value).strip_edges()
+		if not text.is_empty():
+			values.append(text)
 	return values

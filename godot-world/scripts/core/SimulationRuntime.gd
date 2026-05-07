@@ -109,7 +109,7 @@ func get_snapshot() -> Dictionary:
 	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
 	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
-	var world_clock := _build_world_clock_summary(snapshot)
+	var world_clock := _build_world_clock_summary(installed_rules_by_id, snapshot)
 	if not world_clock.is_empty():
 		snapshot["world_clock"] = world_clock
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
@@ -609,8 +609,7 @@ func _append_event(event_type: String, message: String, details: Dictionary = {}
 	_world_state["event_log"] = event_log
 
 
-func _build_world_clock_summary(snapshot: Dictionary) -> Dictionary:
-	var installed_rules_by_id: Dictionary = snapshot.get("installed_rules_by_id", {})
+func _build_world_clock_summary(installed_rules_by_id: Dictionary, snapshot: Dictionary) -> Dictionary:
 	if not _has_world_clock_rule(installed_rules_by_id):
 		return {}
 	return {

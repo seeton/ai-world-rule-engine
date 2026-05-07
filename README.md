@@ -18,3 +18,7 @@ Default development flow is **issue → branch → PR**.
 - If a PR relies on Copilot automatic review, wait for that review to complete before merging; otherwise note explicitly that no automatic review was available.
 - Keep gameplay, runtime, and rule package work under `godot-world/`.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+
+## Repo-root main checkout
+
+Keep the repo-root `main` checkout as a sync-only baseline. Do implementation work in `.agent-workspaces/issue-<number>/`, inspect the repo-root state with `bash scripts/worktree.sh root-status`, and fast-forward it with `bash scripts/worktree.sh sync-root` when tracked files are clean.

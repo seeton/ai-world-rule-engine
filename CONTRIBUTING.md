@@ -14,6 +14,21 @@ If a PR depends on Copilot automatic review in this repository, do not merge it 
 
 `godot-world/` is the active Godot 4 project and the primary location for gameplay, runtime, and rule-package changes.
 
+## Repo-root main checkout
+
+Treat the repo-root `main` checkout as a sync-only baseline instead of a normal implementation workspace.
+
+- do implementation, conflict resolution, and experiments in issue worktrees
+- keep repo-root tracked files clean enough for fast-forward syncs
+- if tracked changes or unmerged paths appear at repo root, move that work into the owning issue worktree before syncing
+- intentional untracked local directories may remain, but they should not block repo-root syncs
+
+Helper commands:
+
+- `bash scripts/agent_guard.sh status` — includes repo-root tracked/untracked state
+- `bash scripts/worktree.sh root-status` — prints only the repo-root checkout state
+- `bash scripts/worktree.sh sync-root` — fast-forwards the repo-root default branch when tracked files are clean
+
 ## Issue decomposition for multi-agent work
 
 Use one tracking issue for the larger goal, then split implementation into independent child issues when possible.

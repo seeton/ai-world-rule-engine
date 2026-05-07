@@ -24,10 +24,6 @@ permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: request-copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
-  cancel-in-progress: true
-
 jobs:
   request-copilot-review:
     name: Request Copilot code review
@@ -47,6 +43,9 @@ jobs:
           )
         )
       )
+    concurrency:
+      group: request-copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
+      cancel-in-progress: true
     steps:
       - name: Request Copilot as reviewer
         env:

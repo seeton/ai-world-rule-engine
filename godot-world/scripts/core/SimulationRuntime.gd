@@ -3,6 +3,11 @@ class_name SimulationRuntime
 
 const DEFAULT_FIXED_STEP := 0.25
 const DEFAULT_LOCALE := "ja"
+const DEFAULT_THREE_D_CAMERA := {
+	"position": {"x": 6.6, "y": 6.0, "z": -7.4},
+	"look_at": {"x": 0.0, "y": 1.4, "z": 0.4},
+	"fov_degrees": 60.0
+}
 
 const TEXT := {
 		"ja": {
@@ -70,6 +75,7 @@ var _accumulator_seconds: float = 0.0
 var _world_state: Dictionary = {}
 var _template_index: Dictionary = {}
 var _clone_sequence: int = 0
+var _locale: String = DEFAULT_LOCALE
 
 
 func _init(rule_templates: Array = []) -> void:
@@ -778,94 +784,6 @@ func _apply_install_actions(rule: Dictionary) -> void:
 		if not (raw_action is Dictionary):
 			continue
 		var action: Dictionary = raw_action
-		if String(action.get("op", "")) != "upsert_entities":
-			continue
-		for raw_entity_patch in action.get("entities", []):
-			if not (raw_entity_patch is Dictionary):
-				continue
-			var entity_patch: Dictionary = raw_entity_patch
-			var entity_id := String(entity_patch.get("id", ""))
-			if entity_id.is_empty():
-				continue
-			var existing_entity: Dictionary = entities.get(entity_id, {})
-			var merged_entity := _merge_dictionaries(existing_entity, entity_patch)
-			entities[entity_id] = _normalize_entity(merged_entity)
-	_world_state["entities"] = entities
-
-
-func _refresh_rule_relationships() -> void:
-	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
-	var rule_ids: Array = installed_rules.keys()
-	rule_ids.sort()
-
-	for rule_id in rule_ids:
-		var rule: Dictionary = installed_rules[rule_id]
-		var parent_resolution := _resolve_parent_rule_links(rule, installed_rules)
-		rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
-		rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
-		rule["missing_required_rule_kinds"] = parent_resolution.get("missing_required_rule_kinds", []).duplicate(true)
-		installed_rules[rule_id] = rule
-
-	_world_state["installed_rules"] = installed_rules
-
-
-func _initialize_rule_targets(rule: Dictionary) -> void:
-	if String(rule.get("scope", "entity")) == "world":
-		return
-
-	for required_kind_variant in required_rule_kinds:
-		var required_kind := String(required_kind_variant).strip_edges()
-		if required_kind.is_empty():
-			continue
-
-		var matching_rule_ids: Array = []
-		for installed_rule_id in installed_rule_ids:
-			var candidate_rule: Dictionary = installed_rules[installed_rule_id]
-			if String(candidate_rule.get("id", installed_rule_id)) == rule_id:
-				continue
-			if _rule_provides_kind(candidate_rule, required_kind):
-				matching_rule_ids.append(installed_rule_id)
-				if not resolved_parent_rule_ids.has(installed_rule_id):
-					resolved_parent_rule_ids.append(installed_rule_id)
-		matching_rule_ids.sort()
-		resolved_parent_rule_links.append({
-			"required_kind": required_kind,
-			"rule_ids": matching_rule_ids.duplicate(true)
-		})
-		if matching_rule_ids.is_empty():
-			missing_rule_kinds.append(required_kind)
-
-	resolved_parent_rule_ids.sort()
-	if not missing_rule_kinds.is_empty():
-		return {
-			"status": "error",
-			"message": "ルール '%s' には、導入済みの親ルール種別 [%s] が必要です。先に対応するルールを入れてください。" % [rule_id, ", ".join(missing_rule_kinds)],
-			"rule_id": rule_id,
-			"requires_rule_kinds": required_rule_kinds.duplicate(true),
-			"missing_required_rule_kinds": missing_rule_kinds.duplicate(true)
-		}
-
-	return {
-		"status": "resolved",
-		"resolved_parent_rule_ids": resolved_parent_rule_ids.duplicate(true),
-		"resolved_parent_rule_links": resolved_parent_rule_links.duplicate(true),
-		"missing_required_rule_kinds": []
-	}
-
-
-func _rule_provides_kind(rule: Dictionary, required_kind: String) -> bool:
-	for provided_kind_variant in rule.get("provides_rule_kinds", []):
-		if String(provided_kind_variant).strip_edges() == required_kind:
-			return true
-	return false
-
-
-func _apply_install_actions(rule: Dictionary) -> void:
-	var entities: Dictionary = _world_state.get("entities", {})
-	for raw_action in rule.get("install_actions", []):
-		if not (raw_action is Dictionary):
-			continue
-		var action: Dictionary = raw_action
 		match String(action.get("op", "")):
 			"upsert_entities":
 				for raw_entity_patch in action.get("entities", []):
@@ -900,6 +818,9 @@ func _refresh_rule_relationships() -> void:
 
 
 func _initialize_rule_targets(rule: Dictionary) -> void:
+	if String(rule.get("scope", "entity")) == "world":
+		return
+
 	var entities: Dictionary = _world_state.get("entities", {})
 	var entity_ids: Array = entities.keys()
 	entity_ids.sort()

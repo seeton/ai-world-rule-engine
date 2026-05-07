@@ -1,6 +1,8 @@
 [gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/world_3d_scene.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/game/game_master.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/game/player_character.gd" id="3_gm"]
 
 [sub_resource type="Environment" id="1_environment"]
 background_mode = 1
@@ -66,6 +68,7 @@ cast_shadow = 0
 
 [node name="Player" type="CharacterBody3D" parent="."]
 position = Vector3(0, 0.9, -3.2)
+script = ExtResource("2_player")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
 shape = SubResource("5_player_shape")
@@ -77,6 +80,7 @@ material_override = SubResource("7_player_material")
 [node name="GameMaster" type="Area3D" parent="."]
 position = Vector3(3.2, 1.1, 0.8)
 input_ray_pickable = true
+script = ExtResource("3_gm")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="GameMaster"]
 shape = SubResource("8_gm_shape")

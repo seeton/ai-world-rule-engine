@@ -78,7 +78,7 @@ Use package changes with the same default workflow as the rest of the repo: **is
 - preserve `source_repo` and `source_ref`
 - set `suggested_pr_target` when the package should be proposed upstream
 
-Before opening a PR, run `bash godot-world/scripts/validate_repo.sh` from the repository root. It validates package JSON against the checked-in schema and catches static `res://...` / `ExtResource(...)` mistakes without requiring a local Godot install.
+Before opening a PR, run `bash godot-world/scripts/validate_repo.sh` from the repository root. It validates package JSON against the checked-in schema and catches static `res://...` / `ExtResource(...)` mistakes without requiring a local Godot install, but it does require Python 3 because the wrapper invokes `python3`.
 
 For rule package PRs, include:
 

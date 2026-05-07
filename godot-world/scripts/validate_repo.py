@@ -190,7 +190,10 @@ def validate_against_schema(
 def validate_rule_packages(root_dir: Path, problems: list[ValidationProblem]) -> int:
     schema_path = root_dir / SCHEMA_RELATIVE_PATH
     schema = read_json_file(schema_path, problems)
+    if schema is None:
+        return 0
     if not isinstance(schema, dict):
+        problems.append(ValidationProblem(schema_path, "Schema must be a JSON object."))
         return 0
 
     package_dir = root_dir / PACKAGE_RELATIVE_DIR
@@ -206,10 +209,12 @@ def validate_rule_packages(root_dir: Path, problems: list[ValidationProblem]) ->
     package_ids: dict[str, Path] = {}
     for package_path in package_paths:
         package_data = read_json_file(package_path, problems)
-        if not isinstance(package_data, dict):
+        if package_data is None:
             continue
 
         validate_against_schema(package_data, schema, package_path, "$", problems)
+        if not isinstance(package_data, dict):
+            continue
 
         package_id = package_data.get("package_id")
         if isinstance(package_id, str):
@@ -283,6 +288,20 @@ def validate_scene_ext_resources(
         )
 
 
+def resolve_repository_reference(root_dir: Path, reference: str) -> tuple[Path | None, str | None]:
+    relative_path = Path(reference.removeprefix("res://"))
+    if ".." in relative_path.parts:
+        return None, f"{reference} is not a valid repository reference."
+
+    target_path = (root_dir / relative_path).resolve(strict=False)
+    try:
+        target_path.relative_to(root_dir)
+    except ValueError:
+        return None, f"{reference} is not a valid repository reference."
+
+    return target_path, None
+
+
 def validate_reference_files(root_dir: Path, problems: list[ValidationProblem]) -> int:
     reference_files: set[Path] = set()
     for pattern in REFERENCE_GLOBS:
@@ -298,7 +317,11 @@ def validate_reference_files(root_dir: Path, problems: list[ValidationProblem]) 
             continue
 
         for reference in sorted(set(RES_REFERENCE_PATTERN.findall(text))):
-            target_path = root_dir / reference.removeprefix("res://")
+            target_path, error_message = resolve_repository_reference(root_dir, reference)
+            if error_message is not None:
+                problems.append(ValidationProblem(path, error_message))
+                continue
+
             if not target_path.exists():
                 problems.append(
                     ValidationProblem(path, f"{reference} does not exist in the repository.")

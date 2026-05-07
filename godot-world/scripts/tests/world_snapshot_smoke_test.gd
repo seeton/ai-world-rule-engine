@@ -1,7 +1,7 @@
 extends SceneTree
 
 const WorldStateScript = preload("res://scripts/core/WorldState.gd")
-const SNAPSHOT_PATH := "res://scripts/tests/world_snapshot_smoke.json"
+const SNAPSHOT_PATH := "user://world_snapshot_smoke.json"
 
 
 func _initialize() -> void:
@@ -113,5 +113,6 @@ func _extract_character_hunger(snapshot: Dictionary, entity_id: String) -> float
 
 
 func _cleanup_snapshot_file() -> void:
-	if FileAccess.file_exists(SNAPSHOT_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SNAPSHOT_PATH))
+	var snapshot_absolute_path := ProjectSettings.globalize_path(SNAPSHOT_PATH)
+	if FileAccess.file_exists(snapshot_absolute_path):
+		DirAccess.remove_absolute(snapshot_absolute_path)

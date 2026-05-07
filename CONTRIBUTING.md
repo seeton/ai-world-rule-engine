@@ -10,6 +10,8 @@ This repository uses **issue-driven development**:
 4. Open a PR linked to the issue.
 5. Merge through PR review; do not merge direct-to-main changes by default.
 
+If a PR depends on Copilot automatic review in this repository, do not merge it until that review has completed. If no automatic review is configured or available for the PR, call that out explicitly in the PR notes before merging.
+
 `godot-world/` is the active Godot 4 project. The root Node app is an older PoC and should remain intact unless an issue explicitly calls for changes there.
 
 ## Issue decomposition for multi-agent work
@@ -56,6 +58,7 @@ Every PR should be small enough to review and should include:
 - validation performed
 - risks, follow-ups, or explicitly deferred work
 - screenshots/video for visible Godot changes when relevant
+- whether Copilot automatic review completed, or that no automatic review was available/configured
 
 Call out scope clearly:
 

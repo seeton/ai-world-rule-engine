@@ -39,4 +39,5 @@ Default development flow is **issue → branch → PR**.
 - Start from a GitHub issue before implementing.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
 - Keep Godot 4 work under `godot-world/` unless the issue explicitly targets the legacy Node PoC.
+- If a PR relies on Copilot automatic review, wait for that review to complete before merging; otherwise note explicitly that no automatic review was available.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.

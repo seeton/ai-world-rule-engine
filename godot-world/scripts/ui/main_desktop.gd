@@ -68,6 +68,13 @@ const OBJECT_TAG_HINTS: Array = ["container", "item", "location", "object", "por
 
 var _world_state: Node = null
 var _task_input: TextEdit
+var _proposal_selector: OptionButton
+var _proposal_review_summary_label: Label
+var _proposal_metadata_view: TextEdit
+var _proposal_editor: TextEdit
+var _reset_proposal_button: Button
+var _approve_proposal_button: Button
+var _install_proposal_button: Button
 var _template_list: ItemList
 var _install_template_button: Button
 var _tick_amount: SpinBox
@@ -82,6 +89,15 @@ var _status_label: Label
 var _three_d_preview_renderer: Control
 
 var _template_cache: Array = []
+var _latest_task_result: Dictionary = {}
+var _proposal_cache: Array = []
+var _proposal_signature: String = ""
+var _selected_proposal_index: int = -1
+var _loaded_proposal_key: String = ""
+var _selected_proposal_original_text := ""
+var _approved_proposal_text := ""
+var _current_proposal_review: Dictionary = {}
+var _is_updating_proposal_editor := false
 var _installed_rule_cache: Array = []
 var _snapshot_cache: Dictionary = {}
 var _shell_log_lines: Array[String] = []
@@ -313,6 +329,7 @@ func _build_ui() -> void:
     left_scroll.add_child(left_column)
 
     left_column.add_child(_build_task_panel())
+    left_column.add_child(_build_proposal_panel())
     left_column.add_child(_build_template_panel())
     left_column.add_child(_build_tick_panel())
 
@@ -357,6 +374,55 @@ func _build_task_panel() -> Control:
     refresh_button.text = "情報を更新"
     refresh_button.pressed.connect(_refresh_all)
     button_row.add_child(refresh_button)
+
+    return panel
+
+func _build_proposal_panel() -> Control:
+    var panel := _make_panel_section("提案パッチのレビュー", "最新の提案パッケージ JSON を確認・編集し、承認してから導入します。")
+    var body := panel.get_meta("body") as VBoxContainer
+
+    _proposal_review_summary_label = Label.new()
+    _proposal_review_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    body.add_child(_proposal_review_summary_label)
+
+    _proposal_selector = OptionButton.new()
+    _proposal_selector.item_selected.connect(_on_proposal_selected)
+    body.add_child(_proposal_selector)
+
+    _proposal_metadata_view = TextEdit.new()
+    _proposal_metadata_view.editable = false
+    _proposal_metadata_view.custom_minimum_size = Vector2(0, 120)
+    _proposal_metadata_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    body.add_child(_proposal_metadata_view)
+
+    var action_row := HBoxContainer.new()
+    action_row.add_theme_constant_override("separation", 8)
+    body.add_child(action_row)
+
+    _reset_proposal_button = Button.new()
+    _reset_proposal_button.text = "下書きを元に戻す"
+    _reset_proposal_button.disabled = true
+    _reset_proposal_button.pressed.connect(_on_reset_proposal_pressed)
+    action_row.add_child(_reset_proposal_button)
+
+    _approve_proposal_button = Button.new()
+    _approve_proposal_button.text = "提案を承認"
+    _approve_proposal_button.disabled = true
+    _approve_proposal_button.pressed.connect(_on_approve_proposal_pressed)
+    action_row.add_child(_approve_proposal_button)
+
+    _install_proposal_button = Button.new()
+    _install_proposal_button.text = "承認済み提案を導入"
+    _install_proposal_button.disabled = true
+    _install_proposal_button.pressed.connect(_on_install_proposal_pressed)
+    action_row.add_child(_install_proposal_button)
+
+    _proposal_editor = TextEdit.new()
+    _proposal_editor.custom_minimum_size = Vector2(0, 220)
+    _proposal_editor.placeholder_text = "相談を送ると、ここに編集可能なルールパッケージ JSON が表示されます。"
+    _proposal_editor.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    _proposal_editor.text_changed.connect(_on_proposal_editor_changed)
+    body.add_child(_proposal_editor)
 
     return panel
 
@@ -610,8 +676,11 @@ func _refresh_all() -> void:
     _refresh_world_state_reference()
     _refresh_templates()
     _refresh_snapshot()
+    _latest_task_result = _extract_latest_task_result(_snapshot_cache)
+    _proposal_cache = _extract_task_proposals(_latest_task_result)
     _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _update_template_list()
+    _update_proposal_panel()
     _update_installed_rules_panel()
     _update_three_d_preview()
     _update_world_state_view()
@@ -642,6 +711,276 @@ func _update_template_list() -> void:
     _install_template_button.disabled = _template_cache.is_empty()
     if not _template_cache.is_empty():
         _template_list.select(0)
+
+func _update_proposal_panel() -> void:
+    if _proposal_selector == null:
+        return
+
+    var previous_key := _build_proposal_key(_current_selected_proposal(), _selected_proposal_index)
+    var task_signature := _build_task_result_signature(_latest_task_result)
+    var task_changed := task_signature != _proposal_signature
+    _proposal_signature = task_signature
+
+    _proposal_selector.clear()
+    for index in range(_proposal_cache.size()):
+        _proposal_selector.add_item(_format_proposal_option_label(_proposal_cache[index], index))
+
+    if _proposal_cache.is_empty():
+        _selected_proposal_index = -1
+        _loaded_proposal_key = ""
+        _selected_proposal_original_text = ""
+        _approved_proposal_text = ""
+        _current_proposal_review = {}
+        _proposal_review_summary_label.text = "まだ提案はありません。相談を送るとレビュー導線が開きます。"
+        _proposal_metadata_view.text = "最新の相談結果がここに表示されます。clone / fork メタデータ、保留中の操作、導入準備状況を確認できます。"
+        _set_proposal_editor_text("")
+        _reset_proposal_button.disabled = true
+        _approve_proposal_button.disabled = true
+        _install_proposal_button.disabled = true
+        return
+
+    var selection_index := 0
+    if not task_changed:
+        var matched_index := _find_proposal_index_by_key(previous_key)
+        if matched_index != -1:
+            selection_index = matched_index
+        elif _selected_proposal_index >= 0 and _selected_proposal_index < _proposal_cache.size():
+            selection_index = _selected_proposal_index
+    selection_index = min(max(selection_index, 0), _proposal_cache.size() - 1)
+    _selected_proposal_index = selection_index
+    _proposal_selector.select(selection_index)
+
+    var selected_key := _build_proposal_key(_proposal_cache[selection_index], selection_index)
+    if task_changed or selected_key != _loaded_proposal_key:
+        _load_selected_proposal_into_editor()
+        return
+
+    _current_proposal_review = _refresh_current_proposal_review(false)
+    _update_proposal_views()
+
+func _load_selected_proposal_into_editor() -> void:
+    var proposal := _current_selected_proposal()
+    _loaded_proposal_key = _build_proposal_key(proposal, _selected_proposal_index)
+    _approved_proposal_text = ""
+
+    var rule_package := _proposal_to_rule_package(proposal)
+    if rule_package.is_empty():
+        _selected_proposal_original_text = ""
+        _current_proposal_review = {
+            "status": "error",
+            "message": "選択した提案には編集可能なルールパッケージが含まれていません。"
+        }
+        _set_proposal_editor_text("")
+        _update_proposal_views()
+        return
+
+    var proposal_text := JSON.stringify(rule_package, "	")
+    _selected_proposal_original_text = proposal_text
+    _approved_proposal_text = proposal_text if String(rule_package.get("patch", {}).get("review_status", "")) == "approved" else ""
+    _set_proposal_editor_text(proposal_text)
+    _current_proposal_review = _refresh_current_proposal_review(false)
+    _update_proposal_views()
+
+func _set_proposal_editor_text(value: String) -> void:
+    _is_updating_proposal_editor = true
+    _proposal_editor.text = value
+    _is_updating_proposal_editor = false
+
+func _refresh_current_proposal_review(append_errors: bool) -> Dictionary:
+    var parsed_result := _parse_editor_rule_package()
+    if String(parsed_result.get("status", "")) == "error":
+        if append_errors:
+            _append_log("提案レビューに失敗しました。", parsed_result)
+        return parsed_result
+
+    var rule_package: Dictionary = parsed_result.get("rule_package", {})
+    if _world_state != null and _world_state.has_method("review_rule_package_proposal"):
+        var review_result = _world_state.call("review_rule_package_proposal", rule_package)
+        if review_result is Dictionary:
+            if append_errors and String(review_result.get("status", "")) == "error":
+                _append_log("提案レビューに失敗しました。", review_result)
+            return review_result
+    return _build_local_proposal_review(rule_package)
+
+func _parse_editor_rule_package() -> Dictionary:
+    var raw_text := _proposal_editor.text.strip_edges()
+    if raw_text.is_empty():
+        return {
+            "status": "error",
+            "message": "提案エディタが空です。"
+        }
+
+    var parser := JSON.new()
+    var parse_result := parser.parse(raw_text)
+    if parse_result != OK:
+        return {
+            "status": "error",
+            "message": "提案 JSON が不正です。",
+            "line": parser.get_error_line(),
+            "details": parser.get_error_message()
+        }
+    if not (parser.data is Dictionary):
+        return {
+            "status": "error",
+            "message": "提案 JSON は辞書型である必要があります。"
+        }
+    return {
+        "status": "parsed",
+        "rule_package": parser.data
+    }
+
+func _build_local_proposal_review(rule_package: Dictionary) -> Dictionary:
+    if rule_package.is_empty():
+        return {
+            "status": "error",
+            "message": "ルールパッケージが空です。"
+        }
+    if not _looks_like_rule_package(rule_package):
+        return {
+            "status": "error",
+            "message": "ルールパッケージに必要な schema_version または patch がありません。",
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var patch = rule_package.get("patch", {})
+    var operations = patch.get("operations", [])
+    if not (operations is Array):
+        return {
+            "status": "error",
+            "message": "ルールパッケージ patch.operations は配列である必要があります。",
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var deferred_operations: Array = []
+    for operation_variant in operations:
+        if not (operation_variant is Dictionary):
+            deferred_operations.append(operation_variant)
+            continue
+        var operation: Dictionary = operation_variant
+        var op_name := String(operation.get("op", ""))
+        var supported_directly := op_name == "upsert_stat" or (
+            op_name == "upsert_rule" and String(operation.get("rule_type", "")) == "tick_delta"
+        )
+        if not supported_directly:
+            deferred_operations.append(operation.duplicate(true))
+
+    var warnings: Array = []
+    if operations.is_empty():
+        warnings.append("導入対象の操作がまだありません。")
+    if not deferred_operations.is_empty():
+        warnings.append("一部の操作はランタイム対応待ちのため保留されます。")
+
+    var review_status := String(patch.get("review_status", "draft"))
+    return {
+        "status": "ready_for_install" if review_status == "approved" else "needs_approval",
+        "package_id": rule_package.get("package_id", ""),
+        "display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
+        "review_status": review_status,
+        "operation_count": operations.size(),
+        "safe_to_apply_directly": deferred_operations.is_empty(),
+        "deferred_operations": deferred_operations,
+        "forked_from": rule_package.get("forked_from", null),
+        "suggested_pr_target": rule_package.get("suggested_pr_target", null),
+        "warnings": warnings,
+        "rule_package": rule_package.duplicate(true)
+    }
+
+func _update_proposal_views() -> void:
+    var proposal := _current_selected_proposal()
+    if proposal.is_empty():
+        _proposal_review_summary_label.text = "提案未選択です。"
+        _proposal_metadata_view.text = "レビューする提案を選んでください。"
+        _reset_proposal_button.disabled = true
+        _approve_proposal_button.disabled = true
+        _install_proposal_button.disabled = true
+        return
+
+    var rule_package := _proposal_to_rule_package(proposal)
+    var review_status := String(_current_proposal_review.get("review_status", ""))
+    if review_status.is_empty() and not rule_package.is_empty():
+        review_status = String(rule_package.get("patch", {}).get("review_status", "draft"))
+
+    var summary_segments: Array[String] = []
+    summary_segments.append("最新相談: %s" % str(_latest_task_result.get("status", "proposal_ready")))
+    summary_segments.append("レビュー: %s" % (review_status if not review_status.is_empty() else "未取得"))
+    if _proposal_editor_is_dirty():
+        summary_segments.append("編集中")
+    if _proposal_requires_reapproval():
+        summary_segments.append("再承認が必要")
+    if String(_current_proposal_review.get("status", "")) == "error":
+        summary_segments.append("JSON要修正")
+    _proposal_review_summary_label.text = " | ".join(summary_segments)
+
+    var metadata_lines: Array[String] = []
+    metadata_lines.append("相談: %s" % str(_latest_task_result.get("task_text", "(未送信)")))
+    metadata_lines.append("解決方針: %s" % str(_latest_task_result.get("resolution", _latest_task_result.get("status", "unknown"))))
+    metadata_lines.append("メッセージ: %s" % str(_latest_task_result.get("message", "要約はありません。")))
+    if not rule_package.is_empty():
+        metadata_lines.append("")
+        metadata_lines.append("パッケージ: %s" % str(rule_package.get("package_id", "")))
+        metadata_lines.append("表示名: %s" % str(rule_package.get("display_name", "")))
+        metadata_lines.append("説明: %s" % str(rule_package.get("description", "")))
+        metadata_lines.append("ソース: %s @ %s" % [
+            str(rule_package.get("source_repo", "")),
+            str(rule_package.get("source_ref", ""))
+        ])
+        metadata_lines.append("clone / fork 元: %s" % _format_variant_for_text(rule_package.get("forked_from", null)))
+        metadata_lines.append("提案PR先: %s" % _format_variant_for_text(rule_package.get("suggested_pr_target", null)))
+        metadata_lines.append("タグ: %s" % _format_variant_for_text(rule_package.get("tags", [])))
+        metadata_lines.append("コミュニティ: %s" % _format_variant_for_text(rule_package.get("community", {})))
+        var install_actions = rule_package.get("patch", {}).get("install_actions", [])
+        if install_actions is Array and not install_actions.is_empty():
+            metadata_lines.append("宣言的な導入アクション (%d): %s" % [
+                install_actions.size(),
+                JSON.stringify(install_actions, "	")
+            ])
+    else:
+        metadata_lines.append("")
+        metadata_lines.append("この提案には完全なパッケージ JSON が含まれないため、ここから編集・導入できません。")
+
+    if _current_proposal_review.has("operation_count"):
+        metadata_lines.append("操作数: %s" % str(_current_proposal_review.get("operation_count", 0)))
+    if _current_proposal_review.has("safe_to_apply_directly"):
+        metadata_lines.append("直接適用可能: %s" % str(_current_proposal_review.get("safe_to_apply_directly", false)))
+    if _current_proposal_review.has("compiled_runtime_patch"):
+        metadata_lines.append("コンパイル済みランタイムパッチ: %s" % _format_variant_for_text(_current_proposal_review.get("compiled_runtime_patch", {})))
+    if _current_proposal_review.has("deferred_operations"):
+        var deferred_operations = _current_proposal_review.get("deferred_operations", [])
+        if deferred_operations is Array and not deferred_operations.is_empty():
+            metadata_lines.append("保留中の操作 (%d): %s" % [
+                deferred_operations.size(),
+                JSON.stringify(deferred_operations, "	")
+            ])
+
+    var warnings = _current_proposal_review.get("warnings", [])
+    if warnings is Array and not warnings.is_empty():
+        metadata_lines.append("警告: %s" % _format_variant_for_text(warnings))
+
+    if _latest_task_result.has("workflow"):
+        metadata_lines.append("ワークフロー: %s" % _format_variant_for_text(_latest_task_result.get("workflow", {})))
+
+    if String(_current_proposal_review.get("status", "")) == "error":
+        metadata_lines.append("レビューエラー: %s" % str(_current_proposal_review.get("message", "不明なレビューエラーです。")))
+    elif _proposal_requires_reapproval():
+        metadata_lines.append("承認状態: 承認後に内容が変わりました。再承認してから導入してください。")
+    elif not _approved_proposal_text.is_empty():
+        metadata_lines.append("承認状態: 現在の JSON は導入可能として承認済みです。")
+    elif review_status == "approved":
+        metadata_lines.append("承認状態: UI 上でも承認ボタンを押すと、この提案の導入が解放されます。")
+
+    _proposal_metadata_view.text = "\n".join(metadata_lines)
+
+    var review_failed := String(_current_proposal_review.get("status", "")) == "error"
+    var has_editable_package := not rule_package.is_empty()
+    _reset_proposal_button.disabled = not has_editable_package or not _proposal_editor_is_dirty()
+    _approve_proposal_button.disabled = not has_editable_package or review_failed
+    _install_proposal_button.disabled = (
+        not has_editable_package
+        or review_failed
+        or review_status != "approved"
+        or _approved_proposal_text.is_empty()
+        or _proposal_requires_reapproval()
+    )
 
 func _update_installed_rules_panel() -> void:
     _installed_rule_list.clear()
@@ -822,7 +1161,7 @@ func _update_event_log_view() -> void:
 
 func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
-    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | 稼働ルール: %d" % [source, _template_cache.size(), _installed_rule_cache.size()]
+    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size()]
 
 func _emit_close_requested() -> void:
     close_requested.emit()
@@ -842,6 +1181,109 @@ func _on_submit_pressed() -> void:
     _task_input.clear()
     _refresh_all()
     _append_log("相談を送信しました: %s" % task_text, result)
+
+func _on_proposal_selected(index: int) -> void:
+    _selected_proposal_index = index
+    _load_selected_proposal_into_editor()
+
+func _on_proposal_editor_changed() -> void:
+    if _is_updating_proposal_editor:
+        return
+    _current_proposal_review = _refresh_current_proposal_review(false)
+    _update_proposal_views()
+
+func _on_reset_proposal_pressed() -> void:
+    if _selected_proposal_original_text.is_empty():
+        _append_log("編集対象の提案がないまま元に戻そうとしました。")
+        return
+
+    _set_proposal_editor_text(_selected_proposal_original_text)
+    _current_proposal_review = _refresh_current_proposal_review(false)
+    _approved_proposal_text = _proposal_editor.text if String(_current_proposal_review.get("review_status", "")) == "approved" else ""
+    _update_proposal_views()
+    _append_log("提案 JSON を選択時の下書きへ戻しました。", {
+        "package_id": _current_proposal_review.get("package_id", _build_proposal_key(_current_selected_proposal(), _selected_proposal_index))
+    })
+
+func _on_approve_proposal_pressed() -> void:
+    var parsed_result := _parse_editor_rule_package()
+    if String(parsed_result.get("status", "")) == "error":
+        _append_log("提案の承認に失敗しました。", parsed_result)
+        _current_proposal_review = parsed_result
+        _update_proposal_views()
+        return
+
+    var rule_package: Dictionary = parsed_result.get("rule_package", {}).duplicate(true)
+    var patch = rule_package.get("patch", {})
+    if not (patch is Dictionary):
+        var error_result := {
+            "status": "error",
+            "message": "承認前に patch が辞書型である必要があります。"
+        }
+        _append_log("提案の承認に失敗しました。", error_result)
+        _current_proposal_review = error_result
+        _update_proposal_views()
+        return
+
+    patch["review_status"] = "approved"
+    rule_package["patch"] = patch
+    _set_proposal_editor_text(JSON.stringify(rule_package, "	"))
+    _current_proposal_review = _refresh_current_proposal_review(true)
+    if String(_current_proposal_review.get("status", "")) == "error":
+        _update_proposal_views()
+        return
+
+    _approved_proposal_text = _proposal_editor.text
+    _update_proposal_views()
+    _append_log("提案を承認しました。", {
+        "package_id": _current_proposal_review.get("package_id", ""),
+        "safe_to_apply_directly": _current_proposal_review.get("safe_to_apply_directly", false),
+        "deferred_operation_count": Array(_current_proposal_review.get("deferred_operations", [])).size()
+    })
+
+func _on_install_proposal_pressed() -> void:
+    _current_proposal_review = _refresh_current_proposal_review(true)
+    if String(_current_proposal_review.get("status", "")) == "error":
+        _update_proposal_views()
+        return
+    if String(_current_proposal_review.get("review_status", "")) != "approved":
+        _append_log("提案が承認されるまで導入できません。", {
+            "package_id": _current_proposal_review.get("package_id", ""),
+            "review_status": _current_proposal_review.get("review_status", "draft")
+        })
+        _update_proposal_views()
+        return
+    if _approved_proposal_text.is_empty():
+        _append_log("UI 上の承認ステップを完了するまで導入できません。", {
+            "package_id": _current_proposal_review.get("package_id", "")
+        })
+        _update_proposal_views()
+        return
+    if _proposal_requires_reapproval():
+        _append_log("承認後に内容が変わったため、再承認が必要です。", {
+            "package_id": _current_proposal_review.get("package_id", "")
+        })
+        _update_proposal_views()
+        return
+
+    var parsed_result := _parse_editor_rule_package()
+    if String(parsed_result.get("status", "")) == "error":
+        _append_log("ランタイムへ渡す前の提案検証に失敗しました。", parsed_result)
+        _current_proposal_review = parsed_result
+        _update_proposal_views()
+        return
+
+    var rule_package: Dictionary = parsed_result.get("rule_package", {})
+    var package_id := str(rule_package.get("package_id", _build_proposal_key(_current_selected_proposal(), _selected_proposal_index)))
+    var result: Dictionary = {}
+    if _world_state != null and _world_state.has_method("create_rule_from_patch"):
+        result = _world_state.call("create_rule_from_patch", rule_package)
+    else:
+        result = _simulate_package_install(rule_package)
+        result["approved_rule_package"] = rule_package.duplicate(true)
+
+    _refresh_all()
+    _append_log("レビュー済み提案を導入しました: %s" % package_id, result)
 
 func _on_install_template_pressed() -> void:
     var selected_items := _template_list.get_selected_items()
@@ -934,7 +1376,7 @@ func _extract_entities(snapshot: Dictionary) -> Array:
 
 func _extract_identifier(data: Variant) -> String:
     if data is Dictionary:
-        for key in ["id", "rule_id", "template_id", "name"]:
+        for key in ["package_id", "id", "rule_id", "template_id", "display_name", "name", "title"]:
             if data.has(key):
                 return str(data.get(key))
     return str(data)
@@ -1570,6 +2012,101 @@ func _join_values(values: Array) -> String:
         joined += pieces[index]
     return joined
 
+func _extract_latest_task_result(snapshot: Dictionary) -> Dictionary:
+    var task_history = snapshot.get("player_task_history", [])
+    if task_history is Array and not task_history.is_empty():
+        var latest_result = task_history[task_history.size() - 1]
+        return latest_result.duplicate(true) if latest_result is Dictionary else {}
+    return {}
+
+func _extract_task_proposals(task_result: Dictionary) -> Array:
+    var proposals = task_result.get("proposals", [])
+    if proposals is Array:
+        var normalized: Array = []
+        for proposal_data in proposals:
+            if proposal_data is Dictionary:
+                normalized.append(proposal_data.duplicate(true))
+        return normalized
+    return []
+
+func _looks_like_rule_package(candidate: Dictionary) -> bool:
+    return (
+        String(candidate.get("schema_version", "")) == "rule_package_v1"
+        and candidate.get("patch", {}) is Dictionary
+    )
+
+func _build_task_result_signature(task_result: Dictionary) -> String:
+    if task_result.is_empty():
+        return ""
+
+    var proposal_keys: Array[String] = []
+    var proposals = task_result.get("proposals", [])
+    if proposals is Array:
+        for index in range(proposals.size()):
+            var proposal_data = proposals[index]
+            if proposal_data is Dictionary:
+                proposal_keys.append(_build_proposal_key(proposal_data, index))
+
+    return JSON.stringify({
+        "task_text": task_result.get("task_text", ""),
+        "status": task_result.get("status", ""),
+        "resolution": task_result.get("resolution", ""),
+        "proposal_keys": proposal_keys
+    })
+
+func _build_proposal_key(proposal_data: Dictionary, index: int) -> String:
+    var rule_package := _proposal_to_rule_package(proposal_data)
+    if not rule_package.is_empty():
+        return str(rule_package.get("package_id", "proposal_%d" % index))
+    var identifier := _extract_identifier(proposal_data)
+    return identifier if not identifier.is_empty() else "proposal_%d" % index
+
+func _find_proposal_index_by_key(proposal_key: String) -> int:
+    if proposal_key.is_empty():
+        return -1
+    for index in range(_proposal_cache.size()):
+        var proposal_data = _proposal_cache[index]
+        if proposal_data is Dictionary and _build_proposal_key(proposal_data, index) == proposal_key:
+            return index
+    return -1
+
+func _format_proposal_option_label(proposal_data: Variant, index: int) -> String:
+    if proposal_data is Dictionary:
+        var rule_package := _proposal_to_rule_package(proposal_data)
+        var label_source: Dictionary = rule_package if not rule_package.is_empty() else proposal_data
+        var package_id := str(label_source.get("package_id", _build_proposal_key(proposal_data, index)))
+        var display_name := str(label_source.get("display_name", label_source.get("name", package_id)))
+        var review_status := str(label_source.get("patch", {}).get("review_status", proposal_data.get("review_status", "")))
+        if review_status.is_empty():
+            return "%s (%s)" % [display_name, package_id]
+        return "%s (%s) — %s" % [display_name, package_id, review_status]
+    return "提案 %d" % (index + 1)
+
+func _proposal_editor_is_dirty() -> bool:
+    return not _selected_proposal_original_text.is_empty() and _proposal_editor.text != _selected_proposal_original_text
+
+func _proposal_requires_reapproval() -> bool:
+    return not _approved_proposal_text.is_empty() and _approved_proposal_text != _proposal_editor.text
+
+func _current_selected_proposal() -> Dictionary:
+    if _selected_proposal_index < 0 or _selected_proposal_index >= _proposal_cache.size():
+        return {}
+    var proposal = _proposal_cache[_selected_proposal_index]
+    return proposal.duplicate(true) if proposal is Dictionary else {}
+
+func _proposal_to_rule_package(proposal_data: Dictionary) -> Dictionary:
+    if _looks_like_rule_package(proposal_data):
+        return proposal_data.duplicate(true)
+    var nested_package = proposal_data.get("rule_package", {})
+    if nested_package is Dictionary and _looks_like_rule_package(nested_package):
+        return nested_package.duplicate(true)
+    return {}
+
+func _format_variant_for_text(value: Variant) -> String:
+    if value is Dictionary or value is Array:
+        return JSON.stringify(value, "	")
+    return str(value)
+
 func _append_log(message: String, payload: Variant = null) -> void:
     var log_entry := message
     if payload != null:
@@ -1579,11 +2116,76 @@ func _append_log(message: String, payload: Variant = null) -> void:
 
 func _simulate_task_submission(task_text: String) -> Dictionary:
     var task_history = _fallback_snapshot.get("player_task_history", [])
+    var draft_package := {
+        "schema_version": "rule_package_v1",
+        "package_id": "fallback.custom_review",
+        "display_name": "フォールバックのレビュー下書き",
+        "description": task_text,
+        "version": "0.1.0-draft",
+        "author": "fallback-shell",
+        "source_repo": "local://fallback-preview",
+        "source_ref": "draft",
+        "forked_from": {
+            "package_id": "fallback.starter_farming",
+            "source_repo": "local://fallback-preview",
+            "source_ref": "main"
+        },
+        "suggested_pr_target": {
+            "repo": "github.com/godot-world/rule-library",
+            "base_ref": "main",
+            "package_id": "fallback.custom_review"
+        },
+        "tags": ["fallback", "custom", "review"],
+        "match_phrases": [task_text],
+        "community": {
+            "likes": 0,
+            "dislikes": 0,
+            "alternative_package_ids": []
+        },
+        "patch": {
+            "format": "rule_patch_v1",
+            "review_status": "needs_design_review",
+            "operations": [
+                {
+                    "op": "upsert_stat",
+                    "stat_id": "fallback_focus",
+                    "value_type": "float",
+                    "default": 25.0,
+                    "min": 0.0,
+                    "max": 100.0,
+                    "ui_group": "custom"
+                },
+                {
+                    "op": "upsert_rule",
+                    "rule_id": "fallback.review_required",
+                    "rule_type": "designer_review_required",
+                    "design_prompt": task_text
+                }
+            ]
+        }
+    }
     var result := {
-        "status": "proposal_ready",
+        "status": "needs_rule_patch",
+        "resolution": "draft_custom_rule_patch",
         "task_text": task_text,
-        "proposals": [{"template_id": "starter-farming", "title": "農作業のたたき台"}],
-        "message": "フォールバックでサンプルのテンプレート候補を生成しました。"
+        "proposals": [{
+            "package_id": draft_package.get("package_id", ""),
+            "display_name": draft_package.get("display_name", ""),
+            "description": draft_package.get("description", ""),
+            "source_repo": draft_package.get("source_repo", ""),
+            "source_ref": draft_package.get("source_ref", ""),
+            "forked_from": draft_package.get("forked_from", null),
+            "suggested_pr_target": draft_package.get("suggested_pr_target", null),
+            "rule_package": draft_package.duplicate(true),
+            "safe_to_apply_directly": false,
+            "deferred_operations": draft_package.get("patch", {}).get("operations", []).duplicate(true)
+        }],
+        "workflow": {
+            "review_status": "needs_design_review",
+            "forked_from": draft_package.get("forked_from", null),
+            "suggested_pr_target": draft_package.get("suggested_pr_target", null)
+        },
+        "message": "フォールバックが編集可能なルールパッケージ案を生成しました。"
     }
     if task_history is Array:
         task_history.append(result.duplicate(true))
@@ -1625,6 +2227,45 @@ func _simulate_template_install(template_data: Variant) -> Dictionary:
         _fallback_snapshot["concepts"] = concepts
 
     _append_fallback_event("rule_installed", "フォールバックテンプレート '%s' を導入しました。" % template_id, {"rule_id": rule_patch["id"]})
+    return {"status": "installed", "rule": rule_patch}
+
+func _simulate_package_install(package_data: Variant) -> Dictionary:
+    var package_id := _extract_identifier(package_data)
+    var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})
+    var package_name := package_id
+    if package_data is Dictionary:
+        package_name = str(package_data.get("display_name", package_data.get("name", package_id)))
+
+    var rule_patch := {
+        "id": "compiled_%s" % package_id.replace(".", "_"),
+        "name": "%s (Compiled)" % package_name,
+        "concept": package_id,
+        "enabled": true,
+        "metadata": {
+            "package_id": package_id
+        },
+        "effects": [
+            {
+                "component": "stats",
+                "field": package_id,
+                "op": "add",
+                "default": 0.0,
+                "value_per_second": 0.2,
+                "min": 0.0,
+                "max": 100.0
+            }
+        ]
+    }
+    rule_patch.merge(_build_fallback_rule_dependency_profile(package_id), true)
+    installed_rules[rule_patch["id"]] = rule_patch
+    _fallback_snapshot["installed_rules"] = _refresh_fallback_rule_dependencies(installed_rules)
+
+    var concepts = _fallback_snapshot.get("concepts", [])
+    if concepts is Array and not concepts.has(package_id):
+        concepts.append(package_id)
+        _fallback_snapshot["concepts"] = concepts
+
+    _append_fallback_event("rule_installed", "フォールバック提案 '%s' を導入しました。" % package_id, {"rule_id": rule_patch["id"]})
     return {"status": "installed", "rule": rule_patch}
 
 func _simulate_rule_clone(rule_data: Variant) -> Dictionary:

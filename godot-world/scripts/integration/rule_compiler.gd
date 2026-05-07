@@ -4,10 +4,10 @@ class_name RuleCompiler
 const STRONG_MATCH_THRESHOLD := 0.34
 const CUSTOM_PACKAGE_PREFIX := "draft.custom."
 
-var _repository: RulePackageRepository
+var _repository = null
 
-func _init(repository: RulePackageRepository = null) -> void:
-	_repository = repository if repository != null else RulePackageRepository.new()
+func _init(repository = null) -> void:
+	_repository = repository if repository != null else load("res://scripts/integration/rule_package_repository.gd").new()
 
 func list_available_rule_packages() -> Array:
 	return _repository.list_available_rule_packages()
@@ -15,8 +15,8 @@ func list_available_rule_packages() -> Array:
 func resolve_player_task(task: Dictionary) -> Dictionary:
 	var request_text := _task_text(task)
 	var resolution_preference := String(task.get("resolution_preference", "clone_or_create"))
-	var clone_candidates := _repository.resolve_clone_candidates(request_text, 3)
-	var best_candidate := clone_candidates[0] if not clone_candidates.is_empty() else {}
+	var clone_candidates: Array = _repository.resolve_clone_candidates(request_text, 3)
+	var best_candidate: Dictionary = clone_candidates[0] if not clone_candidates.is_empty() else {}
 	var force_custom := resolution_preference == "force_custom" or resolution_preference == "fork_existing"
 
 	if not force_custom and not best_candidate.is_empty() and float(best_candidate.get("match_score", 0.0)) >= STRONG_MATCH_THRESHOLD:
@@ -143,7 +143,7 @@ func _normalize_fork_target(forked_from, best_candidate: Dictionary, prefer_best
 		return forked_from
 	if typeof(forked_from) == TYPE_STRING and not String(forked_from).is_empty():
 		var package_id := String(forked_from)
-		var package := _repository.get_rule_package(package_id)
+		var package: Dictionary = _repository.get_rule_package(package_id)
 		if not package.is_empty():
 			return {
 				"package_id": package.get("package_id", ""),

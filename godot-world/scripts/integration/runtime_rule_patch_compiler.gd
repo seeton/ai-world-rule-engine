@@ -53,6 +53,7 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"target_tags": _normalize_string_array(patch.get("target_tags", ["mortal"])),
 			"requires_rule_kinds": _normalize_string_array(patch.get("requires_rule_kinds", [])),
 			"provides_rule_kinds": _normalize_string_array(patch.get("provides_rule_kinds", [])),
+			"install_actions": _duplicate_install_actions(patch.get("install_actions", [])),
 			"effects": effects,
 			"metadata": {
 				"package_id": package_id,
@@ -131,3 +132,12 @@ func _normalize_string_array(value: Variant) -> Array:
 		if not text.is_empty():
 			values.append(text)
 	return values
+
+
+func _duplicate_install_actions(raw_actions: Variant) -> Array:
+	var duplicated_actions: Array = []
+	if raw_actions is Array:
+		for raw_action in raw_actions:
+			if raw_action is Dictionary:
+				duplicated_actions.append(raw_action.duplicate(true))
+	return duplicated_actions

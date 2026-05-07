@@ -36,6 +36,15 @@ If no strong package matches, or the player explicitly wants a new variant, the 
 - can optionally point to `forked_from`
 - can carry a `suggested_pr_target` for future upstream submission
 
+### 2.5. Review in the Godot UI
+
+The GM conversation UI now keeps package review data-driven:
+
+- the latest proposal is shown as editable package JSON before install
+- `forked_from`, `suggested_pr_target`, tags, and community metadata stay visible during review
+- declarative `install_actions` and deferred operations are listed so the player can see what will apply now vs later
+- installation stays blocked until the reviewed package is explicitly approved
+
 ### 3. Social workflow
 
 Packages support community metadata:

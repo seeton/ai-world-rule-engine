@@ -73,18 +73,12 @@ The current Godot entry point in `scenes/Main.tscn` starts in a playable 2D worl
 
 ### Launching from an issue worktree
 
-Use the worktree-specific launcher instead of opening the repo-root project directly.
+Launch Godot from the issue-specific worktree instead of validating against the repo-root checkout.
 
 1. Create or reuse `.agent-workspaces/issue-<number>/` for the issue you are validating.
-2. Make sure that worktree is the claimed owner for the issue with `bash scripts/agent_guard.sh claim-issue <issue-number> .agent-workspaces/issue-<number>`.
-3. Launch from a repository checkout with `bash scripts/launch_godot.sh <issue-number>`.
-
-Useful variants:
-
-- `bash scripts/launch_godot.sh <issue-number> --dry-run`
-- `bash scripts/launch_godot.sh <issue-number> -- --editor`
-
-The launcher resolves `godot-world` inside `.agent-workspaces/issue-<number>/`, rejects repo-root `godot-world`, blocks project paths that escape the selected worktree, and only permits detached-HEAD launches when `--allow-detached-head` is passed intentionally. Use `bash scripts/agent_guard.sh status` if you need to confirm the current issue/worktree ownership before reusing an existing workspace.
+2. Launch from that worktree with `cd .agent-workspaces/issue-<number>/godot-world && godot --path .`.
+3. If you need the editor UI, use `cd .agent-workspaces/issue-<number>/godot-world && godot --editor --path .`.
+4. Avoid validating from repo-root `godot-world` when the actual change only exists in the issue worktree.
 
 - move the in-world player directly inside a simple 2D plaza first
 - approach the in-world GM and interact with `E` or left click

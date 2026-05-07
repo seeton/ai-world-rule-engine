@@ -25,7 +25,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: request-copilot-review-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: request-copilot-review-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,19 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.draft == false
+      (
+        github.event.pull_request.draft == false &&
+        (
+          (
+            github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name == github.repository
+          ) ||
+          (
+            github.event_name == 'pull_request_target' &&
+            github.event.pull_request.head.repo.full_name != github.repository
+          )
+        )
+      )
     steps:
       - name: Request Copilot as reviewer
         env:

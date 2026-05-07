@@ -24,6 +24,7 @@ test("GM UI exposes proposal review metadata and approval gating", () => {
   assert.match(source, /clone \/ fork 元:/);
   assert.match(source, /提案PR先:/);
   assert.match(source, /宣言的な導入アクション/);
+  assert.match(source, /ルールパッケージ patch は辞書型である必要があります。/);
   assert.match(source, /if String\(_current_proposal_review.get\("review_status", ""\)\) != "approved":/);
   assert.match(source, /_proposal_requires_reapproval/);
 });
@@ -31,6 +32,7 @@ test("GM UI exposes proposal review metadata and approval gating", () => {
 test("runtime compiler preserves declarative install actions for traceable installs", () => {
   const source = fs.readFileSync(compilerPath, "utf8");
 
-  assert.match(source, /"install_actions": _duplicate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
-  assert.match(source, /func _duplicate_install_actions\(raw_actions: Variant\) -> Array:/);
+  assert.match(source, /var install_actions_result := _validate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
+  assert.match(source, /"install_actions": install_actions_result.get\("install_actions", \[\]\)\.duplicate\(true\)/);
+  assert.match(source, /func _validate_install_actions\(raw_actions: Variant\) -> Dictionary:/);
 });

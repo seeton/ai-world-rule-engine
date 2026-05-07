@@ -820,13 +820,21 @@ func _build_editor_change_review_state() -> Dictionary:
         return parsed_result
 
     var rule_package: Dictionary = parsed_result.get("rule_package", {})
+    var patch_variant = rule_package.get("patch", null)
+    if not (patch_variant is Dictionary):
+        return {
+            "status": "error",
+            "message": "ルールパッケージ patch は辞書型である必要があります。",
+            "rule_package": rule_package.duplicate(true)
+        }
+    var patch: Dictionary = patch_variant
     if _world_state == null or not _world_state.has_method("review_rule_package_proposal"):
         return _build_local_proposal_review(rule_package)
 
     return {
         "status": "review_pending",
         "message": "入力停止後に提案レビューを更新します。",
-        "review_status": String(rule_package.get("patch", {}).get("review_status", "draft")),
+        "review_status": String(patch.get("review_status", "draft")),
         "rule_package": rule_package.duplicate(true)
     }
 

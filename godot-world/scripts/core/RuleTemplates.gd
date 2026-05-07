@@ -1,9 +1,12 @@
 extends RefCounted
 class_name RuleTemplates
 
+const RulePackageRepositoryScript = preload("res://scripts/integration/rule_package_repository.gd")
+const RuntimeRulePatchCompilerScript = preload("res://scripts/integration/runtime_rule_patch_compiler.gd")
+
 
 static func get_templates() -> Array:
-	return [
+	var templates := [
 		{
 			"id": "three_d_preview_rule",
 			"name": "3D化ルール",
@@ -348,3 +351,46 @@ static func get_templates() -> Array:
 			}
 		}
 	]
+	var builtin_time_template := _build_builtin_time_template()
+	if not builtin_time_template.is_empty():
+		templates.append(builtin_time_template)
+	return templates
+
+
+static func _build_builtin_time_template() -> Dictionary:
+	var repository := RulePackageRepositoryScript.new()
+	var rule_package := repository.get_rule_package("builtin.time")
+	if rule_package.is_empty():
+		return {}
+
+	var compile_result := RuntimeRulePatchCompilerScript.new().compile_package(rule_package)
+	var runtime_patch: Dictionary = compile_result.get("runtime_patch", {}).duplicate(true)
+	if runtime_patch.is_empty():
+		return {}
+
+	runtime_patch["id"] = "compiled_builtin_time"
+	runtime_patch["name"] = "時間ルール"
+
+	var keywords := _unique_keywords(rule_package.get("tags", []))
+	keywords.append_array(_unique_keywords(rule_package.get("match_phrases", [])))
+	keywords.append_array(["時間", "時計", "経過", "経過時間"])
+	keywords = _unique_keywords(keywords)
+
+	return {
+		"id": "builtin_time_rule",
+		"name": "時間ルール",
+		"description": "builtin.time を使って、プレイ世界の時計とプレイヤーの経過時間を見えるようにします。",
+		"summary": "GM画面で追加すると、WorldState.elapsed_seconds をプレイ画面右上の時計として表示し、プレイヤーに time.elapsed_seconds を付与します。",
+		"keywords": keywords,
+		"rule_patch": runtime_patch
+	}
+
+
+static func _unique_keywords(values: Array) -> Array:
+	var result: Array = []
+	for value in values:
+		var text := String(value).strip_edges()
+		if text.is_empty() or result.has(text):
+			continue
+		result.append(text)
+	return result

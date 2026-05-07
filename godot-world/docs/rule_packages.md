@@ -33,6 +33,16 @@ Rule packages eventually compile into the runtime's shared rule model, so packag
 
 See `rule_model.md` for the detailed prerequisite-graph and `Representation` rules.
 
+## Codex proposal contract
+
+PoC4 Codex output must not become a rule package or GitHub issue directly. Raw generated text is first normalized into a `codex_rule_proposal_v1` document, validated, and then shown for player / human review.
+
+The proposal contract lives in:
+
+- `godot-world/rules/schema/rule_proposal.schema.json`
+
+See `codex_rule_proposals.md` for the validation gate, review states, issue conversion rules, and safety boundary.
+
 ## Player workflow
 
 ### 1. Clone an existing package

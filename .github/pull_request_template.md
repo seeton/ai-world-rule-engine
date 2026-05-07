@@ -10,6 +10,7 @@
 - [ ] Changes were implemented on a dedicated branch
 - [ ] This PR is scoped to the issue acceptance criteria
 - [ ] Any follow-up work has been split into new issues instead of expanding scope
+- [ ] Copilot automatic review completed, or this PR explicitly notes that no automatic review was configured/available
 
 ## Multi-agent execution notes
 

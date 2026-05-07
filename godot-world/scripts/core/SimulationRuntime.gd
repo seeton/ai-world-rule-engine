@@ -610,35 +610,66 @@ func _append_event(event_type: String, message: String, details: Dictionary = {}
 
 
 func _build_world_clock_summary(installed_rules_by_id: Dictionary, snapshot: Dictionary) -> Dictionary:
-	if not _has_world_clock_rule(installed_rules_by_id):
+	var provider := _find_world_clock_provider(installed_rules_by_id)
+	if provider.is_empty():
 		return {}
+	var source_field := String(provider.get("source_field", "elapsed_seconds"))
 	return {
 		"elapsed_seconds": float(snapshot.get("elapsed_seconds", 0.0)),
 		"total_ticks": int(snapshot.get("tick_index", 0)),
-		"source_field": "elapsed_seconds",
-		"source_package_id": "builtin.time",
-		"description": "builtin.time は WorldState.elapsed_seconds をプレイヤー向けの時計として見える化します。"
+		"source_field": source_field,
+		"source_package_id": String(provider.get("source_package_id", "")),
+		"source_rule_id": String(provider.get("source_rule_id", "")),
+		"description": String(provider.get("description", "WorldState.%s をプレイヤー向けの時計として見える化します。" % source_field))
 	}
 
 
-func _has_world_clock_rule(installed_rules_by_id: Dictionary) -> bool:
+func _find_world_clock_provider(installed_rules_by_id: Dictionary) -> Dictionary:
 	for rule in installed_rules_by_id.values():
 		if not (rule is Dictionary):
 			continue
 		var rule_data: Dictionary = rule
 		var metadata: Dictionary = rule_data.get("metadata", {})
-		if String(metadata.get("package_id", "")) == "builtin.time":
-			return true
-		for provided_kind in rule_data.get("provides_rule_kinds", []):
-			if String(provided_kind) == "world-clock":
-				return true
+		var package_id := String(metadata.get("package_id", ""))
+		var rule_id := String(rule_data.get("id", ""))
+		var source_field := ""
 		for effect in rule_data.get("effects", []):
 			if not (effect is Dictionary):
 				continue
 			var effect_data: Dictionary = effect
-			if String(effect_data.get("component", "")) == "time" and String(effect_data.get("field", "")) == "elapsed_seconds":
-				return true
-	return false
+			if String(effect_data.get("component", "")) == "time":
+				source_field = String(effect_data.get("field", ""))
+				if source_field == "elapsed_seconds":
+					break
+		if package_id == "builtin.time":
+			if source_field.is_empty():
+				source_field = "elapsed_seconds"
+			return {
+				"source_field": source_field,
+				"source_package_id": package_id,
+				"source_rule_id": rule_id,
+				"description": "builtin.time は WorldState.%s をプレイヤー向けの時計として見える化します。" % source_field
+			}
+		for provided_kind in rule_data.get("provides_rule_kinds", []):
+			if String(provided_kind) == "world-clock":
+				if source_field.is_empty():
+					source_field = "elapsed_seconds"
+				var provider_id := package_id if not package_id.is_empty() else rule_id
+				return {
+					"source_field": source_field,
+					"source_package_id": package_id,
+					"source_rule_id": rule_id,
+					"description": "%s は WorldState.%s をプレイヤー向けの時計として見える化します。" % [provider_id if not provider_id.is_empty() else "このルール", source_field]
+				}
+		if source_field == "elapsed_seconds":
+			var provider_id := package_id if not package_id.is_empty() else rule_id
+			return {
+				"source_field": source_field,
+				"source_package_id": package_id,
+				"source_rule_id": rule_id,
+				"description": "%s は WorldState.%s をプレイヤー向けの時計として見える化します。" % [provider_id if not provider_id.is_empty() else "このルール", source_field]
+			}
+	return {}
 
 
 func _build_default_three_d_preview_state() -> Dictionary:

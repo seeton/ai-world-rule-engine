@@ -726,10 +726,19 @@ func _update_world_state_view() -> void:
     lines.append("経過秒: %s" % [str(_snapshot_cache.get("elapsed_seconds", 0.0))])
     var world_clock: Variant = _snapshot_cache.get("world_clock", {})
     if world_clock is Dictionary and not world_clock.is_empty():
-        lines.append("ワールド時計: %.2f秒を表示中 (builtin.time → WorldState.%s)" % [
-            float(world_clock.get("elapsed_seconds", _snapshot_cache.get("elapsed_seconds", 0.0))),
-            str(world_clock.get("source_field", "elapsed_seconds"))
-        ])
+        var source_field := str(world_clock.get("source_field", "elapsed_seconds"))
+        var source_label := str(world_clock.get("source_package_id", world_clock.get("source_rule_id", "")))
+        if source_label.is_empty():
+            lines.append("ワールド時計: %.2f秒を表示中 (WorldState.%s)" % [
+                float(world_clock.get("elapsed_seconds", _snapshot_cache.get("elapsed_seconds", 0.0))),
+                source_field
+            ])
+        else:
+            lines.append("ワールド時計: %.2f秒を表示中 (%s → WorldState.%s)" % [
+                float(world_clock.get("elapsed_seconds", _snapshot_cache.get("elapsed_seconds", 0.0))),
+                source_label,
+                source_field
+            ])
     var preview_summary: Variant = _snapshot_cache.get("three_d_preview", null)
     if preview_summary is Dictionary:
         var renderable_count := 0

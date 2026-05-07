@@ -19,7 +19,7 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 		match String(op.get("op", "")):
 			"upsert_stat":
 				var compiled_effect := _compile_stat_operation(op)
-				var stat_id := String(op.get("stat_id", ""))
+				var stat_id := String(compiled_effect.get("field", "value"))
 				stat_definitions[stat_id] = {
 					"component": compiled_effect.get("component", "stats"),
 					"default": compiled_effect.get("default", 0.0)

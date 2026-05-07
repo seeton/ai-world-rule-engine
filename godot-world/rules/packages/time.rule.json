@@ -29,7 +29,7 @@
     "dislikes": 0,
     "alternative_package_ids": []
   },
-  "rule_patch": {
+  "patch": {
     "id": "time_counter",
     "name": "Time Counter",
     "concept": "time",

@@ -327,6 +327,7 @@ func get_snapshot() -> Dictionary:
 	snapshot["world_mode"] = "three_d" if bool(_world_state.get("preview_3d", {}).get("enabled", false)) else "two_d"
 	snapshot["tick"] = snapshot.get("tick_index", 0)
 	snapshot["world_name"] = snapshot.get("world_name", "はじまりの広場")
+	snapshot["clock"] = _build_clock_data(snapshot.get("entities", {}), installed_rules_by_id)
 	snapshot["characters"] = _build_character_list(snapshot.get("entities", {}))
 	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
@@ -1411,7 +1412,8 @@ func _load_time_rule_package() -> Dictionary:
 		return {}
 
 	var package_data: Dictionary = json.data if json.data is Dictionary else {}
-	return package_data.get("rule_patch", {})
+	var patch_data: Variant = package_data.get("patch", package_data.get("rule_patch", {}))
+	return patch_data.duplicate(true) if patch_data is Dictionary else {}
 
 
 func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dictionary:
@@ -1428,7 +1430,9 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 			"formatted": ""
 		}
 
-	var player_entity: Dictionary = entities.get("player_character", {})
+	var player_entity := _find_first_entity_by_tag(entities, "player")
+	if player_entity.is_empty():
+		player_entity = entities.get("origin_entity", {})
 	var components: Dictionary = player_entity.get("components", {})
 	var time_component: Dictionary = components.get("time", {})
 	var total_seconds := float(time_component.get("elapsed_seconds", 0.0))
@@ -1452,6 +1456,23 @@ func _build_clock_data(entities: Dictionary, installed_rules: Dictionary) -> Dic
 		"second": second,
 		"formatted": formatted
 	}
+
+
+func _find_first_entity_by_tag(entities: Dictionary, target_tag: String) -> Dictionary:
+	var normalized_tag := target_tag.strip_edges().to_lower()
+	if normalized_tag.is_empty():
+		return {}
+
+	var entity_ids: Array = entities.keys()
+	entity_ids.sort()
+	for entity_id in entity_ids:
+		var entity_variant: Variant = entities.get(entity_id, {})
+		if not (entity_variant is Dictionary):
+			continue
+		for tag_variant in entity_variant.get("tags", []):
+			if String(tag_variant).to_lower() == normalized_tag:
+				return entity_variant
+	return {}
 
 
 func _text(key: String) -> String:

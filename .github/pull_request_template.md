@@ -10,6 +10,7 @@
 - [ ] Changes were implemented on a dedicated branch
 - [ ] This PR is scoped to the issue acceptance criteria
 - [ ] Any follow-up work has been split into new issues instead of expanding scope
+- [ ] Copilot automatic review completed, or this PR explicitly notes that no automatic review was configured/available
 
 ## Multi-agent execution notes
 
@@ -25,7 +26,7 @@
 - [ ] Godot runtime or scene behavior changed
 - [ ] Rule package data changed under `godot-world/rules/packages/`
 - [ ] Rule package schema or workflow docs changed
-- [ ] Legacy Node PoC changed
+- [ ] Root docs or workflow metadata changed
 
 If rule packages changed, summarize:
 
@@ -45,7 +46,7 @@ List exactly what you ran or verified.
 
 ### Automated
 
-- [ ] `npm test`
+- [ ] Existing repo checks run
 - [ ] Not applicable
 
 ### Manual / reviewer checks

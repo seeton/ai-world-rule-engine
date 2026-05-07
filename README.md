@@ -1,42 +1,56 @@
-# AI Village PoC
+# AI World Rule Engine
 
-棒人間の村人と会話するだけの、最小の PoC アプリです。
-バックエンドは OpenAI API 直叩きではなく、ローカルの `codex app-server` を経由します。
+**AI World Rule Engine** is an experimental Godot 4 project for building a playable world where rules and world behavior are described as data, then applied to a deterministic simulation runtime.
 
-## Repository layout
+The active product in this repository is the Godot project under [`godot-world/`](./godot-world/). If you are visiting this repo on GitHub for the first time, start there.
 
-- `godot-world/` — active Godot 4 game/simulation project.
-- repo root Node app — older PoC kept intact unless an issue explicitly includes it.
+## What this repository is
 
-## 使い方
+This repo is currently focused on a small game/simulation prototype with a rule-package workflow:
 
-```bash
-npm i -g @openai/codex
-codex login
-npm install
-npm start
-```
+- a **playable Godot world** that starts in 2D and can shift into a simple 3D view
+- a **data-driven rule system** for stats, rules, events, relations, and world patches
+- a **safe authoring model** where mechanics are represented as structured package data instead of arbitrary script execution
 
-ブラウザで `http://localhost:3000` を開くと、村人 `Botaro` と会話できます。
+## Current project facts
 
-## モード
+The current state of the repository is:
 
-- **Codex mode**: `codex login` 済みで利用枠があるとき。`codex app-server` へ接続して会話します。
-- **Demo fallback**: Codex が未ログイン、起動不可、利用上限到達などのとき。ローカルの簡易応答で画面確認を続けられます。
+| Area | What it contains |
+| --- | --- |
+| [`godot-world/`](./godot-world/) | Active Godot 4 project, scenes, runtime scripts, rule packages, and project-specific docs |
+| [`godot-world/docs/`](./godot-world/docs/) | Deeper documentation for rule packages, workflows, and integration details |
+| [`scripts/`](./scripts/) | Repository workflow helpers for worktrees, coordination guards, and Godot launch scripts |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch naming, PR expectations, and multi-agent coordination rules |
+| [`test/`](./test/) | Repository-level automated checks for contract and workflow behavior |
 
-## 環境変数
+## Where to start
 
-- `CODEX_BIN`: `codex` コマンドのパス
-- `CODEX_MODEL`: 使用する Codex モデル。既定値は `gpt-5.4-mini`
-- `CODEX_DEMO_FALLBACK`: `false` にすると Codex が使えないとき 503 を返します
+- **Project overview:** [`godot-world/README.md`](./godot-world/README.md)
+- **Contributor workflow:** [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- **Rule package format/details:** [`godot-world/docs/`](./godot-world/docs/)
 
-`.env.example` を参考に設定してください。
+## Project direction
+
+The repository is currently moving toward:
+
+- a larger library of reusable rule packages
+- a clearer GM/player workflow for applying and testing mechanics in-world
+- better authoring and review loops for AI-proposed rule changes
+- keeping the runtime data-driven and safe, without arbitrary code execution in package data
 
 ## GitHub workflow
 
-Default development flow is **issue → branch → PR**.
+This repository uses **issue -> branch -> PR** as the default development flow.
 
 - Start from a GitHub issue before implementing.
 - Use small issue slices so parallel agents can work in separate branches/PRs.
-- Keep Godot 4 work under `godot-world/` unless the issue explicitly targets the legacy Node PoC.
-- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+- Keep changes scoped to one issue per branch/worktree.
+- Open a PR for review instead of merging directly to `main`.
+- If a PR relies on Copilot automatic review, wait for that review to complete before merging; otherwise note explicitly that no automatic review was available.
+- Keep gameplay, runtime, and rule package work under `godot-world/`.
+- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+
+## Repo-root main checkout
+
+Keep the repo-root `main` checkout as a sync-only baseline. Do implementation work in `.agent-workspaces/issue-<number>/`, inspect the repo-root state with `bash scripts/worktree.sh root-status`, and fast-forward it with `bash scripts/worktree.sh sync-root` when tracked files are clean.

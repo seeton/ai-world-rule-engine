@@ -10,7 +10,24 @@ This repository uses **issue-driven development**:
 4. Open a PR linked to the issue.
 5. Merge through PR review; do not merge direct-to-main changes by default.
 
-`godot-world/` is the active Godot 4 project. The root Node app is an older PoC and should remain intact unless an issue explicitly calls for changes there.
+If a PR depends on Copilot automatic review in this repository, do not merge it until that review has completed. If no automatic review is configured or available for the PR, call that out explicitly in the PR notes before merging.
+
+`godot-world/` is the active Godot 4 project and the primary location for gameplay, runtime, and rule-package changes.
+
+## Repo-root main checkout
+
+Treat the repo-root `main` checkout as a sync-only baseline instead of a normal implementation workspace.
+
+- do implementation, conflict resolution, and experiments in issue worktrees
+- keep repo-root tracked files clean enough for fast-forward syncs
+- if tracked changes or unmerged paths appear at repo root, move that work into the owning issue worktree before syncing
+- intentional untracked local directories may remain, but they should not block repo-root syncs
+
+Helper commands:
+
+- `bash scripts/agent_guard.sh status` — includes repo-root tracked/untracked state
+- `bash scripts/worktree.sh root-status` — prints only the repo-root checkout state
+- `bash scripts/worktree.sh sync-root` — fast-forwards the repo-root default branch when tracked files are clean
 
 ## Issue decomposition for multi-agent work
 
@@ -56,11 +73,12 @@ Every PR should be small enough to review and should include:
 - validation performed
 - risks, follow-ups, or explicitly deferred work
 - screenshots/video for visible Godot changes when relevant
+- whether Copilot automatic review completed, or that no automatic review was available/configured
 
 Call out scope clearly:
 
 - whether the PR touches `godot-world/`
-- whether the legacy Node PoC was intentionally left unchanged
+- whether the PR stays within the intended `godot-world/` scope
 - whether rule packages are new, cloned, or forks of existing packages
 
 ## Multi-agent integration rules

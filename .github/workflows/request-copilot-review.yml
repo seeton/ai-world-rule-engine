@@ -49,7 +49,7 @@ jobs:
             --json reviewRequests \
             --jq '.reviewRequests[].login' > /tmp/requested-reviewers.txt
 
-          if grep -Fxq "Copilot" /tmp/requested-reviewers.txt; then
+          if grep -Fxiq "copilot" /tmp/requested-reviewers.txt; then
             echo "Copilot review is already requested."
             exit 0
           fi

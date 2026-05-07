@@ -74,12 +74,42 @@ Every PR should be small enough to review and should include:
 - risks, follow-ups, or explicitly deferred work
 - screenshots/video for visible Godot changes when relevant
 - whether Copilot automatic review completed, or that no automatic review was available/configured
+- if the PR is reopened, recreated, or updated for another review pass, a PR comment that says `@copilot レビューをお願いします`
 
 Call out scope clearly:
 
 - whether the PR touches `godot-world/`
 - whether the PR stays within the intended `godot-world/` scope
 - whether rule packages are new, cloned, or forks of existing packages
+
+## Resolving stale or overlapping PRs
+
+When you are fixing, reviewing, or deciding whether to keep an existing open PR, classify it before making more changes. Use exactly one of these states:
+
+- `merge-ready` - the PR is current, scoped correctly, validated, and can merge as-is
+- `needs-fix` - the PR should stay open, but it still needs conflict resolution, review fixes, or validation
+- `superseded` - the useful change already landed elsewhere, so keeping the PR open adds confusion
+- `split-required` - the PR mixes too many goals or stale integration work and should be replaced with smaller follow-up PRs
+- `close` - the PR should not continue in its current form and has no unique value worth carrying forward
+
+Record that classification and the rationale in the PR body, review thread, or linked issue comment before doing more cleanup. If multiple PRs touch the same area, explicitly name which PR is the current source of truth and which ones should close or be recreated.
+
+When you reopen, recreate, or otherwise resubmit a PR for another review pass, always add a fresh PR comment that says `@copilot レビューをお願いします` so the next review request is explicit in the timeline.
+
+Do not document helper scripts or workflow tooling unless that helper is tracked in the same branch/repository. If the repository does not contain the helper, document the real `git`, `godot`, or test commands directly.
+
+## Merge decision gates
+
+`mergeable=true` on GitHub only means the branch can merge mechanically. It is not enough on its own for this repository.
+
+Before merging a PR that changes `godot-world/`, gameplay/runtime scripts, scenes, or rule-package data, the PR should include concrete evidence for the checks that matter to its scope:
+
+- `git diff --check`
+- a headless Godot startup command such as `godot --headless --path godot-world --quit-after 1`, or an equivalent command that actually exists in the branch being reviewed
+- any parse/schema/contract checks relevant to the edited files
+- confirmation that unresolved review threads were addressed or intentionally deferred
+
+If a stale PR is being retired instead of merged, the closing comment should point to the replacement PR, merged commit, or issue comment that now owns the work.
 
 ## Multi-agent integration rules
 

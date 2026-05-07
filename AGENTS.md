@@ -12,7 +12,7 @@
 - 同じ issue の既存 worktree を後続 run で再利用すること自体は問題ないが、同時に複数セッションで使わないこと。
 - アクティブな issue ごとに、必ず別の repo-local worktree を使うこと。
 - worktree はこのリポジトリ内の `.agent-workspaces/` 配下に置くこと。`/Users/seeton`、`~`、その他ホームディレクトリ配下には clone や worktree を作らないこと。
-- 可能なら repo root から `bash scripts/worktree.sh ensure <issue-number> <branch-name>` を使って worktree を作成または再利用すること。
+- helper script が追跡されていない限り、repo root から `git worktree add .agent-workspaces/issue-<number> -b <branch-name> main` のような実コマンドで worktree を作成または再利用すること。
 
 ## Repo root main の役割
 
@@ -30,55 +30,24 @@
 - 同じ issue を複数セッションで同時に編集しないこと。
 - 同じ PR を複数セッションから同時に更新しないこと。
 - PR を claim したセッションは、その claim を release するまで、その PR への後続 push をすべて所有する。
+- 再度 PR を出す、PR を作り直す、または修正後に再レビューを依頼する場合は、PR 上に `@copilot レビューをお願いします` というコメントを必ず追加して再レビュー依頼を明示すること。
 
-## 必須の guard workflow
+## 必須の coordination workflow
 
-1. 編集前に issue と worktree を claim する。
+このリポジトリには、issue / PR claim や排他 lock 用の helper script が常に追跡されているとは限らない。追跡されていない helper を前提にせず、以下を実施すること。
 
-   ```bash
-   bash scripts/agent_guard.sh claim-issue 7 .agent-workspaces/issue-7
-   ```
+1. 編集前に、対象 issue と worktree の所有者を issue / PR コメントや作業記録で明示する。
+2. PR に更新を push する前に、その PR をどの issue/worktree が担当しているかを明示する。
+3. `git checkout` / `git clean` / 依存インストール / server 起動のような repo 全体に影響する操作は、他セッションと同時に走らせない。
+4. セッション完了時には、所有権メモや issue / PR コメントを更新して解放する。
 
-2. PR に更新を push する前に、その PR を claim する。
-
-   ```bash
-   bash scripts/agent_guard.sh claim-pr 13 .agent-workspaces/issue-7
-   ```
-
-3. リポジトリ全体に影響する安全でない操作は、必ず排他 guard 経由で実行する。
-
-   ```bash
-   bash scripts/agent_guard.sh run-exclusive git-checkout -- \
-     git -C .agent-workspaces/issue-7 checkout feat/7-validation-tooling
-
-   bash scripts/agent_guard.sh run-exclusive git-clean -- \
-     git -C .agent-workspaces/issue-7 clean -fd
-
-   bash scripts/agent_guard.sh run-exclusive npm-install -- \
-     npm --prefix .agent-workspaces/issue-7 install
-
-   bash scripts/agent_guard.sh run-exclusive start-server -- \
-     bash -lc 'cd .agent-workspaces/issue-7 && npm start'
-   ```
-
-4. 現在の claim と lock はいつでも確認できる。
-
-   ```bash
-   bash scripts/agent_guard.sh status
-   ```
-
-5. セッション完了時に claim を release する。
-
-   ```bash
-   bash scripts/agent_guard.sh release-pr 13 .agent-workspaces/issue-7
-   bash scripts/agent_guard.sh release-issue 7 .agent-workspaces/issue-7
-   ```
+もし将来 helper script を使う運用にするなら、その script を同じブランチで追跡対象に追加してから、この文書へ具体名を書くこと。
 
 ## Godot の起動とクローズ
 
 - Godot 作業では repo root から直接 `godot --path godot-world` を実行しない。
-- `bash scripts/launch_godot.sh <issue-number>` を使い、必要なら `-- --editor` のように追加フラグを渡す。
-- 作業完了後に issue を閉じる場合は、対象 worktree の外から `bash scripts/close_issue.sh <issue-number>` を使う。
+- issue 用 worktree の `godot-world/` へ移動して `godot --path .` を実行し、必要なら `godot --editor --path .` を使う。
+- 作業完了後の issue close は、GitHub 上で対象 issue / PR の状態を確認して行う。
 
 ## ドキュメント記述ガイド
 
@@ -95,11 +64,9 @@
 - `npm install`
 - server startup commands
 
-これらを実行する前に、`scripts/agent_guard.sh` で共有排他ロックを取得すること。
+これらを実行する前に、同じ repo を使う他セッションが動いていないことを確認し、必要なら issue / PR 側で実行中であることを明示すること。
 
 ## 運用上の注意
 
-- `claim-issue` が失敗した場合、その issue または worktree はすでに別セッションに所有されている。
-- `claim-pr` が失敗した場合、その PR はすでに別セッションに所有されている。
-- `run-exclusive` が失敗した場合、リポジトリ全体に影響する安全でない操作を、すでに別セッションが実行中である。
-- これらのチェックを手動で迂回しないこと。
+- 別セッションがすでに同じ issue / PR / worktree を使っている場合、そのまま共有しないこと。
+- helper script が追跡されていない状態では、存在しない command を手順書へ書き足さないこと。

@@ -12,7 +12,7 @@
 - 同じ issue の既存 worktree を後続 run で再利用すること自体は問題ないが、同時に複数セッションで使わないこと。
 - アクティブな issue ごとに、必ず別の repo-local worktree を使うこと。
 - worktree はこのリポジトリ内の `.agent-workspaces/` 配下に置くこと。`/Users/seeton`、`~`、その他ホームディレクトリ配下には clone や worktree を作らないこと。
-- helper script が追跡されていない限り、repo root から `git worktree add .agent-workspaces/issue-<number> -b <branch-name> main` のような実コマンドで worktree を作成または再利用すること。
+- helper script が追跡されていない限り、新規 issue worktree を作るときだけ repo root から `git worktree add .agent-workspaces/issue-<number> -b <branch-name> main` のような実コマンドを使うこと。既存 worktree を再利用するときは、そのディレクトリへ移動し、必要なら `git worktree list` で対応する branch / path を確認すること。
 
 ## Repo root main の役割
 

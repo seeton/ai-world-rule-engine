@@ -44,7 +44,13 @@ The repository is currently moving toward:
 This repository uses **issue -> branch -> PR** as the default development flow.
 
 - Start from a GitHub issue before implementing.
+- Use small issue slices so parallel agents can work in separate branches/PRs.
 - Keep changes scoped to one issue per branch/worktree.
 - Open a PR for review instead of merging directly to `main`.
-- Keep gameplay, runtime, and rule-package work under `godot-world/`.
-- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed branch, PR, and coordination rules.
+- If a PR relies on Copilot automatic review, wait for that review to complete before merging; otherwise note explicitly that no automatic review was available.
+- Keep gameplay, runtime, and rule package work under `godot-world/`.
+- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+
+## Repo-root main checkout
+
+Keep the repo-root `main` checkout as a sync-only baseline. Do implementation work in `.agent-workspaces/issue-<number>/`, inspect the repo-root state with `bash scripts/worktree.sh root-status`, and fast-forward it with `bash scripts/worktree.sh sync-root` when tracked files are clean.

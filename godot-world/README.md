@@ -15,6 +15,24 @@ This folder contains a data-driven rule package workflow for a Godot 4 simulatio
 - `scripts/integration/` — repository and compiler helpers for Godot-side integration.
 - `docs/` — workflow notes for clone/fork/PR behavior.
 
+## Repository validation
+
+Contributors can validate rule package data and static Godot file references without installing Godot.
+
+Run this from the repository root inside your issue worktree:
+
+```bash
+bash godot-world/scripts/validate_repo.sh
+```
+
+The validator checks:
+
+- every `rules/packages/*.rule.json` file against `rules/schema/rule_package.schema.json`
+- duplicate package IDs and invalid JSON payloads
+- static `res://...` paths plus `.tscn` `ExtResource(...)` wiring in `project.godot`, `scenes/`, and `scripts/`
+
+If you also changed repository-side tests or rule package contracts, follow it with `node --test` from the repository root before opening a PR.
+
 ## Safety model
 
 Rule packages only contain structured patch operations such as:

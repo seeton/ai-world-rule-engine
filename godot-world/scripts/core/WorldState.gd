@@ -52,6 +52,26 @@ func get_world_snapshot() -> Dictionary:
 	return _runtime.get_snapshot()
 
 
+func create_world_snapshot() -> Dictionary:
+	_ensure_runtime()
+	return _runtime.create_snapshot()
+
+
+func restore_world_snapshot(snapshot_data: Dictionary) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.restore_snapshot(snapshot_data)
+
+
+func save_world_snapshot(file_path: String) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.save_snapshot(file_path)
+
+
+func load_world_snapshot(file_path: String) -> Dictionary:
+	_ensure_runtime()
+	return _runtime.load_snapshot(file_path)
+
+
 func get_available_rule_templates() -> Array:
 	_ensure_runtime()
 	var templates: Array = []

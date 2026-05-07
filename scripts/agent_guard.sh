@@ -38,6 +38,10 @@ sanitize() {
   printf '%s' "$1" | tr '/: ' '___'
 }
 
+hash_worktree_path() {
+  printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+}
+
 normalize_worktree_path() {
   local raw_path="$1"
   local absolute_path="$raw_path"
@@ -93,8 +97,9 @@ emit_worktree_claim_paths() {
   legacy_relative_path="$(legacy_relative_worktree_path "${worktree_path}")"
 
   printf '%s\n' "$(worktree_claim_path "${normalized_path}")"
+  printf '%s\n' "$(legacy_worktree_claim_path "${normalized_path}")"
   if [[ "${legacy_relative_path}" != "${normalized_path}" ]]; then
-    printf '%s\n' "$(worktree_claim_path "${legacy_relative_path}")"
+    printf '%s\n' "$(legacy_worktree_claim_path "${legacy_relative_path}")"
   fi
 }
 
@@ -121,6 +126,12 @@ issue_claim_path() {
 }
 
 worktree_claim_path() {
+  local normalized_path
+  normalized_path="$(normalize_worktree_path "$1")"
+  printf '%s/%s.claim' "$WORKTREES_DIR" "$(hash_worktree_path "$normalized_path")"
+}
+
+legacy_worktree_claim_path() {
   printf '%s/%s.claim' "$WORKTREES_DIR" "$(sanitize "$1")"
 }
 

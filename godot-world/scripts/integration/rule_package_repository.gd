@@ -69,7 +69,7 @@ func _read_json(path: String) -> Dictionary:
 		return {}
 
 	var raw_text := FileAccess.get_file_as_string(path)
-	var parsed := JSON.parse_string(raw_text)
+	var parsed: Variant = JSON.parse_string(raw_text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	return parsed

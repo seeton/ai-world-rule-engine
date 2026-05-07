@@ -109,6 +109,9 @@ func get_snapshot() -> Dictionary:
 	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
 	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
+	var world_clock := _build_world_clock_summary(snapshot)
+	if not world_clock.is_empty():
+		snapshot["world_clock"] = world_clock
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
 	return snapshot
 
@@ -604,6 +607,39 @@ func _append_event(event_type: String, message: String, details: Dictionary = {}
 		"details": details.duplicate(true)
 	})
 	_world_state["event_log"] = event_log
+
+
+func _build_world_clock_summary(snapshot: Dictionary) -> Dictionary:
+	var installed_rules_by_id: Dictionary = snapshot.get("installed_rules_by_id", {})
+	if not _has_world_clock_rule(installed_rules_by_id):
+		return {}
+	return {
+		"elapsed_seconds": float(snapshot.get("elapsed_seconds", 0.0)),
+		"total_ticks": int(snapshot.get("tick_index", 0)),
+		"source_field": "elapsed_seconds",
+		"source_package_id": "builtin.time",
+		"description": "builtin.time は WorldState.elapsed_seconds をプレイヤー向けの時計として見える化します。"
+	}
+
+
+func _has_world_clock_rule(installed_rules_by_id: Dictionary) -> bool:
+	for rule in installed_rules_by_id.values():
+		if not (rule is Dictionary):
+			continue
+		var rule_data: Dictionary = rule
+		var metadata: Dictionary = rule_data.get("metadata", {})
+		if String(metadata.get("package_id", "")) == "builtin.time":
+			return true
+		for provided_kind in rule_data.get("provides_rule_kinds", []):
+			if String(provided_kind) == "world-clock":
+				return true
+		for effect in rule_data.get("effects", []):
+			if not (effect is Dictionary):
+				continue
+			var effect_data: Dictionary = effect
+			if String(effect_data.get("component", "")) == "time" and String(effect_data.get("field", "")) == "elapsed_seconds":
+				return true
+	return false
 
 
 func _build_default_three_d_preview_state() -> Dictionary:

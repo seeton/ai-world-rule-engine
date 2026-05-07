@@ -57,6 +57,7 @@ The launcher resolves `godot-world` inside `.agent-workspaces/issue-<number>/`, 
 
 - move the in-world player directly inside a simple 2D plaza first
 - approach the in-world GM and interact with `E` or left click
+- add `時間ルール` from the GM screen when you want the playable 2D/3D world HUD to expose the shared `elapsed_seconds` clock
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
 - view rules, world state, and admin-heavy inspectors only after entering the GM screen
 - continue play in the quarter-view third-person 3D world after the conversion

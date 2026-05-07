@@ -54,6 +54,19 @@ Packages do **not** execute embedded scripts or arbitrary code. The compiler pro
 
 The core foundation starts from a null world with a mutable origin entity. Rules are additive data patches: AI proposes them, and the deterministic fixed-step runtime executes them without arbitrary code execution.
 
+## Rule model
+
+- Rules form a directed acyclic parent/child prerequisite graph (DAG) rather than a strict tree.
+- Rules with no prerequisites act as root rules.
+- A child rule may depend on one or more parent rules.
+- A child rule only applies after all of its parent rules are already active.
+- Required parent prerequisites cannot be skipped when applying child rules.
+- Deeper descendants can sit behind multiple parent chains in the same graph.
+- Every rule always owns a `Representation`, even when that representation is intentionally not visible in the world.
+- Visible rules such as time use their `Representation` for rendering, while invisible rules such as gravity still keep an internal `Representation` so systems can treat all rules consistently.
+
+See `docs/rule_model.md` for the detailed rule and representation invariants.
+
 ## Playable main scene (PoC3)
 
 The current Godot entry point in `scenes/Main.tscn` starts in a playable 2D world and switches to the playable 3D world after the GM applies `3D化`.

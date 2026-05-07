@@ -89,9 +89,56 @@ If a requested mechanic does not already map to a built-in package, it should st
 - `clone_rule(rule_id: String) -> Dictionary`
 - `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary`
 - `get_world_snapshot() -> Dictionary`
+- `create_world_snapshot() -> Dictionary`
+- `restore_world_snapshot(snapshot_data: Dictionary) -> Dictionary`
+- `save_world_snapshot(file_path: String) -> Dictionary`
+- `load_world_snapshot(file_path: String) -> Dictionary`
 - `get_available_rule_templates() -> Array`
 - `advance_tick(delta_seconds: float) -> void`
 - `set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary`
+
+`get_world_snapshot()` keeps returning the live inspector/playable payload. Use `create_world_snapshot()` when you need the deterministic save format for persistence, and `restore_world_snapshot()` / `load_world_snapshot()` when you want to rebuild the runtime from that saved payload.
+
+## Snapshot save format
+
+`create_world_snapshot()` returns a JSON-serializable dictionary with this top-level structure:
+
+```json
+{
+  "snapshot_type": "godot_world_state_snapshot",
+  "snapshot_version": 1,
+  "runtime": {
+    "fixed_step_seconds": 0.25,
+    "accumulator_seconds": 0.0,
+    "clone_sequence": 0
+  },
+  "template_catalog": {
+    "available_template_ids": ["hunger", "three_d_preview_rule"]
+  },
+  "world": {
+    "world_id": "starter-plaza",
+    "world_name": "はじまりの広場",
+    "elapsed_seconds": 0.0,
+    "tick_index": 0,
+    "concepts": ["main_scene_2d_start", "gm_in_world"],
+    "preview_3d": {},
+    "entities": [{ "id": "origin_entity" }],
+    "installed_rules": [{ "id": "rule_hunger", "metadata": {} }],
+    "player_task_history": [],
+    "event_log": []
+  }
+}
+```
+
+- `runtime` stores the deterministic counters needed to resume ticking without resetting the fixed-step accumulator.
+- `template_catalog.available_template_ids` records which built-in templates were available when the save was created; installed rules themselves are restored from the snapshot payload, so package metadata on saved rules survives reload.
+- `world.entities` and `world.installed_rules` are saved as stable arrays sorted by id so the JSON stays data-driven and diff-friendly.
+
+## Snapshot limitations
+
+- Snapshot save/load persists the simulation runtime state only. Live scene nodes, current UI focus, and other transient editor/view state are rebuilt by the project after reload.
+- `save_world_snapshot(file_path)` needs a writable path. `user://` is recommended for creator-facing saves; `res://` is fine for local development smoke tests but is read-only in exported builds.
+- The loader currently accepts `snapshot_version: 1` only. Future format changes should add a new version and an explicit migration path instead of silently guessing.
 
 ### Desktop inspector (PoC2)
 

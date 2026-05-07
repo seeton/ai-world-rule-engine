@@ -1,6 +1,7 @@
 extends Node3D
 
 signal gm_interaction_requested
+signal rule_tree_toggle_requested
 
 const PLAYER_ENTITY_ID := "origin_entity"
 const GM_ENTITY_ID := "gm_entity"
@@ -20,6 +21,7 @@ const UI_TEXT := {
 		"tick_prefix": "Tick ",
 		"goal": "3D化された世界です。矢印キーで歩き、GMに近づいてください。",
 		"subgoal": "光ルールや重力ルールを追加したら、世界の見え方の変化を確認できます。",
+		"tree_hint": "Tキーでルールツリー表示",
 		"world_fallback": "3D広場",
 		"player_status": "プレイヤーは3D世界の中を移動できます。",
 		"gm_status": "GMは3D世界の中に存在し、会話できます。"
@@ -39,6 +41,7 @@ var _world_state: Node = null
 var _hud_layer: CanvasLayer = null
 var _world_name_label: Label = null
 var _clock_label: Label = null
+var _tree_hint_label: Label = null
 var _goal_hint: Label = null
 var _status_hint: Label = null
 var _interaction_hint: Label = null
@@ -86,6 +89,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_T or key_event.physical_keycode == KEY_T):
+			rule_tree_toggle_requested.emit()
+			get_viewport().set_input_as_handled()
+			return
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():
 			gm_interaction_requested.emit()
 
@@ -135,6 +142,19 @@ func _setup_hud() -> void:
 	_clock_label.add_theme_color_override("font_color", Color(0.08, 0.1, 0.12, 1.0))
 	_clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_clock_label)
+
+	_tree_hint_label = Label.new()
+	_tree_hint_label.position = Vector2(1010.0, 52.0)
+	_tree_hint_label.size = Vector2(380.0, 26.0)
+	_tree_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_tree_hint_label.text = _text("tree_hint")
+	_tree_hint_label.add_theme_font_size_override("font_size", 14)
+	_tree_hint_label.add_theme_color_override("font_color", Color(0.12, 0.14, 0.17, 0.92))
+	_tree_hint_label.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.72))
+	_tree_hint_label.add_theme_constant_override("shadow_offset_x", 1)
+	_tree_hint_label.add_theme_constant_override("shadow_offset_y", 1)
+	_tree_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_layer.add_child(_tree_hint_label)
 
 	_interaction_hint = Label.new()
 	_interaction_hint.position = Vector2(480.0, 804.0)

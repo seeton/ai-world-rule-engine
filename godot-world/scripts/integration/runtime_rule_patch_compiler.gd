@@ -8,8 +8,17 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"message": "Rule package was empty."
 		}
 
-	var patch: Dictionary = rule_package.get("patch", {})
-	var operations: Array = patch.get("operations", [])
+	var patch_variant = rule_package.get("patch", null)
+	if not (patch_variant is Dictionary):
+		return {
+			"status": "error",
+			"message": "Rule package patch must be a dictionary."
+		}
+	var patch: Dictionary = patch_variant
+	var operations_result := _validate_operations(patch.get("operations", []))
+	if String(operations_result.get("status", "")) == "error":
+		return operations_result
+	var operations: Array = operations_result.get("operations", [])
 	var effects: Array = []
 	var deferred_operations: Array = []
 	var stat_definitions: Dictionary = {}
@@ -209,4 +218,33 @@ func _validate_install_actions(raw_actions: Variant) -> Dictionary:
 	return {
 		"status": "ok",
 		"install_actions": validated_actions
+	}
+
+
+func _validate_operations(raw_operations: Variant) -> Dictionary:
+	if not (raw_operations is Array):
+		return {
+			"status": "error",
+			"message": "Rule package patch operations must be an array."
+		}
+
+	var operations: Array = raw_operations
+	for operation_index in range(operations.size()):
+		var raw_operation = operations[operation_index]
+		if not (raw_operation is Dictionary):
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must be a dictionary." % operation_index
+			}
+
+		var operation: Dictionary = raw_operation
+		if String(operation.get("op", "")).strip_edges().is_empty():
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must include a non-empty op." % operation_index
+			}
+
+	return {
+		"status": "ok",
+		"operations": operations
 	}

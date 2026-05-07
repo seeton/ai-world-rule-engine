@@ -16,6 +16,7 @@ func _run_smoke(world_state: Node) -> void:
 	_test_custom_draft_approval(world_state)
 	_test_install_actions_trace(world_state)
 	_test_runtime_helpers_reinitialize(world_state)
+	_test_invalid_patch_operations_fail_fast(world_state)
 	_test_invalid_install_actions_fail_fast(world_state)
 
 	if _failures.is_empty():
@@ -141,9 +142,16 @@ func _test_runtime_helpers_reinitialize(world_state: Node) -> void:
 	world_state.set("_rule_package_repository", null)
 	world_state.set("_rule_compiler", null)
 	world_state.set("_runtime_rule_patch_compiler", null)
+	world_state.set("_available_rule_packages", [{
+		"package_id": "stale.package"
+	}])
 
 	var result: Dictionary = world_state.call("submit_player_task", "hunger food eat starvation")
 	_expect(String(result.get("status", "")) == "proposal_ready", "submit_player_task should restore helper dependencies when runtime already exists.")
+	var available_rule_packages: Array = world_state.call("get_available_rule_packages")
+	_expect(not available_rule_packages.is_empty(), "Helper reinitialization should restore available rule packages.")
+	if not available_rule_packages.is_empty():
+		_expect(String(available_rule_packages[0].get("package_id", "")) != "stale.package", "Helper reinitialization should refresh stale cached rule packages.")
 
 	var proposals: Array = result.get("proposals", [])
 	if proposals.is_empty():
@@ -153,6 +161,42 @@ func _test_runtime_helpers_reinitialize(world_state: Node) -> void:
 	world_state.set("_runtime_rule_patch_compiler", null)
 	var review: Dictionary = world_state.call("review_rule_package_proposal", rule_package)
 	_expect(String(review.get("status", "")) == "ready_for_install", "review_rule_package_proposal should restore the runtime patch compiler when it was cleared.")
+
+
+func _test_invalid_patch_operations_fail_fast(world_state: Node) -> void:
+	var rule_package := {
+		"schema_version": "rule_package_v1",
+		"package_id": "draft.custom.invalid_operations",
+		"display_name": "Invalid Operations",
+		"description": "Contains malformed patch.operations entries.",
+		"version": "0.1.0-draft",
+		"author": "smoke-test",
+		"source_repo": "local://smoke-tests",
+		"source_ref": "issue-9",
+		"forked_from": null,
+		"suggested_pr_target": null,
+		"tags": ["smoke", "operations"],
+		"match_phrases": ["invalid operations"],
+		"community": {
+			"likes": 0,
+			"dislikes": 0,
+			"alternative_package_ids": []
+		},
+		"patch": {
+			"format": "rule_patch_v1",
+			"review_status": "approved",
+			"operations": [
+				"not-a-dictionary"
+			]
+		}
+	}
+
+	var review: Dictionary = world_state.call("review_rule_package_proposal", rule_package)
+	_expect(String(review.get("status", "")) == "error", "Malformed patch.operations should fail review instead of reaching the compiler unchecked.")
+	_expect(String(review.get("message", "")).find("operations[0]") != -1, "Malformed patch.operations should report the failing index.")
+
+	var install_result: Dictionary = world_state.call("create_rule_from_patch", rule_package)
+	_expect(String(install_result.get("status", "")) == "error", "Malformed patch.operations should fail installation before runtime apply.")
 
 
 func _test_invalid_install_actions_fail_fast(world_state: Node) -> void:

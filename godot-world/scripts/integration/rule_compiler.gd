@@ -3,11 +3,12 @@ class_name RuleCompiler
 
 const STRONG_MATCH_THRESHOLD := 0.34
 const CUSTOM_PACKAGE_PREFIX := "draft.custom."
+const RulePackageRepositoryScript = preload("res://scripts/integration/rule_package_repository.gd")
 
 var _repository = null
 
 func _init(repository = null) -> void:
-	_repository = repository if repository != null else load("res://scripts/integration/rule_package_repository.gd").new()
+	_repository = repository if repository != null else RulePackageRepositoryScript.new()
 
 func list_available_rule_packages() -> Array:
 	return _repository.list_available_rule_packages()

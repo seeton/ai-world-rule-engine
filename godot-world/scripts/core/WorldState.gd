@@ -103,13 +103,10 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
             "rule_package": rule_package.duplicate(true)
         }
 
-    var operations = patch.get("operations", [])
-    if not (operations is Array):
-        return {
-            "status": "error",
-            "message": "Rule package patch operations must be an array.",
-            "rule_package": rule_package.duplicate(true)
-        }
+    var operations_result := _validate_rule_package_operations(patch.get("operations", []), rule_package)
+    if String(operations_result.get("status", "")) == "error":
+        return operations_result
+    var operations: Array = operations_result.get("operations", [])
 
     var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
     if String(compilation.get("status", "")) != "compiled":
@@ -155,6 +152,26 @@ func get_available_rule_packages() -> Array:
     return packages
 
 
+func create_world_snapshot() -> Dictionary:
+    _ensure_runtime()
+    return _runtime.create_snapshot()
+
+
+func restore_world_snapshot(snapshot_data: Dictionary) -> Dictionary:
+    _ensure_runtime()
+    return _runtime.restore_snapshot(snapshot_data)
+
+
+func save_world_snapshot(file_path: String) -> Dictionary:
+    _ensure_runtime()
+    return _runtime.save_snapshot(file_path)
+
+
+func load_world_snapshot(file_path: String) -> Dictionary:
+    _ensure_runtime()
+    return _runtime.load_snapshot(file_path)
+
+
 func get_available_rule_templates() -> Array:
     _ensure_runtime()
     var templates: Array = []
@@ -183,17 +200,23 @@ func _reset_world() -> void:
 
 
 func _ensure_runtime() -> void:
-    if _rule_package_repository == null or _rule_compiler == null:
+    if _runtime == null:
+        _reset_world()
+        return
+
+    var refreshed_rule_packages := false
+    if _rule_package_repository == null:
         _rule_package_repository = RulePackageRepositoryScript.new()
+        refreshed_rule_packages = true
+    if _rule_compiler == null or _rule_compiler.get("_repository") != _rule_package_repository:
         _rule_compiler = RuleCompilerScript.new(_rule_package_repository)
+        refreshed_rule_packages = true
     if _runtime_rule_patch_compiler == null:
         _runtime_rule_patch_compiler = RuntimeRulePatchCompilerScript.new()
-    if _available_rule_packages.is_empty():
+    if refreshed_rule_packages or _available_rule_packages.is_empty():
         _available_rule_packages = _rule_compiler.list_available_rule_packages()
     if _available_templates.is_empty():
         _available_templates = RuleTemplatesScript.get_templates()
-    if _runtime == null:
-        _reset_world()
 
 
 func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:
@@ -316,3 +339,35 @@ func _find_missing_rule_package_keys(rule_package: Dictionary) -> Array:
         if not rule_package.has(key):
             missing_keys.append(key)
     return missing_keys
+
+
+func _validate_rule_package_operations(operations_variant: Variant, rule_package: Dictionary) -> Dictionary:
+    if not (operations_variant is Array):
+        return {
+            "status": "error",
+            "message": "Rule package patch operations must be an array.",
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var operations: Array = operations_variant
+    for operation_index in range(operations.size()):
+        var operation_variant = operations[operation_index]
+        if not (operation_variant is Dictionary):
+            return {
+                "status": "error",
+                "message": "Rule package patch.operations[%d] must be a dictionary." % operation_index,
+                "rule_package": rule_package.duplicate(true)
+            }
+
+        var operation: Dictionary = operation_variant
+        if String(operation.get("op", "")).strip_edges().is_empty():
+            return {
+                "status": "error",
+                "message": "Rule package patch.operations[%d] must include a non-empty op." % operation_index,
+                "rule_package": rule_package.duplicate(true)
+            }
+
+    return {
+        "status": "ok",
+        "operations": operations
+    }

@@ -14,6 +14,14 @@
 - worktree はこのリポジトリ内の `.agent-workspaces/` 配下に置くこと。`/Users/seeton`、`~`、その他ホームディレクトリ配下には clone や worktree を作らないこと。
 - 可能なら repo root から `bash scripts/worktree.sh ensure <issue-number> <branch-name>` を使って worktree を作成または再利用すること。
 
+## Repo root main の役割
+
+- repo root の `main` は通常の実装場所ではなく、`origin/main` に追随する基準 checkout として扱うこと。
+- 日常の実装・競合解消・検証は issue worktree で行い、repo root の tracked ファイルには原則として変更を残さないこと。
+- 意図的な untracked ディレクトリが残っていてもよいが、tracked 変更や未解決競合は issue worktree へ移してから同期すること。
+- 状態確認には `bash scripts/agent_guard.sh status` または `bash scripts/worktree.sh root-status` を使うこと。
+- repo root を fast-forward 同期するときは `bash scripts/worktree.sh sync-root` を使うこと。
+
 ## Issue / PR の所有権
 
 - すべての実装セッションは、必ず 1 つの GitHub issue に対応していなければならない。

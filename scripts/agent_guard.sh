@@ -38,6 +38,80 @@ sanitize() {
   printf '%s' "$1" | tr '/: ' '___'
 }
 
+normalize_worktree_path() {
+  local raw_path="$1"
+  local absolute_path="$raw_path"
+
+  if [[ "${absolute_path}" != /* ]]; then
+    absolute_path="${ROOT_DIR}/${absolute_path}"
+  fi
+
+  if [[ -d "${absolute_path}" ]]; then
+    (
+      cd "${absolute_path}"
+      pwd -P
+    )
+    return 0
+  fi
+
+  local parent_dir
+  parent_dir="$(dirname "${absolute_path}")"
+  if [[ -d "${parent_dir}" ]]; then
+    printf '%s/%s\n' "$(cd "${parent_dir}" && pwd -P)" "$(basename "${absolute_path}")"
+    return 0
+  fi
+
+  printf '%s\n' "${absolute_path}"
+}
+
+legacy_relative_worktree_path() {
+  local normalized_path
+  normalized_path="$(normalize_worktree_path "$1")"
+  case "${normalized_path}" in
+    "${ROOT_DIR}"/*)
+      printf '%s\n' "${normalized_path#"${ROOT_DIR}/"}"
+      ;;
+    *)
+      printf '%s\n' "${normalized_path}"
+      ;;
+  esac
+}
+
+claims_match_worktree_path() {
+  local lhs="${1:-}"
+  local rhs="${2:-}"
+  [[ -n "${lhs}" && -n "${rhs}" ]] || return 1
+  [[ "$(normalize_worktree_path "${lhs}")" == "$(normalize_worktree_path "${rhs}")" ]]
+}
+
+emit_worktree_claim_paths() {
+  local worktree_path="$1"
+  local normalized_path
+  local legacy_relative_path
+
+  normalized_path="$(normalize_worktree_path "${worktree_path}")"
+  legacy_relative_path="$(legacy_relative_worktree_path "${worktree_path}")"
+
+  printf '%s\n' "$(worktree_claim_path "${normalized_path}")"
+  if [[ "${legacy_relative_path}" != "${normalized_path}" ]]; then
+    printf '%s\n' "$(worktree_claim_path "${legacy_relative_path}")"
+  fi
+}
+
+worktree_claim_path_matches() {
+  local claim_path="$1"
+  local expected_worktree_path="$2"
+  local candidate_path
+
+  while IFS= read -r candidate_path; do
+    if [[ "${claim_path}" == "${candidate_path}" ]]; then
+      return 0
+    fi
+  done < <(emit_worktree_claim_paths "${expected_worktree_path}")
+
+  return 1
+}
+
 current_pid() {
   printf '%s\n' "${BASHPID:-$$}"
 }
@@ -148,7 +222,7 @@ find_other_issue_for_worktree() {
   while IFS= read -r path; do
     local other_issue_id
     other_issue_id="$(basename "$path" .claim)"
-    if [[ "$other_issue_id" != "$expected_issue_id" && "$(read_claim "$path")" == "$worktree_path" ]]; then
+    if [[ "$other_issue_id" != "$expected_issue_id" ]] && claims_match_worktree_path "$(read_claim "$path")" "$worktree_path"; then
       printf '%s\n' "$other_issue_id"
       return 0
     fi
@@ -165,7 +239,7 @@ find_other_worktree_claim_for_issue() {
   while IFS= read -r path; do
     local claimed_issue_id
     claimed_issue_id="$(read_claim "$path")"
-    if [[ "$claimed_issue_id" == "$issue_id" && "$(basename "$path" .claim)" != "$(sanitize "$expected_worktree_path")" ]]; then
+    if [[ "$claimed_issue_id" == "$issue_id" ]] && ! worktree_claim_path_matches "$path" "$expected_worktree_path"; then
       printf '%s\n' "$(basename "$path" .claim)"
       return 0
     fi
@@ -178,20 +252,25 @@ claim_issue_locked() {
   local issue_id="$1"
   local worktree_path="$2"
   local issue_path
-  local worktree_path_claim
+  local current_worktree_owner=""
 
   issue_path="$(issue_claim_path "$issue_id")"
-  worktree_path_claim="$(worktree_claim_path "$worktree_path")"
 
   local current_issue_owner
   current_issue_owner="$(read_claim "$issue_path")"
-  if [[ -n "${current_issue_owner:-}" && "$current_issue_owner" != "$worktree_path" ]]; then
+  if [[ -n "${current_issue_owner:-}" ]] && ! claims_match_worktree_path "${current_issue_owner}" "$worktree_path"; then
     echo "Issue $issue_id is already claimed by $current_issue_owner" >&2
     return 1
   fi
 
-  local current_worktree_owner
-  current_worktree_owner="$(read_claim "$worktree_path_claim")"
+  while IFS= read -r claim_path; do
+    local claim_owner
+    claim_owner="$(read_claim "$claim_path")"
+    if [[ -n "${claim_owner:-}" ]]; then
+      current_worktree_owner="$claim_owner"
+      break
+    fi
+  done < <(emit_worktree_claim_paths "$worktree_path")
   if [[ -n "${current_worktree_owner:-}" && "$current_worktree_owner" != "$issue_id" ]]; then
     echo "Worktree $worktree_path is already claimed for issue $current_worktree_owner" >&2
     return 1
@@ -212,13 +291,19 @@ claim_issue_locked() {
   fi
 
   write_claim "$issue_path" "$worktree_path"
-  write_claim "$worktree_path_claim" "$issue_id"
+  write_claim "$(worktree_claim_path "$worktree_path")" "$issue_id"
+  while IFS= read -r legacy_claim_path; do
+    if [[ "${legacy_claim_path}" != "$(worktree_claim_path "$worktree_path")" ]]; then
+      rm -f "${legacy_claim_path}"
+    fi
+  done < <(emit_worktree_claim_paths "$worktree_path")
   echo "Claimed issue $issue_id for $worktree_path"
 }
 
 claim_issue() {
   local issue_id="$1"
-  local worktree_path="$2"
+  local worktree_path
+  worktree_path="$(normalize_worktree_path "$2")"
   with_lock \
     "$CLAIMS_LOCK_DIR" \
     "claim-issue:$issue_id" \
@@ -231,29 +316,26 @@ release_issue_locked() {
   local issue_id="$1"
   local worktree_path="$2"
   local issue_path
-  local worktree_path_claim
 
   issue_path="$(issue_claim_path "$issue_id")"
-  worktree_path_claim="$(worktree_claim_path "$worktree_path")"
 
   local current_issue_owner
   current_issue_owner="$(read_claim "$issue_path")"
-  if [[ "$current_issue_owner" == "$worktree_path" ]]; then
+  if claims_match_worktree_path "${current_issue_owner:-}" "$worktree_path"; then
     rm -f "$issue_path"
   fi
 
-  local current_worktree_owner
-  current_worktree_owner="$(read_claim "$worktree_path_claim")"
-  if [[ "$current_worktree_owner" == "$issue_id" ]]; then
-    rm -f "$worktree_path_claim"
-  fi
+  while IFS= read -r claim_path; do
+    rm -f "$claim_path"
+  done < <(emit_worktree_claim_paths "$worktree_path")
 
   echo "Released issue $issue_id for $worktree_path"
 }
 
 release_issue() {
   local issue_id="$1"
-  local worktree_path="$2"
+  local worktree_path
+  worktree_path="$(normalize_worktree_path "$2")"
   with_lock \
     "$CLAIMS_LOCK_DIR" \
     "release-issue:$issue_id" \
@@ -267,15 +349,17 @@ release_worktree_locked() {
   local path
 
   while IFS= read -r path; do
-    if [[ "$(read_claim "$path")" == "$worktree_path" ]]; then
+    if claims_match_worktree_path "$(read_claim "$path")" "$worktree_path"; then
       rm -f "$path"
     fi
   done < <(find "$ISSUES_DIR" -type f -name '*.claim' -print | sort)
 
-  rm -f "$(worktree_claim_path "$worktree_path")"
+  while IFS= read -r claim_path; do
+    rm -f "$claim_path"
+  done < <(emit_worktree_claim_paths "$worktree_path")
 
   while IFS= read -r path; do
-    if [[ "$(read_claim "$path")" == "$worktree_path" ]]; then
+    if claims_match_worktree_path "$(read_claim "$path")" "$worktree_path"; then
       rm -f "$path"
     fi
   done < <(find "$PRS_DIR" -type f -name '*.claim' -print | sort)
@@ -284,7 +368,8 @@ release_worktree_locked() {
 }
 
 release_worktree() {
-  local worktree_path="$1"
+  local worktree_path
+  worktree_path="$(normalize_worktree_path "$1")"
   with_lock \
     "$CLAIMS_LOCK_DIR" \
     "release-worktree:$worktree_path" \
@@ -302,7 +387,7 @@ claim_pr_locked() {
 
   local current_owner
   current_owner="$(read_claim "$claim_path")"
-  if [[ -n "${current_owner:-}" && "$current_owner" != "$worktree_path" ]]; then
+  if [[ -n "${current_owner:-}" ]] && ! claims_match_worktree_path "${current_owner}" "$worktree_path"; then
     echo "PR $pr_number is already claimed by $current_owner" >&2
     return 1
   fi
@@ -313,7 +398,8 @@ claim_pr_locked() {
 
 claim_pr() {
   local pr_number="$1"
-  local worktree_path="$2"
+  local worktree_path
+  worktree_path="$(normalize_worktree_path "$2")"
   with_lock \
     "$CLAIMS_LOCK_DIR" \
     "claim-pr:$pr_number" \
@@ -331,7 +417,7 @@ release_pr_locked() {
 
   local current_owner
   current_owner="$(read_claim "$claim_path")"
-  if [[ "$current_owner" == "$worktree_path" ]]; then
+  if claims_match_worktree_path "${current_owner:-}" "$worktree_path"; then
     rm -f "$claim_path"
   fi
 
@@ -340,7 +426,8 @@ release_pr_locked() {
 
 release_pr() {
   local pr_number="$1"
-  local worktree_path="$2"
+  local worktree_path
+  worktree_path="$(normalize_worktree_path "$2")"
   with_lock \
     "$CLAIMS_LOCK_DIR" \
     "release-pr:$pr_number" \

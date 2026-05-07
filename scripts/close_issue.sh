@@ -49,10 +49,6 @@ worktree_is_clean() {
   [[ -z "$(git -C "${target_path}" status --porcelain)" ]]
 }
 
-root_is_clean() {
-  [[ -z "$(git -C "${repo_root}" status --porcelain --untracked-files=no)" ]]
-}
-
 maybe_pull_repo_root() {
   local default_branch="$1"
   bash "${script_dir}/agent_guard.sh" run-exclusive git-sync-root -- \
@@ -103,7 +99,7 @@ close_issue() {
     die "Unsupported issue state for #${issue_number}: ${issue_state}"
   fi
 
-  bash "${script_dir}/agent_guard.sh" release-worktree ".agent-workspaces/issue-${issue_number}"
+  bash "${script_dir}/agent_guard.sh" release-worktree "${target_path}"
 
   if worktree_exists "${target_path}"; then
     remove_args=(remove "${issue_number}")

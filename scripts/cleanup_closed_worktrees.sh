@@ -75,7 +75,11 @@ fi
 
 failures=0
 for issue_number in "${issue_numbers[@]}"; do
-  issue_state="$(gh issue view "${issue_number}" --repo "${repo_name}" --json state --jq '.state')"
+  if ! issue_state="$(gh issue view "${issue_number}" --repo "${repo_name}" --json state --jq '.state')"; then
+    echo "Failed to inspect #${issue_number}" >&2
+    failures=1
+    continue
+  fi
   if [[ "${issue_state}" != "CLOSED" ]]; then
     echo "Skipping #${issue_number}: issue is ${issue_state}"
     continue

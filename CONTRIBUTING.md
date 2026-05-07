@@ -74,7 +74,7 @@ Every PR should be small enough to review and should include:
 - risks, follow-ups, or explicitly deferred work
 - screenshots/video for visible Godot changes when relevant
 - whether Copilot automatic review completed, or that no automatic review was available/configured
-- if the PR is reopened, recreated, or updated for another review pass, a PR comment that says `@copilot レビューをお願いします`
+- do not add `@copilot レビューをお願いします` on the initial creation of a new PR; add it only when requesting another review pass on an existing PR after follow-up changes
 
 Call out scope clearly:
 
@@ -94,7 +94,7 @@ When you are fixing, reviewing, or deciding whether to keep an existing open PR,
 
 Record that classification and the rationale in the PR body, review thread, or linked issue comment before doing more cleanup. If multiple PRs touch the same area, explicitly name which PR is the current source of truth and which ones should close or be recreated.
 
-When you reopen, recreate, or otherwise resubmit a PR for another review pass, always add a fresh PR comment that says `@copilot レビューをお願いします` so the next review request is explicit in the timeline.
+Do not add `@copilot レビューをお願いします` when opening a brand-new PR for the first time. Add that comment only when an existing PR has follow-up changes and you want to request another review pass explicitly in the timeline.
 
 Do not document helper scripts or workflow tooling unless that helper is tracked in the same branch/repository. If the repository does not contain the helper, document the real `git`, `godot`, or test commands directly.
 

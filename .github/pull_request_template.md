@@ -12,7 +12,7 @@
 - [ ] Any follow-up work has been split into new issues instead of expanding scope
 - [ ] Copilot automatic review completed, or this PR explicitly notes that no automatic review was configured/available
 - [ ] Any overlapping open PRs were classified (`merge-ready` / `needs-fix` / `superseded` / `split-required` / `close`) before merge or close decisions
-- [ ] If this PR is being reopened, recreated, or updated for another review pass, I added a PR comment that says `@copilot レビューをお願いします`
+- [ ] If this existing PR received follow-up changes and needs another review pass, I added a PR comment that says `@copilot レビューをお願いします` (not for the initial creation of a new PR)
 - [ ] This PR does not rely on helper scripts or workflow tooling that are not tracked in this branch
 
 ## Multi-agent execution notes

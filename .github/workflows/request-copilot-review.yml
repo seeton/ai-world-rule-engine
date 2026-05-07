@@ -42,6 +42,18 @@ jobs:
             exit 1
           fi
 
+          echo "Checking current review requests for PR #${PR_NUMBER}."
+
+          gh pr view "${PR_NUMBER}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json reviewRequests \
+            --jq '.reviewRequests[].login' > /tmp/requested-reviewers.txt
+
+          if grep -Fxq "Copilot" /tmp/requested-reviewers.txt; then
+            echo "Copilot review is already requested."
+            exit 0
+          fi
+
           echo "Requesting Copilot code review for PR #${PR_NUMBER}."
 
           if gh pr edit "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-reviewer "@copilot"; then

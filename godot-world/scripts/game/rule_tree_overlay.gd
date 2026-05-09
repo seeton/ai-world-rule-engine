@@ -2,12 +2,13 @@ extends Control
 
 signal closed
 
-const RUNTIME_RULE_TREE_VIEW_SCRIPT := preload("res://scripts/ui/runtime_rule_tree_view.gd")
+const RULE_TREE_GRAPH_VIEW_SCRIPT := preload("res://scripts/ui/rule_tree_graph_view.gd")
 const REFRESH_INTERVAL: float = 0.35
 
 var _world_state: Node = null
 var _summary_label: Label = null
-var _rule_tree: Tree = null
+var _graph_view: Control = null
+var _demo_button: Button = null
 var _refresh_timer: float = 0.0
 var _last_snapshot_signature: String = ""
 var _is_closing: bool = false
@@ -39,6 +40,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			close_overlay()
 			get_viewport().set_input_as_handled()
 			return
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_F:
+			if _graph_view != null and _graph_view.has_method("reset_view"):
+				_graph_view.call("reset_view")
+				get_viewport().set_input_as_handled()
+				return
 
 	if event.is_action_pressed("ui_cancel"):
 		close_overlay()
@@ -60,105 +66,135 @@ func close_overlay() -> void:
 
 func _build_ui() -> void:
 	var scrim := ColorRect.new()
-	scrim.color = Color(0.01, 0.02, 0.04, 0.34)
+	scrim.color = Color(0.01, 0.02, 0.04, 0.62)
 	scrim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	scrim.mouse_filter = MOUSE_FILTER_STOP
 	add_child(scrim)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_left", 32)
+	margin.add_theme_constant_override("margin_top", 32)
+	margin.add_theme_constant_override("margin_right", 32)
+	margin.add_theme_constant_override("margin_bottom", 32)
 	add_child(margin)
 
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = SIZE_EXPAND_FILL
-	row.size_flags_vertical = SIZE_EXPAND_FILL
-	margin.add_child(row)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
-	row.add_child(spacer)
-
 	var frame := PanelContainer.new()
-	frame.custom_minimum_size = Vector2(700.0, 0.0)
+	frame.size_flags_horizontal = SIZE_EXPAND_FILL
 	frame.size_flags_vertical = SIZE_EXPAND_FILL
 	frame.mouse_filter = MOUSE_FILTER_STOP
-	row.add_child(frame)
+	margin.add_child(frame)
 
 	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = Color(0.05, 0.07, 0.11, 0.94)
+	frame_style.bg_color = Color(0.04, 0.06, 0.10, 0.96)
 	frame_style.border_width_left = 2
 	frame_style.border_width_top = 2
 	frame_style.border_width_right = 2
 	frame_style.border_width_bottom = 2
-	frame_style.border_color = Color(0.72, 0.84, 1.0, 0.95)
+	frame_style.border_color = Color(0.78, 0.66, 0.36, 0.95)
 	frame_style.corner_radius_top_left = 18
 	frame_style.corner_radius_top_right = 18
 	frame_style.corner_radius_bottom_left = 18
 	frame_style.corner_radius_bottom_right = 18
+	frame_style.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
+	frame_style.shadow_size = 18
 	frame.add_theme_stylebox_override("panel", frame_style)
 
 	var content_margin := MarginContainer.new()
-	content_margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	content_margin.add_theme_constant_override("margin_left", 18)
-	content_margin.add_theme_constant_override("margin_top", 18)
+	content_margin.add_theme_constant_override("margin_top", 16)
 	content_margin.add_theme_constant_override("margin_right", 18)
-	content_margin.add_theme_constant_override("margin_bottom", 18)
+	content_margin.add_theme_constant_override("margin_bottom", 16)
 	frame.add_child(content_margin)
 
 	var layout := VBoxContainer.new()
 	layout.size_flags_horizontal = SIZE_EXPAND_FILL
 	layout.size_flags_vertical = SIZE_EXPAND_FILL
-	layout.add_theme_constant_override("separation", 12)
+	layout.add_theme_constant_override("separation", 10)
 	content_margin.add_child(layout)
 
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
+	header.add_theme_constant_override("separation", 16)
 	layout.add_child(header)
 
 	var title_wrap := VBoxContainer.new()
 	title_wrap.size_flags_horizontal = SIZE_EXPAND_FILL
-	title_wrap.add_theme_constant_override("separation", 6)
+	title_wrap.add_theme_constant_override("separation", 4)
 	header.add_child(title_wrap)
 
 	var title := Label.new()
-	title.text = "ライブ ルールツリー"
-	title.add_theme_font_size_override("font_size", 26)
-	title.add_theme_color_override("font_color", Color(0.97, 0.99, 1.0, 1.0))
+	title.text = "ルール フォーカス ツリー"
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(0.96, 0.84, 0.46, 1.0))
 	title_wrap.add_child(title)
 
 	_summary_label = Label.new()
 	_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_summary_label.add_theme_font_size_override("font_size", 15)
-	_summary_label.add_theme_color_override("font_color", Color(0.82, 0.9, 0.98, 0.96))
+	_summary_label.add_theme_font_size_override("font_size", 14)
+	_summary_label.add_theme_color_override("font_color", Color(0.82, 0.88, 0.96, 0.9))
 	title_wrap.add_child(_summary_label)
+
+	var help_label := Label.new()
+	help_label.text = "ホイール: ズーム / ドラッグ: パン / F: 全体表示 / T・Esc: 閉じる"
+	help_label.add_theme_font_size_override("font_size", 12)
+	help_label.add_theme_color_override("font_color", Color(0.74, 0.80, 0.90, 0.85))
+	title_wrap.add_child(help_label)
+
+	var legend_container := _build_legend()
+	header.add_child(legend_container)
+
+	_demo_button = Button.new()
+	_demo_button.text = "サンプルツリーを導入"
+	_demo_button.tooltip_text = "サンプルとして3D化や所有ルールなど親子関係を持つルールを一括導入します"
+	_demo_button.size_flags_vertical = SIZE_SHRINK_CENTER
+	_demo_button.pressed.connect(_on_demo_button_pressed)
+	header.add_child(_demo_button)
 
 	var close_button := Button.new()
 	close_button.text = "閉じる (T / Esc)"
+	close_button.size_flags_vertical = SIZE_SHRINK_CENTER
 	close_button.pressed.connect(close_overlay)
 	header.add_child(close_button)
 
-	var help_label := Label.new()
-	help_label.text = "現在の世界を一時停止したまま、ライブのルール依存を確認できます。背景を暗くして読みやすくしています。"
-	help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help_label.add_theme_font_size_override("font_size", 14)
-	help_label.add_theme_color_override("font_color", Color(0.74, 0.8, 0.89, 0.92))
-	layout.add_child(help_label)
+	_graph_view = RULE_TREE_GRAPH_VIEW_SCRIPT.new()
+	_graph_view.size_flags_horizontal = SIZE_EXPAND_FILL
+	_graph_view.size_flags_vertical = SIZE_EXPAND_FILL
+	layout.add_child(_graph_view)
 
-	_rule_tree = Tree.new()
-	_rule_tree.columns = 2
-	_rule_tree.column_titles_visible = true
-	_rule_tree.hide_root = true
-	_rule_tree.size_flags_vertical = SIZE_EXPAND_FILL
-	_rule_tree.focus_mode = Control.FOCUS_NONE
-	_rule_tree.clip_contents = true
-	_rule_tree.set_column_title(0, "ルール")
-	_rule_tree.set_column_title(1, "依存 / 状態")
-	_rule_tree.mouse_filter = MOUSE_FILTER_STOP
-	layout.add_child(_rule_tree)
+
+func _build_legend() -> Control:
+	var legend := HBoxContainer.new()
+	legend.add_theme_constant_override("separation", 8)
+	legend.size_flags_vertical = SIZE_SHRINK_CENTER
+
+	var entries := [
+		{"label": "根ルール", "color": Color(0.86, 0.70, 0.30, 1.0)},
+		{"label": "通常", "color": Color(0.42, 0.66, 0.92, 1.0)},
+		{"label": "親未解決", "color": Color(0.92, 0.46, 0.30, 1.0)},
+		{"label": "循環", "color": Color(0.84, 0.46, 0.92, 1.0)}
+	]
+	for entry in entries:
+		legend.add_child(_make_legend_chip(entry["label"], entry["color"]))
+	return legend
+
+
+func _make_legend_chip(text: String, color: Color) -> Control:
+	var wrapper := HBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 6)
+
+	var swatch := ColorRect.new()
+	swatch.custom_minimum_size = Vector2(14.0, 14.0)
+	swatch.color = color
+	swatch.size_flags_vertical = SIZE_SHRINK_CENTER
+	wrapper.add_child(swatch)
+
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.98, 0.95))
+	wrapper.add_child(label)
+
+	return wrapper
 
 
 func _refresh_overlay(force: bool = false) -> void:
@@ -170,12 +206,18 @@ func _refresh_overlay(force: bool = false) -> void:
 		return
 
 	_last_snapshot_signature = snapshot_signature
-	var visible_rule_count := RUNTIME_RULE_TREE_VIEW_SCRIPT.populate(_rule_tree, rule_tree)
+
+	var visible_rule_count := 0
+	if _graph_view != null and _graph_view.has_method("update_rule_tree"):
+		visible_rule_count = int(_graph_view.call("update_rule_tree", rule_tree))
+
 	var root_count := 0
 	var root_rule_ids_variant: Variant = rule_tree.get("root_rule_ids", [])
 	if root_rule_ids_variant is Array:
 		root_count = (root_rule_ids_variant as Array).size()
-	_summary_label.text = "%s / %d ルール表示 / 根 %d 件 / T または Esc で閉じる" % [world_name, visible_rule_count, root_count]
+	_summary_label.text = "%s / %d ルール / 根 %d 件" % [world_name, visible_rule_count, root_count]
+	if _demo_button != null:
+		_demo_button.visible = visible_rule_count == 0
 
 
 func _get_world_snapshot() -> Dictionary:
@@ -189,6 +231,12 @@ func _get_world_snapshot() -> Dictionary:
 func _fade_in() -> void:
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 1.0, 0.16)
+
+
+func _on_demo_button_pressed() -> void:
+	if _world_state != null and _world_state.has_method("seed_demo_rule_tree"):
+		_world_state.call("seed_demo_rule_tree")
+		_refresh_overlay(true)
 
 
 func _coerce_dictionary(value: Variant) -> Dictionary:

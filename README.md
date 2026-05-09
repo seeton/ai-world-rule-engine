@@ -53,4 +53,4 @@ This repository uses **issue -> branch -> PR** as the default development flow.
 
 ## Repo-root main checkout
 
-Keep the repo-root `main` checkout as a sync-only baseline. Do implementation work in `.agent-workspaces/issue-<number>/`, inspect the repo-root state with `bash scripts/worktree.sh root-status`, and fast-forward it with `bash scripts/worktree.sh sync-root` when tracked files are clean.
+Keep the repo-root `main` checkout as a sync-only baseline. Do implementation work in `.agent-workspaces/issue-<number>/`, inspect the repo-root state with `bash scripts/worktree.sh root-status`, inspect worktree backlog with `bash scripts/worktree.sh status --stale-days 14`, and fast-forward repo root with `bash scripts/worktree.sh sync-root` when tracked files are clean.

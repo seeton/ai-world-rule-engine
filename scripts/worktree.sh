@@ -11,6 +11,7 @@ usage() {
 Usage:
   scripts/worktree.sh ensure <issue-number> <branch> [base-ref]
   scripts/worktree.sh list
+  scripts/worktree.sh status [--stale-days <days>]
   scripts/worktree.sh root-status
   scripts/worktree.sh sync-root [branch]
   scripts/worktree.sh remove <issue-number> [--force] [--delete-branch]
@@ -24,6 +25,9 @@ EOF
 git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || die "Run this command inside the repository."
 repo_root="$(cd "${git_common_dir}/.." && pwd -P)"
 workspace_root="${repo_root}/.agent-workspaces"
+state_root="${workspace_root}/.coord"
+issue_claims_dir="${state_root}/issues"
+pr_claims_dir="${state_root}/prs"
 
 resolve_issue() {
   local issue_number="${1:-}"
@@ -35,6 +39,39 @@ worktree_path_for_issue() {
   local issue_number
   issue_number="$(resolve_issue "${1:-}")"
   printf '%s/issue-%s\n' "${workspace_root}" "${issue_number}"
+}
+
+normalize_worktree_path() {
+  local raw_path="$1"
+  local absolute_path="$raw_path"
+
+  if [[ "${absolute_path}" != /* ]]; then
+    absolute_path="${repo_root}/${absolute_path}"
+  fi
+
+  if [[ -d "${absolute_path}" ]]; then
+    (
+      cd "${absolute_path}"
+      pwd -P
+    )
+    return 0
+  fi
+
+  local parent_dir
+  parent_dir="$(dirname "${absolute_path}")"
+  if [[ -d "${parent_dir}" ]]; then
+    printf '%s/%s\n' "$(cd "${parent_dir}" && pwd -P)" "$(basename "${absolute_path}")"
+    return 0
+  fi
+
+  printf '%s\n' "${absolute_path}"
+}
+
+claims_match_worktree_path() {
+  local lhs="${1:-}"
+  local rhs="${2:-}"
+  [[ -n "${lhs}" && -n "${rhs}" ]] || return 1
+  [[ "$(normalize_worktree_path "${lhs}")" == "$(normalize_worktree_path "${rhs}")" ]]
 }
 
 worktree_exists() {
@@ -129,6 +166,169 @@ count_non_empty_lines() {
   fi
 
   printf '%s\n' "${raw_paths}" | awk 'NF { count += 1 } END { print count + 0 }'
+}
+
+issue_state_for_worktree() {
+  local issue_number="$1"
+  gh issue view "${issue_number}" --json state --jq '.state' 2>/dev/null || printf 'UNKNOWN\n'
+}
+
+worktree_git_state() {
+  local target_path="$1"
+  local tracked_status
+
+  tracked_status="$(git -C "${target_path}" status --short --untracked-files=no)"
+  if [[ -n "$(printf '%s\n' "${tracked_status}" | awk 'substr($0, 1, 2) ~ /^(AA|AU|DD|DU|UA|UD|UU)$/' )" ]]; then
+    printf 'unmerged\n'
+    return 0
+  fi
+
+  if [[ -n "$(git -C "${target_path}" status --porcelain)" ]]; then
+    printf 'dirty\n'
+    return 0
+  fi
+
+  printf 'clean\n'
+}
+
+worktree_changed_paths() {
+  local target_path="$1"
+
+  {
+    git -C "${target_path}" diff --name-only
+    git -C "${target_path}" diff --cached --name-only
+    git -C "${target_path}" diff --name-only --diff-filter=U
+    git -C "${target_path}" ls-files --others --exclude-standard
+  } | awk 'NF' | sort -u
+}
+
+portable_stat_mtime_epoch() {
+  local target_path="$1"
+  local epoch
+
+  if epoch="$(stat -c %Y "${target_path}" 2>/dev/null)"; then
+    printf '%s\n' "${epoch}"
+  elif epoch="$(stat -f '%m' "${target_path}" 2>/dev/null)"; then
+    printf '%s\n' "${epoch}"
+  else
+    printf '0\n'
+  fi
+}
+
+worktree_latest_changed_path_epoch() {
+  local target_path="$1"
+  local changed_path
+  local max_epoch=0
+
+  while IFS= read -r changed_path; do
+    local absolute_path
+    local path_epoch
+    absolute_path="${target_path}/${changed_path}"
+    if [[ -e "${absolute_path}" ]]; then
+      path_epoch="$(portable_stat_mtime_epoch "${absolute_path}")"
+      if (( path_epoch > max_epoch )); then
+        max_epoch="${path_epoch}"
+      fi
+    fi
+  done < <(worktree_changed_paths "${target_path}")
+
+  printf '%s\n' "${max_epoch}"
+}
+
+worktree_last_update_epoch() {
+  local target_path="$1"
+  local git_state="$2"
+  local head_epoch dirty_epoch
+
+  head_epoch="$(git -C "${target_path}" log -1 --format=%ct 2>/dev/null || printf '0\n')"
+  if [[ "${git_state}" == "clean" ]]; then
+    printf '%s\n' "${head_epoch}"
+    return 0
+  fi
+
+  dirty_epoch="$(worktree_latest_changed_path_epoch "${target_path}")"
+  if (( dirty_epoch > head_epoch )); then
+    printf '%s\n' "${dirty_epoch}"
+  else
+    printf '%s\n' "${head_epoch}"
+  fi
+}
+
+epoch_to_iso_utc() {
+  local epoch="$1"
+  local formatted
+  if [[ "${epoch}" =~ ^[0-9]+$ ]] && (( epoch > 0 )); then
+    if formatted="$(date -u -d "@${epoch}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)"; then
+      printf '%s\n' "${formatted}"
+    elif formatted="$(date -u -r "${epoch}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)"; then
+      printf '%s\n' "${formatted}"
+    else
+      printf 'unknown\n'
+    fi
+  else
+    printf 'unknown\n'
+  fi
+}
+
+issue_claim_state_for_worktree() {
+  local issue_number="$1"
+  local target_path="$2"
+  local claim_path="${issue_claims_dir}/${issue_number}.claim"
+  local claim_owner=""
+
+  if [[ -f "${claim_path}" ]]; then
+    claim_owner="$(cat "${claim_path}")"
+  fi
+
+  if claims_match_worktree_path "${claim_owner}" "${target_path}"; then
+    printf 'claimed\n'
+  else
+    printf 'unclaimed\n'
+  fi
+}
+
+pr_claims_for_worktree() {
+  local target_path="$1"
+  local claim_path
+  local claim_owner
+  local found=0
+
+  if [[ ! -d "${pr_claims_dir}" ]]; then
+    printf '-\n'
+    return 0
+  fi
+
+  while IFS= read -r claim_path; do
+    claim_owner="$(cat "${claim_path}")"
+    if claims_match_worktree_path "${claim_owner}" "${target_path}"; then
+      found=1
+      printf '%s\n' "$(basename "${claim_path}" .claim)"
+    fi
+  done < <(find "${pr_claims_dir}" -type f -name '*.claim' -print | sort)
+
+  if (( found == 0 )); then
+    printf '%s\n' "-"
+  fi
+}
+
+composite_worktree_status() {
+  local issue_state="$1"
+  local git_state="$2"
+  local claim_state="$3"
+  local stale_state="$4"
+  local normalized_issue_state
+  local result
+
+  normalized_issue_state="$(printf '%s' "${issue_state}" | tr '[:upper:]' '[:lower:]')"
+  result="${normalized_issue_state}-${git_state}"
+  if [[ "${claim_state}" == "claimed" ]]; then
+    result="${result}-claimed"
+  fi
+  if [[ "${stale_state}" == "stale" ]]; then
+    result="${result}-stale"
+  fi
+
+  printf '%s\n' "${result}"
 }
 
 show_repo_root_status() {
@@ -249,6 +449,94 @@ list_worktrees() {
   fi
 }
 
+show_worktree_status() {
+  local stale_days=14
+  local option
+  local now_epoch
+  local found=0
+
+  while [[ $# -gt 0 ]]; do
+    option="$1"
+    case "${option}" in
+      --stale-days)
+        [[ $# -ge 2 ]] || die "--stale-days requires a value"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "--stale-days must be a non-negative integer"
+        stale_days="$2"
+        shift 2
+        ;;
+      *)
+        die "Unknown option for status: ${option}"
+        ;;
+    esac
+  done
+
+  now_epoch="$(date +%s)"
+  printf 'stale_days=%s\n' "${stale_days}"
+  printf 'ISSUE\tISSUE_STATE\tGIT_STATE\tCLAIM_STATE\tPR_CLAIMS\tSTALE\tAGE_DAYS\tLAST_UPDATED\tBRANCH\tPATH\tSTATUS\n'
+
+  while IFS=$'\t' read -r issue_number target_path; do
+    local issue_state
+    local git_state
+    local claim_state
+    local pr_claims
+    local branch_name
+    local last_update_epoch
+    local age_days
+    local stale_state="fresh"
+    local last_updated_iso
+    local status_label
+
+    found=1
+    issue_state="$(issue_state_for_worktree "${issue_number}")"
+    git_state="$(worktree_git_state "${target_path}")"
+    claim_state="$(issue_claim_state_for_worktree "${issue_number}" "${target_path}")"
+    pr_claims="$(pr_claims_for_worktree "${target_path}" | paste -sd ',' -)"
+    branch_name="$(git -C "${target_path}" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'HEAD\n')"
+    last_update_epoch="$(worktree_last_update_epoch "${target_path}" "${git_state}")"
+    if (( last_update_epoch > 0 )); then
+      age_days=$(( (now_epoch - last_update_epoch) / 86400 ))
+      if (( age_days >= stale_days )); then
+        stale_state="stale"
+      fi
+    else
+      age_days=-1
+      stale_state="unknown"
+    fi
+    last_updated_iso="$(epoch_to_iso_utc "${last_update_epoch}")"
+    status_label="$(composite_worktree_status "${issue_state}" "${git_state}" "${claim_state}" "${stale_state}")"
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "${issue_number}" \
+      "${issue_state}" \
+      "${git_state}" \
+      "${claim_state}" \
+      "${pr_claims}" \
+      "${stale_state}" \
+      "${age_days}" \
+      "${last_updated_iso}" \
+      "${branch_name}" \
+      "${target_path}" \
+      "${status_label}"
+  done < <(
+    git -C "${repo_root}" worktree list --porcelain | \
+      awk -v prefix="${workspace_root}/issue-" '
+        /^worktree / {
+          path = substr($0, 10)
+          if (index(path, prefix) == 1) {
+            issue = substr(path, length(prefix) + 1)
+            if (issue ~ /^[0-9]+$/) {
+              printf "%s\t%s\n", issue, path
+            }
+          }
+        }
+      ' | sort -n
+  )
+
+  if (( found == 0 )); then
+    echo "No repo-local issue worktrees found under ${workspace_root}" >&2
+  fi
+}
+
 remove_worktree() {
   local issue_number force_flag="" delete_branch=0 target_path branch_name
   issue_number="$(resolve_issue "${1:-}")"
@@ -290,6 +578,10 @@ case "${command}" in
     ;;
   list)
     list_worktrees
+    ;;
+  status)
+    shift
+    show_worktree_status "$@"
     ;;
   root-status)
     show_repo_root_status

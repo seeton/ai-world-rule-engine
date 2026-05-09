@@ -190,6 +190,36 @@ func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dicti
     return _runtime.set_entity_position(entity_id, position_patch)
 
 
+func seed_demo_rule_tree() -> Dictionary:
+    _ensure_runtime()
+    var demo_template_ids := [
+        "three_d_preview_rule",
+        "three_d_light_rule",
+        "three_d_gravity_rule",
+        "object_rule",
+        "ownership_rule",
+        "hunger"
+    ]
+    var installed_count := 0
+    var skipped_count := 0
+    var errors: Array = []
+    for template_id in demo_template_ids:
+        var result: Dictionary = _runtime.create_rule_from_patch({"template_id": template_id})
+        var status := String(result.get("status", ""))
+        if status == "installed":
+            installed_count += 1
+        elif status == "error" and String(result.get("message", "")).find("すでに導入") != -1:
+            skipped_count += 1
+        else:
+            errors.append({"template_id": template_id, "result": result})
+    return {
+        "status": "ok" if errors.is_empty() else "partial",
+        "installed": installed_count,
+        "skipped": skipped_count,
+        "errors": errors
+    }
+
+
 func _reset_world() -> void:
     _rule_package_repository = RulePackageRepositoryScript.new()
     _rule_compiler = RuleCompilerScript.new(_rule_package_repository)

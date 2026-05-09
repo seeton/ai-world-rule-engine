@@ -12,7 +12,6 @@ var _demo_button: Button = null
 var _refresh_timer: float = 0.0
 var _last_snapshot_signature: String = ""
 var _is_closing: bool = false
-var _last_visible_rule_count: int = 0
 
 
 func _ready() -> void:
@@ -217,7 +216,6 @@ func _refresh_overlay(force: bool = false) -> void:
 	if root_rule_ids_variant is Array:
 		root_count = (root_rule_ids_variant as Array).size()
 	_summary_label.text = "%s / %d ルール / 根 %d 件" % [world_name, visible_rule_count, root_count]
-	_last_visible_rule_count = visible_rule_count
 	if _demo_button != null:
 		_demo_button.visible = visible_rule_count == 0
 

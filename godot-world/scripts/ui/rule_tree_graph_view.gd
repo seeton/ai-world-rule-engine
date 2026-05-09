@@ -150,7 +150,7 @@ func _rebuild(rule_tree: Dictionary) -> int:
 		var rule_id := str(rule_id_variant)
 		var node_data := _coerce_dictionary(nodes_by_rule_id.get(rule_id, {}))
 		var state := str(_node_states.get(rule_id, "normal"))
-		var control := _build_node_card(rule_id, node_data, state)
+		var control := _build_node_card(rule_id, node_data, state, nodes_by_rule_id)
 		var pos: Vector2 = _node_positions[rule_id]
 		control.position = Vector2(round(pos.x), round(pos.y))
 		control.size = Vector2(NODE_WIDTH, NODE_HEIGHT)
@@ -169,9 +169,9 @@ func _rebuild(rule_tree: Dictionary) -> int:
 	return _node_controls.size()
 
 
-func _build_node_card(rule_id: String, node_data: Dictionary, state: String) -> Panel:
+func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nodes_by_rule_id: Dictionary) -> Panel:
 	var card := Panel.new()
-	card.mouse_filter = MOUSE_FILTER_STOP
+	card.mouse_filter = MOUSE_FILTER_PASS
 	card.clip_contents = true
 	card.set_meta("rule_id", rule_id)
 	card.set_meta("state", state)
@@ -217,7 +217,7 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String) -> 
 	var provides := _normalize_string_array(node_data.get("provides_rule_kinds", []))
 	var requires := _normalize_string_array(node_data.get("requires_rule_kinds", []))
 	var resolved_parent_ids := _normalize_string_array(node_data.get("resolved_parent_rule_ids", []))
-	var unresolved := _unresolved_required_kinds(node_data, resolved_parent_ids)
+	var unresolved := _unresolved_required_kinds(node_data, resolved_parent_ids, nodes_by_rule_id)
 
 	var added_badges := 0
 	var max_badges := 3
@@ -326,15 +326,16 @@ func _compute_layout(nodes_by_rule_id: Dictionary, declared_roots: Array) -> Dic
 
 	var assigned_x: Dictionary = {}
 	var depth_by_id: Dictionary = {}
+	var cycle_set: Dictionary = {}
 	var counter := [0.0]
 	for rid in roots:
-		_assign_subtree_x(rid, 0, nodes_by_rule_id, assigned_x, depth_by_id, counter, {})
+		_assign_subtree_x(rid, 0, nodes_by_rule_id, assigned_x, depth_by_id, counter, {}, cycle_set)
 
 	for rid_v in rule_ids:
 		var rid := str(rid_v)
 		if assigned_x.has(rid):
 			continue
-		_assign_subtree_x(rid, 0, nodes_by_rule_id, assigned_x, depth_by_id, counter, {})
+		_assign_subtree_x(rid, 0, nodes_by_rule_id, assigned_x, depth_by_id, counter, {}, cycle_set)
 
 	var positions: Dictionary = {}
 	var states: Dictionary = {}
@@ -354,10 +355,12 @@ func _compute_layout(nodes_by_rule_id: Dictionary, declared_roots: Array) -> Dic
 
 		var node := _coerce_dictionary(nodes_by_rule_id.get(rid, {}))
 		var parents := _normalize_string_array(node.get("resolved_parent_rule_ids", []))
-		var unresolved := _unresolved_required_kinds(node, parents)
-		if parents.is_empty() and unresolved.is_empty():
+		var unresolved := _unresolved_required_kinds(node, parents, nodes_by_rule_id)
+		if cycle_set.has(rid):
+			states[rid] = "cycle"
+		elif parents.is_empty() and unresolved.is_empty():
 			states[rid] = "root"
-		elif not unresolved.is_empty() and parents.is_empty():
+		elif not unresolved.is_empty():
 			states[rid] = "unresolved"
 		else:
 			states[rid] = "normal"
@@ -385,7 +388,8 @@ func _assign_subtree_x(
 	assigned_x: Dictionary,
 	depth_by_id: Dictionary,
 	counter: Array,
-	ancestry: Dictionary
+	ancestry: Dictionary,
+	cycle_set: Dictionary
 ) -> float:
 	if assigned_x.has(rule_id):
 		return float(assigned_x[rule_id])
@@ -394,6 +398,9 @@ func _assign_subtree_x(
 		counter[0] = counter[0] + 1.0
 		assigned_x[rule_id] = fallback_x
 		depth_by_id[rule_id] = max(int(depth_by_id.get(rule_id, depth)), depth)
+		cycle_set[rule_id] = true
+		for ancestor_id in ancestry.keys():
+			cycle_set[str(ancestor_id)] = true
 		return fallback_x
 
 	depth_by_id[rule_id] = max(int(depth_by_id.get(rule_id, depth)), depth)
@@ -416,7 +423,7 @@ func _assign_subtree_x(
 		var child_id := str(child_id_variant)
 		if not nodes_by_rule_id.has(child_id):
 			continue
-		var child_x := _assign_subtree_x(child_id, depth + 1, nodes_by_rule_id, assigned_x, depth_by_id, counter, next_ancestry)
+		var child_x := _assign_subtree_x(child_id, depth + 1, nodes_by_rule_id, assigned_x, depth_by_id, counter, next_ancestry, cycle_set)
 		first_x = min(first_x, child_x)
 		last_x = max(last_x, child_x)
 
@@ -455,7 +462,7 @@ func _compute_connectors(nodes_by_rule_id: Dictionary) -> Array:
 	return connectors
 
 
-func _unresolved_required_kinds(node: Dictionary, resolved_parent_ids: Array) -> Array:
+func _unresolved_required_kinds(node: Dictionary, resolved_parent_ids: Array, nodes_by_rule_id: Dictionary) -> Array:
 	var required := _normalize_string_array(node.get("requires_rule_kinds", []))
 	if required.is_empty():
 		return []
@@ -465,11 +472,11 @@ func _unresolved_required_kinds(node: Dictionary, resolved_parent_ids: Array) ->
 	for kind in required:
 		var resolved := false
 		for parent_id in resolved_parent_ids:
-			# Without nodes_by_rule_id here we cannot check parent provides;
-			# this is a soft signal — the SimulationRuntime side ensures
-			# provides_rule_kinds is canonical, so trust resolved_parent_ids
-			resolved = true
-			break
+			var parent_node := _coerce_dictionary(nodes_by_rule_id.get(str(parent_id), {}))
+			var provided := _normalize_string_array(parent_node.get("provides_rule_kinds", []))
+			if provided.has(str(kind)):
+				resolved = true
+				break
 		if not resolved:
 			unresolved.append(kind)
 	return unresolved
@@ -639,8 +646,6 @@ func _coerce_dictionary(value: Variant) -> Dictionary:
 
 class _GridBackground extends Control:
 	func _draw() -> void:
-		var rect := Rect2(Vector2.ZERO, size)
-		# vertical gradient via two triangles
 		var top := COLOR_BG_TOP
 		var bottom := COLOR_BG_BOTTOM
 		var colors := PackedColorArray([top, top, bottom, bottom])
@@ -650,10 +655,7 @@ class _GridBackground extends Control:
 			Vector2(size.x, size.y),
 			Vector2(0, size.y)
 		])
-		var indices := PackedInt32Array([0, 1, 2, 0, 2, 3])
 		draw_polygon(points, colors)
-		# subtle vignette via dark border rectangles
-		var vignette := Color(0.0, 0.0, 0.0, 0.35)
 		var thickness := 80.0
 		draw_rect(Rect2(0, 0, size.x, thickness), Color(0, 0, 0, 0.25))
 		draw_rect(Rect2(0, size.y - thickness, size.x, thickness), Color(0, 0, 0, 0.25))

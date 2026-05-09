@@ -10,7 +10,6 @@ func _initialize() -> void:
 
 	var world_state: Node = WorldStateScript.new()
 	root.add_child(world_state)
-	world_state._ready()
 
 	var seed_result: Dictionary = world_state.seed_demo_rule_tree()
 	if int(seed_result.get("installed", 0)) == 0:

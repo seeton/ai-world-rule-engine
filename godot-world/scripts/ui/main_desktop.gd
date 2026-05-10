@@ -87,6 +87,7 @@ var _installed_rule_details_view: TextEdit
 var _entity_tree: Tree
 var _world_state_view: TextEdit
 var _event_log_view: TextEdit
+var _poc4_state_view: TextEdit
 var _status_label: Label
 var _three_d_preview_renderer: Control
 
@@ -102,6 +103,8 @@ var _current_proposal_review: Dictionary = {}
 var _is_updating_proposal_editor := false
 var _installed_rule_cache: Array = []
 var _snapshot_cache: Dictionary = {}
+var _poc4_state_cache: Dictionary = {}
+var _poc4_apply_result_cache: Dictionary = {}
 var _shell_log_lines: Array[String] = []
 var _fallback_snapshot: Dictionary = {
     "world_id": "fallback-world",
@@ -290,12 +293,12 @@ func _build_ui() -> void:
     top_row.add_child(title_wrap)
 
     var title := Label.new()
-    title.text = "PoC3: GM会話 / ルール確認と世界管理"
+    title.text = "PoC4: GM会話 / ルール確認と世界管理"
     title.add_theme_font_size_override("font_size", 22)
     title_wrap.add_child(title)
 
     var subtitle := Label.new()
-    subtitle.text = "主画面はプレイ世界です。ここではGMに相談しながら、3D化・ルール・状態・俯瞰メモを確認します。"
+    subtitle.text = "主画面はプレイ世界です。ここではGMに相談しながら、3D化・ルール・状態・PoC4 proposal / apply 状態を確認します。"
     subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     title_wrap.add_child(subtitle)
 
@@ -332,6 +335,7 @@ func _build_ui() -> void:
 
     left_column.add_child(_build_task_panel())
     left_column.add_child(_build_proposal_panel())
+    left_column.add_child(_build_poc4_admin_panel())
     left_column.add_child(_build_template_panel())
     left_column.add_child(_build_tick_panel())
 
@@ -354,7 +358,7 @@ func _build_ui() -> void:
     main_column.add_child(_build_footer_bar())
 
 func _build_task_panel() -> Control:
-    var panel := _make_panel_section("GMへの相談", "やりたいことを日本語で伝えると、GM視点で対応するルール候補や方針を確認できます。")
+    var panel := _make_panel_section("GMへの相談", "ここでは既存テンプレート候補や即時に試せる方針を確認します。PoC4 の Codex proposal 生成は、プレイヤー向けの GM 会話画面から行ってください。")
     var body := panel.get_meta("body") as VBoxContainer
 
     _task_input = TextEdit.new()
@@ -376,6 +380,18 @@ func _build_task_panel() -> Control:
     refresh_button.text = "情報を更新"
     refresh_button.pressed.connect(_refresh_all)
     button_row.add_child(refresh_button)
+
+    return panel
+
+func _build_poc4_admin_panel() -> Control:
+    var panel := _make_panel_section("PoC4 proposal / apply 状態", "pending proposal、review 状態、apply 結果、backend error を read-only で確認します。")
+    var body := panel.get_meta("body") as VBoxContainer
+
+    _poc4_state_view = TextEdit.new()
+    _poc4_state_view.editable = false
+    _poc4_state_view.custom_minimum_size = Vector2(0, 170)
+    _poc4_state_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    body.add_child(_poc4_state_view)
 
     return panel
 
@@ -686,11 +702,13 @@ func _refresh_all() -> void:
     _refresh_snapshot()
     _latest_task_result = _extract_latest_task_result(_snapshot_cache)
     _proposal_cache = _extract_task_proposals(_latest_task_result)
+    _refresh_poc4_state()
     _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _update_template_list()
     _update_proposal_panel()
     _update_installed_rules_panel()
     _update_three_d_preview()
+    _update_poc4_state_view()
     _update_world_state_view()
     _update_event_log_view()
     _update_status_label()
@@ -711,6 +729,23 @@ func _refresh_snapshot() -> void:
         _snapshot_cache = snapshot if snapshot is Dictionary else {}
     else:
         _snapshot_cache = _fallback_snapshot.duplicate(true)
+
+func _refresh_poc4_state() -> void:
+    var merged_state := _merge_poc4_state(_snapshot_cache.get("poc4", {}))
+    if _world_state != null and _world_state.has_method("get_pending_rule_proposal"):
+        var pending_state = _world_state.call("get_pending_rule_proposal")
+        if pending_state is Dictionary:
+            merged_state = _merge_poc4_state(pending_state)
+
+    var apply_result: Dictionary = merged_state.get("apply_result", {}).duplicate(true)
+    if _world_state != null and _world_state.has_method("get_last_rule_apply_result"):
+        var last_apply = _world_state.call("get_last_rule_apply_result")
+        if last_apply is Dictionary and not last_apply.is_empty():
+            apply_result = last_apply.duplicate(true)
+
+    _poc4_state_cache = merged_state
+    _poc4_apply_result_cache = apply_result
+    _poc4_state_cache["apply_result"] = _poc4_apply_result_cache.duplicate(true)
 
 func _update_template_list() -> void:
     _template_list.clear()
@@ -1199,9 +1234,99 @@ func _update_event_log_view() -> void:
     _event_log_view.text = "\n".join(lines) if not lines.is_empty() else "まだイベントはありません。"
     _event_log_view.scroll_vertical = _event_log_view.get_line_count()
 
+func _update_poc4_state_view() -> void:
+    if _poc4_state_view == null:
+        return
+
+    var proposal: Dictionary = _poc4_state_cache.get("proposal", {})
+    var summary: Dictionary = _poc4_state_cache.get("summary", {})
+    var review: Dictionary = _poc4_state_cache.get("review", {})
+    var issue_preview: Dictionary = _poc4_state_cache.get("issue_preview", {})
+    var apply_result: Dictionary = _poc4_apply_result_cache if not _poc4_apply_result_cache.is_empty() else _poc4_state_cache.get("apply_result", {})
+    var last_error: Dictionary = _poc4_state_cache.get("last_error", {})
+    var execution: Dictionary = _poc4_state_cache.get("execution", {})
+    var codex: Dictionary = _poc4_state_cache.get("codex", {})
+    var lines: Array[String] = []
+
+    lines.append("Execution:")
+    lines.append("- status: %s" % str(execution.get("status", "idle")))
+    if execution.has("phase"):
+        lines.append("- phase: %s" % str(execution.get("phase", "")))
+    if execution.has("message") and not String(execution.get("message", "")).is_empty():
+        lines.append("- message: %s" % str(execution.get("message", "")))
+    lines.append("")
+
+    lines.append("PoC4 pending proposal:")
+    if proposal.is_empty():
+        lines.append("- なし")
+    else:
+        lines.append("- proposal_title: %s" % str(summary.get("title", issue_preview.get("title", proposal.get("proposal_title", "n/a")))))
+        lines.append("- proposal 要約: %s" % str(summary.get("player_request_summary", proposal.get("player_request_summary", "n/a"))))
+        lines.append("- package_id: %s" % str(summary.get("package_id", proposal.get("package_id", "n/a"))))
+        lines.append("- operation_count: %d" % int(summary.get("operation_count", 0)))
+        var operation_types := Array(summary.get("operation_types", []))
+        lines.append("- operation_types: %s" % (_join_values(operation_types) if not operation_types.is_empty() else "-"))
+        lines.append("- stats: %s" % _bool_text(bool(summary.get("has_stat_changes", false))))
+        lines.append("- rules: %s" % _bool_text(bool(summary.get("has_rule_changes", false))))
+        lines.append("- event_bindings: %s" % _bool_text(bool(summary.get("has_event_binding_changes", false))))
+        lines.append("- relations: %s" % _bool_text(bool(summary.get("has_relation_changes", false))))
+        lines.append("- review_status: %s" % str(summary.get("review_status", proposal.get("review_status", "n/a"))))
+        lines.append("- validation_status: %s" % str(summary.get("validation_status", proposal.get("validation", {}).get("status", "n/a"))))
+        lines.append("- suggested_pr_target: %s" % _format_poc4_submission_target(summary.get("suggested_pr_target", null), apply_result))
+
+    lines.append("")
+    lines.append("Review:")
+    lines.append("- required: %s" % _bool_text(bool(review.get("required", false))))
+    lines.append("- acknowledged: %s" % _bool_text(bool(review.get("acknowledged", review.get("granted", false)))))
+    lines.append("- status: %s" % str(review.get("status", "not_requested")))
+
+    var last_request_text := String(_poc4_state_cache.get("last_request_text", "")).strip_edges()
+    if not last_request_text.is_empty():
+        lines.append("- request: %s" % last_request_text)
+
+    lines.append("")
+    lines.append("Apply result:")
+    if apply_result.is_empty():
+        lines.append("- まだありません")
+    else:
+        lines.append("- status: %s" % str(apply_result.get("status", "unknown")))
+        if apply_result.has("message"):
+            lines.append("- message: %s" % str(apply_result.get("message", "")))
+        if apply_result.has("package_id"):
+            lines.append("- package_id: %s" % str(apply_result.get("package_id", "")))
+        if apply_result.has("proposal_title"):
+            lines.append("- proposal_title: %s" % str(apply_result.get("proposal_title", "")))
+        if apply_result.has("runtime_rule_id"):
+            lines.append("- runtime_rule_id: %s" % str(apply_result.get("runtime_rule_id", "")))
+        if apply_result.has("applied_operation_count"):
+            lines.append("- applied_operation_count: %s" % str(apply_result.get("applied_operation_count", "")))
+        if apply_result.has("deferred_operation_count"):
+            lines.append("- deferred_operation_count: %s" % str(apply_result.get("deferred_operation_count", "")))
+
+    if not last_error.is_empty():
+        lines.append("")
+        lines.append("Last error:")
+        lines.append("- error_code: %s" % str(last_error.get("error_code", "unknown")))
+        lines.append("- message: %s" % str(last_error.get("message", "")))
+        var details: Dictionary = last_error.get("details", {})
+        if not details.is_empty():
+            lines.append("- details: %s" % _format_variant_inline(details))
+
+    _append_poc4_codex_lines(lines, codex)
+
+    var history: Array = _poc4_state_cache.get("history", [])
+    if not history.is_empty():
+        lines.append("")
+        lines.append("Recent history:")
+        for entry in _take_last_entries(history, 5):
+            lines.append("- %s" % _format_variant_inline(entry))
+
+    _poc4_state_view.text = "\n".join(lines)
+
 func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
-    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size()]
+    var poc4_status := _describe_poc4_status()
+    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
 
 func _emit_close_requested() -> void:
     close_requested.emit()
@@ -1217,6 +1342,9 @@ func _on_submit_pressed() -> void:
         result = _world_state.call("submit_player_task", task_text)
     else:
         result = _simulate_task_submission(task_text)
+
+    if String(result.get("status", "")) == "needs_rule_patch":
+        result["message"] = "既存テンプレートでは解決できません。PoC4 proposal を作る場合は、プレイヤー向け GM 会話画面から依頼してください。"
 
     _task_input.clear()
     _refresh_all()
@@ -2057,6 +2185,92 @@ func _join_values(values: Array) -> String:
             joined += ", "
         joined += pieces[index]
     return joined
+
+func _merge_poc4_state(source: Variant) -> Dictionary:
+    if not (source is Dictionary):
+        return {
+            "proposal": {},
+            "summary": {},
+            "issue_preview": {},
+            "review": {},
+            "apply_result": {},
+            "last_error": {},
+            "execution": {},
+            "codex": {},
+            "last_request_text": "",
+            "history": []
+        }
+
+    var state: Dictionary = source
+    return {
+        "proposal": state.get("proposal", state.get("pending_proposal", {})).duplicate(true) if state.get("proposal", state.get("pending_proposal", {})) is Dictionary else {},
+        "summary": state.get("summary", state.get("proposal_summary", {})).duplicate(true) if state.get("summary", state.get("proposal_summary", {})) is Dictionary else {},
+        "issue_preview": state.get("issue_preview", {}).duplicate(true) if state.get("issue_preview", {}) is Dictionary else {},
+        "review": state.get("review", {}).duplicate(true) if state.get("review", {}) is Dictionary else {},
+        "apply_result": state.get("apply_result", {}).duplicate(true) if state.get("apply_result", {}) is Dictionary else {},
+        "last_error": state.get("last_error", {}).duplicate(true) if state.get("last_error", {}) is Dictionary else {},
+        "execution": state.get("execution", {}).duplicate(true) if state.get("execution", {}) is Dictionary else {},
+        "codex": state.get("codex", {}).duplicate(true) if state.get("codex", {}) is Dictionary else {},
+        "last_request_text": String(state.get("last_request_text", "")),
+        "history": Array(state.get("history", [])).duplicate(true)
+    }
+
+
+func _describe_poc4_status() -> String:
+    var proposal: Dictionary = _poc4_state_cache.get("proposal", {})
+    var review: Dictionary = _poc4_state_cache.get("review", {})
+    var apply_result: Dictionary = _poc4_apply_result_cache if not _poc4_apply_result_cache.is_empty() else _poc4_state_cache.get("apply_result", {})
+    var last_error: Dictionary = _poc4_state_cache.get("last_error", {})
+    var execution: Dictionary = _poc4_state_cache.get("execution", {})
+    if not last_error.is_empty():
+        return "error:%s" % str(last_error.get("error_code", "unknown"))
+    if String(execution.get("status", "idle")) == "running":
+        return "running"
+    if String(apply_result.get("status", "")) in ["applied", "applied_with_warnings"]:
+        return String(apply_result.get("status", "applied"))
+    if proposal.is_empty():
+        return "idle"
+    if bool(review.get("acknowledged", review.get("granted", false))):
+        return "reviewed"
+    return "pending_review"
+
+func _format_poc4_submission_target(suggested_target: Variant, apply_result: Dictionary) -> String:
+    if suggested_target is Dictionary:
+        return "%s @ %s (%s)" % [
+            str(suggested_target.get("repo", "")),
+            str(suggested_target.get("base_ref", "")),
+            str(suggested_target.get("package_id", ""))
+        ]
+    if not String(apply_result.get("runtime_rule_id", "")).is_empty():
+        return "runtime:%s" % str(apply_result.get("runtime_rule_id", ""))
+    return "runtime install"
+
+func _append_poc4_codex_lines(lines: Array, codex: Dictionary) -> void:
+    if codex.is_empty():
+        return
+
+    lines.append("")
+    lines.append("Codex detail:")
+    lines.append("- session id: %s" % _format_poc4_codex_value(codex.get("session_id", "")))
+    lines.append("- model: %s" % _format_poc4_codex_value(codex.get("model", "")))
+    lines.append("- workdir: %s" % _format_poc4_codex_value(codex.get("workdir", "")))
+    lines.append("- approval: %s" % _format_poc4_codex_value(codex.get("approval", "")))
+    lines.append("- sandbox: %s" % _format_poc4_codex_value(codex.get("sandbox", "")))
+
+    var excerpt := String(codex.get("cli_output_excerpt", "")).strip_edges()
+    if excerpt.is_empty():
+        excerpt = String(codex.get("cli_output", "")).strip_edges()
+    if excerpt.length() > 280:
+        excerpt = excerpt.substr(0, 280).strip_edges() + "…"
+    if not excerpt.is_empty():
+        lines.append("- cli 抜粋: %s" % excerpt.replace("\n", " / "))
+
+func _format_poc4_codex_value(value: Variant) -> String:
+    var text := str(value).strip_edges()
+    return text if not text.is_empty() else "-"
+
+func _bool_text(value: bool) -> String:
+    return "あり" if value else "なし"
 
 func _extract_latest_task_result(snapshot: Dictionary) -> Dictionary:
     var task_history = snapshot.get("player_task_history", [])

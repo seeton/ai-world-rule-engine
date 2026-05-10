@@ -42,14 +42,19 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 					stat_definitions[stat_id]["max"] = compiled_effect.get("max", 0.0)
 				effects.append(compiled_effect)
 			"upsert_rule":
-				if String(op.get("rule_type", "")) == "tick_delta":
+				var rule_type := String(op.get("rule_type", ""))
+				if rule_type == "tick_delta":
 					var compiled_tick := _compile_tick_delta(op, stat_definitions)
 					if not compiled_tick.is_empty():
 						effects.append(compiled_tick)
 					else:
 						deferred_operations.append(op.duplicate(true))
+				elif rule_type in ["event_visual_effect"]:
+					deferred_operations.append(op.duplicate(true))
 				else:
 					deferred_operations.append(op.duplicate(true))
+			"add_event_binding", "add_relation":
+				deferred_operations.append(op.duplicate(true))
 			_:
 				deferred_operations.append(op.duplicate(true))
 

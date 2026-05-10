@@ -108,6 +108,15 @@ issue worktree 以外 (repo root の `godot-world/` を含む) からの実行�
 
 UI が立ち上がらない状態で何が起きているかを判断するための軽量シグナルで、復旧手順を決める入り口として使う。
 
+## In-game の C キー overlay (検証導線)
+
+実際にワールドを崩壊させて headless CLI の挙動を確認するのは現状そう簡単ではない。そのため稼働中のワールドに対して **`C` キー** で in-game overlay を開き、CLI `inspect` と同じレポートを画面で確認できるようにしている。
+
+- overlay と headless CLI は `scripts/cli/inspect_report.gd` という共通モジュールを呼ぶので、表示内容は二重管理にならない
+- overlay 上の「スナップショットを保存」ボタンで `user://cli_inspect_<timestamp>.json` に書き出せる。headless CLI 側で `bash scripts/world_cli.sh <issue> --snapshot <そのパス> -- inspect` を叩けば、別プロセスからも同じ観測になることを突き合わせ確認できる
+- T キー overlay (rule tree) と GM screen とは排他制御される。GM screen が開いている間は C キー入力は無視される
+- overlay は read-only な観測 + snapshot dump のみ。`rule disable` / `snapshot load` などの actuation は引き続き headless CLI 側に集約する (UI 崩壊時に届かない overlay に actuation を持たせない)
+
 ## 想定する復旧フロー (UI 不能化時)
 
 1. 別ターミナルから `bash scripts/world_cli.sh <issue> --snapshot user://last_known.json -- inspect` を叩いて崩壊状態を観測する。
@@ -120,16 +129,14 @@ UI が立ち上がらない状態で何が起きているかを判断するた�
 
 ## smoke test
 
-`godot-world/scripts/tests/cli_smoke_test.gd` が、CLI ディスパッチャーが依存する engine-safe API を直接突いて以下を検証する:
-
-- `set_rule_enabled` の disable/enable が `installed_rules_by_id[*].enabled` に反映されること
-- disable 済みルールの effects が `advance_tick` で適用されないこと
-- snapshot dump → load の往復で `enabled` フラグが保持されること
+- `godot-world/scripts/tests/cli_smoke_test.gd` — CLI ディスパッチャーが依存する engine-safe API を直接突き、`set_rule_enabled` の disable/enable、disable 済みルールがティック時に適用されないこと、snapshot dump → load の往復で `enabled` フラグが保持されることを検証する。
+- `godot-world/scripts/tests/cli_inspect_overlay_smoke_test.gd` — `inspect_report.gd` (overlay と CLI が共有する集計モジュール) が、ルール導入直後 / disable 直後 / 連続呼び出しで安定したレポートを返すことを検証する。
 
 実行例:
 
 ```bash
-bash scripts/launch_godot.sh 93 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 97 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 97 -- --headless --script res://scripts/tests/cli_inspect_overlay_smoke_test.gd
 ```
 
 ## 既知の制約 / Phase 2 への TODO

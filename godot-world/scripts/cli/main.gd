@@ -5,6 +5,7 @@ extends SceneTree
 # and only touches engine-safe API on a fresh WorldState instance.
 
 const WorldStateScript = preload("res://scripts/core/WorldState.gd")
+const InspectReportScript = preload("res://scripts/cli/inspect_report.gd")
 
 const EXIT_OK := 0
 const EXIT_USAGE := 2
@@ -69,71 +70,7 @@ func _initialize() -> void:
 
 
 func _run_inspect() -> void:
-	var snapshot: Dictionary = _world.get_world_snapshot()
-	var installed_rules: Array = snapshot.get("installed_rules", [])
-	var rule_summaries: Array = []
-	var disabled_rule_ids: Array = []
-	var rules_with_unmet_requirements: Array = []
-	for rule in installed_rules:
-		if not (rule is Dictionary):
-			continue
-		var rule_data: Dictionary = rule
-		var rule_id := String(rule_data.get("id", ""))
-		var enabled := bool(rule_data.get("enabled", true))
-		var missing_kinds: Array = rule_data.get("missing_required_rule_kinds", [])
-		rule_summaries.append({
-			"rule_id": rule_id,
-			"name": String(rule_data.get("name", rule_id)),
-			"enabled": enabled,
-			"package_id": String(rule_data.get("metadata", {}).get("package_id", "")),
-			"requires_rule_kinds": rule_data.get("requires_rule_kinds", []).duplicate(true),
-			"provides_rule_kinds": rule_data.get("provides_rule_kinds", []).duplicate(true),
-			"resolved_parent_rule_ids": rule_data.get("resolved_parent_rule_ids", []).duplicate(true),
-			"missing_required_rule_kinds": missing_kinds.duplicate(true)
-		})
-		if not enabled:
-			disabled_rule_ids.append(rule_id)
-		if not missing_kinds.is_empty():
-			rules_with_unmet_requirements.append(rule_id)
-
-	var packages: Array = []
-	for package_summary in _world.get_available_rule_packages():
-		packages.append(package_summary)
-
-	var has_movement: bool = _has_kind_provider(installed_rules, "space")
-	var has_input: bool = _has_kind_provider(installed_rules, "input")
-	var world_clock_value: Variant = snapshot.get("world_clock", {})
-	var has_world_clock: bool = (world_clock_value is Dictionary) and not (world_clock_value as Dictionary).is_empty()
-	var collapse_signals: Array = []
-	if installed_rules.is_empty():
-		collapse_signals.append("no_installed_rules")
-	if not rules_with_unmet_requirements.is_empty():
-		collapse_signals.append("rules_with_unmet_requirements")
-	if not disabled_rule_ids.is_empty():
-		collapse_signals.append("disabled_rules_present")
-
-	var report := {
-		"world": {
-			"world_id": snapshot.get("world_id", ""),
-			"world_name": snapshot.get("world_name", ""),
-			"world_mode": snapshot.get("world_mode", ""),
-			"tick": int(snapshot.get("tick", 0)),
-			"elapsed_seconds": float(snapshot.get("elapsed_seconds", 0.0))
-		},
-		"installed_rules": rule_summaries,
-		"installed_rule_count": rule_summaries.size(),
-		"disabled_rule_ids": disabled_rule_ids,
-		"rules_with_unmet_requirements": rules_with_unmet_requirements,
-		"installed_packages": packages,
-		"installed_package_count": packages.size(),
-		"world_status": {
-			"has_world_clock": has_world_clock,
-			"has_movement_provider": has_movement,
-			"has_input_provider": has_input,
-			"collapse_signals": collapse_signals
-		},
-		"snapshot_loaded_from": _snapshot_path
-	}
+	var report := InspectReportScript.build(_world, _snapshot_path)
 	_emit_result(report)
 	_quit_with(EXIT_OK)
 
@@ -210,18 +147,6 @@ func _run_snapshot(args: Array) -> void:
 				_quit_with(EXIT_RUNTIME)
 		_:
 			_die_usage("snapshot subcommand action must be 'dump' or 'load'.")
-
-
-func _has_kind_provider(installed_rules: Array, required_kind: String) -> bool:
-	for rule in installed_rules:
-		if not (rule is Dictionary):
-			continue
-		if not bool(rule.get("enabled", true)):
-			continue
-		for kind in rule.get("provides_rule_kinds", []):
-			if String(kind) == required_kind:
-				return true
-	return false
 
 
 func _emit_result(result: Variant) -> void:

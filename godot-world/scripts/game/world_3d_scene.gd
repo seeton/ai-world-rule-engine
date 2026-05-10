@@ -2,6 +2,7 @@ extends Node3D
 
 signal gm_interaction_requested
 signal rule_tree_toggle_requested
+signal cli_overlay_toggle_requested
 
 const PLAYER_ENTITY_ID := "origin_entity"
 const GM_ENTITY_ID := "gm_entity"
@@ -91,6 +92,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key_event := event as InputEventKey
 		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_T or key_event.physical_keycode == KEY_T):
 			rule_tree_toggle_requested.emit()
+			get_viewport().set_input_as_handled()
+			return
+		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_C or key_event.physical_keycode == KEY_C):
+			cli_overlay_toggle_requested.emit()
 			get_viewport().set_input_as_handled()
 			return
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():

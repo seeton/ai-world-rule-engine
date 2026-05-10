@@ -32,6 +32,9 @@
   "patch": {
     "format": "rule_patch_v1",
     "review_status": "approved",
+    "scope": "entity",
+    "target_tags": ["player"],
+    "provides_rule_kinds": ["world-clock", "player-time"],
     "operations": [
       {
         "op": "upsert_stat",
@@ -44,7 +47,7 @@
       },
       {
         "op": "upsert_rule",
-        "rule_id": "time.tick_counter",
+        "rule_id": "time.elapsed_counter",
         "rule_type": "tick_delta",
         "target_stat": "elapsed_seconds",
         "delta": 1.0,

@@ -8,22 +8,43 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"message": "Rule package was empty."
 		}
 
-	var operations: Array = rule_package.get("patch", {}).get("operations", [])
+	var patch_variant = rule_package.get("patch", null)
+	if not (patch_variant is Dictionary):
+		return {
+			"status": "error",
+			"message": "Rule package patch must be a dictionary."
+		}
+	var patch: Dictionary = patch_variant
+	var operations_result := _validate_operations(patch.get("operations", []))
+	if String(operations_result.get("status", "")) == "error":
+		return operations_result
+	var operations: Array = operations_result.get("operations", [])
 	var effects: Array = []
 	var deferred_operations: Array = []
-	var stat_components: Dictionary = {}
+	var stat_definitions: Dictionary = {}
+	var install_actions_result := _validate_install_actions(patch.get("install_actions", []))
+	if String(install_actions_result.get("status", "")) == "error":
+		return install_actions_result
 
 	for operation in operations:
 		var op: Dictionary = operation
 		match String(op.get("op", "")):
 			"upsert_stat":
 				var compiled_effect := _compile_stat_operation(op)
-				stat_components[String(op.get("stat_id", ""))] = compiled_effect.get("component", "stats")
+				var stat_id := String(compiled_effect.get("field", "value"))
+				stat_definitions[stat_id] = {
+					"component": compiled_effect.get("component", "stats"),
+					"default": compiled_effect.get("default", 0.0)
+				}
+				if compiled_effect.has("min"):
+					stat_definitions[stat_id]["min"] = compiled_effect.get("min", 0.0)
+				if compiled_effect.has("max"):
+					stat_definitions[stat_id]["max"] = compiled_effect.get("max", 0.0)
 				effects.append(compiled_effect)
 			"upsert_rule":
 				var rule_type := String(op.get("rule_type", ""))
 				if rule_type == "tick_delta":
-					var compiled_tick := _compile_tick_delta(op, stat_components)
+					var compiled_tick := _compile_tick_delta(op, stat_definitions)
 					if not compiled_tick.is_empty():
 						effects.append(compiled_tick)
 					else:
@@ -45,8 +66,11 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 			"id": "compiled_%s" % package_id.replace(".", "_"),
 			"name": "%s (Compiled)" % String(rule_package.get("display_name", package_id)),
 			"concept": concept,
-			"scope": "entity",
-			"target_tags": ["mortal"],
+			"scope": String(patch.get("scope", "entity")),
+			"target_tags": _normalize_string_array(patch.get("target_tags", ["mortal"])),
+			"requires_rule_kinds": _normalize_string_array(patch.get("requires_rule_kinds", [])),
+			"provides_rule_kinds": _normalize_string_array(patch.get("provides_rule_kinds", [])),
+			"install_actions": install_actions_result.get("install_actions", []).duplicate(true),
 			"effects": effects,
 			"metadata": {
 				"package_id": package_id,
@@ -62,35 +86,170 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 
 func _compile_stat_operation(operation: Dictionary) -> Dictionary:
 	var stat_id := String(operation.get("stat_id", "value"))
-	return {
+	var effect := {
 		"component": _resolve_component(stat_id, String(operation.get("ui_group", ""))),
 		"field": stat_id,
 		"op": "add",
 		"default": float(operation.get("default", 0.0)),
-		"value_per_second": 0.0,
-		"min": float(operation.get("min", 0.0)),
-		"max": float(operation.get("max", 100.0))
+		"value_per_second": 0.0
 	}
+	if operation.has("min"):
+		effect["min"] = float(operation.get("min", 0.0))
+	if operation.has("max"):
+		effect["max"] = float(operation.get("max", 0.0))
+	return effect
 
-func _compile_tick_delta(operation: Dictionary, stat_components: Dictionary) -> Dictionary:
+func _compile_tick_delta(operation: Dictionary, stat_definitions: Dictionary) -> Dictionary:
 	var stat_id := String(operation.get("target_stat", ""))
 	if stat_id.is_empty():
 		return {}
 
-	var interval_seconds: float = max(float(operation.get("interval_seconds", 1.0)), 0.001)
-	return {
-		"component": stat_components.get(stat_id, _resolve_component(stat_id, "")),
+	var interval_seconds: float = maxf(float(operation.get("interval_seconds", 1.0)), 0.001)
+	var stat_definition: Dictionary = stat_definitions.get(stat_id, {})
+	var effect := {
+		"component": stat_definition.get("component", _resolve_component(stat_id, "")),
 		"field": stat_id,
 		"op": "add",
-		"default": 0.0,
-		"value_per_second": float(operation.get("delta", 0.0)) / interval_seconds,
-		"min": float(operation.get("min", 0.0)),
-		"max": float(operation.get("max", 100.0))
+		"default": float(stat_definition.get("default", 0.0)),
+		"value_per_second": float(operation.get("delta", 0.0)) / interval_seconds
 	}
+	if operation.has("min"):
+		effect["min"] = float(operation.get("min", 0.0))
+	elif bool(operation.get("clamp_to_stat_bounds", false)) and stat_definition.has("min"):
+		effect["min"] = float(stat_definition.get("min", 0.0))
+	if operation.has("max"):
+		effect["max"] = float(operation.get("max", 0.0))
+	elif bool(operation.get("clamp_to_stat_bounds", false)) and stat_definition.has("max"):
+		effect["max"] = float(stat_definition.get("max", 0.0))
+	return effect
 
 func _resolve_component(stat_id: String, ui_group: String) -> String:
+	if ui_group == "time" or stat_id in ["elapsed_seconds", "time_seconds"]:
+		return "time"
 	if ui_group == "needs":
 		return "needs"
 	if stat_id in ["hunger", "sleep", "energy"]:
 		return "needs"
 	return "stats"
+
+func _normalize_string_array(value: Variant) -> Array:
+	var values: Array = []
+	if value is Array:
+		for entry in value:
+			var text := String(entry).strip_edges()
+			if not text.is_empty() and not values.has(text):
+				values.append(text)
+	elif value is PackedStringArray:
+		for entry in value:
+			var text := String(entry).strip_edges()
+			if not text.is_empty() and not values.has(text):
+				values.append(text)
+	elif value is String:
+		var text := String(value).strip_edges()
+		if not text.is_empty():
+			values.append(text)
+	return values
+
+
+func _validate_install_actions(raw_actions: Variant) -> Dictionary:
+	if raw_actions == null:
+		return {
+			"status": "ok",
+			"install_actions": []
+		}
+	if not (raw_actions is Array):
+		return {
+			"status": "error",
+			"message": "Rule package patch.install_actions must be an array."
+		}
+
+	var validated_actions: Array = []
+	for action_index in range(raw_actions.size()):
+		var raw_action = raw_actions[action_index]
+		if not (raw_action is Dictionary):
+			return {
+				"status": "error",
+				"message": "Rule package patch.install_actions[%d] must be a dictionary." % action_index
+			}
+
+		var action: Dictionary = raw_action.duplicate(true)
+		var op := String(action.get("op", "")).strip_edges()
+		if op.is_empty():
+			return {
+				"status": "error",
+				"message": "Rule package patch.install_actions[%d] must include a non-empty op." % action_index
+			}
+
+		match op:
+			"merge_world_state":
+				if action.has("path") and not (action.get("path", "") is String):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d].path must be a string when provided." % action_index
+					}
+				if String(action.get("path", "")).strip_edges().is_empty() and not (action.get("value", {}) is Dictionary):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d] must provide a dictionary value when path is omitted." % action_index
+					}
+			"upsert_entities":
+				var entities = action.get("entities", null)
+				if not (entities is Array):
+					return {
+						"status": "error",
+						"message": "Rule package patch.install_actions[%d].entities must be an array." % action_index
+					}
+				for entity_index in range(entities.size()):
+					var raw_entity = entities[entity_index]
+					if not (raw_entity is Dictionary):
+						return {
+							"status": "error",
+							"message": "Rule package patch.install_actions[%d].entities[%d] must be a dictionary." % [action_index, entity_index]
+						}
+					if String(raw_entity.get("id", "")).strip_edges().is_empty():
+						return {
+							"status": "error",
+							"message": "Rule package patch.install_actions[%d].entities[%d] must include a non-empty id." % [action_index, entity_index]
+						}
+			_:
+				return {
+					"status": "error",
+					"message": "Rule package patch.install_actions[%d] uses unsupported op '%s'." % [action_index, op]
+				}
+
+		action["op"] = op
+		validated_actions.append(action)
+
+	return {
+		"status": "ok",
+		"install_actions": validated_actions
+	}
+
+
+func _validate_operations(raw_operations: Variant) -> Dictionary:
+	if not (raw_operations is Array):
+		return {
+			"status": "error",
+			"message": "Rule package patch operations must be an array."
+		}
+
+	var operations: Array = raw_operations
+	for operation_index in range(operations.size()):
+		var raw_operation = operations[operation_index]
+		if not (raw_operation is Dictionary):
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must be a dictionary." % operation_index
+			}
+
+		var operation: Dictionary = raw_operation
+		if String(operation.get("op", "")).strip_edges().is_empty():
+			return {
+				"status": "error",
+				"message": "Rule package patch.operations[%d] must include a non-empty op." % operation_index
+			}
+
+	return {
+		"status": "ok",
+		"operations": operations
+	}

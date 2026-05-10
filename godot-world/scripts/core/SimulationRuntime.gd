@@ -3,6 +3,8 @@ class_name SimulationRuntime
 
 const RuntimeRulePatchCompilerScript = preload("res://scripts/integration/runtime_rule_patch_compiler.gd")
 const DEFAULT_FIXED_STEP := 0.25
+const WORLD_SNAPSHOT_TYPE := "godot_world_state_snapshot"
+const WORLD_SNAPSHOT_VERSION := 1
 const DEFAULT_THREE_D_CAMERA := {
 	"position": {"x": 6.6, "y": 6.0, "z": -7.4},
 	"look_at": {"x": 0.0, "y": 1.4, "z": 0.4},
@@ -390,10 +392,123 @@ func get_snapshot() -> Dictionary:
 	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
 	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
+	var world_clock := _build_world_clock_summary(installed_rules_by_id, snapshot)
+	if not world_clock.is_empty():
+		snapshot["world_clock"] = world_clock
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
 	snapshot["poc4"] = _get_poc4_state()
 	snapshot["visual_effects"] = _build_visual_effects_snapshot(Array(_world_state.get("visual_effects", [])))
 	return snapshot
+
+
+func create_snapshot() -> Dictionary:
+	var template_ids: Array = _template_index.keys()
+	template_ids.sort()
+	return {
+		"snapshot_type": WORLD_SNAPSHOT_TYPE,
+		"snapshot_version": WORLD_SNAPSHOT_VERSION,
+		"runtime": {
+			"fixed_step_seconds": fixed_step_seconds,
+			"accumulator_seconds": _accumulator_seconds,
+			"clone_sequence": _clone_sequence
+		},
+		"template_catalog": {
+			"available_template_ids": template_ids.duplicate(true)
+		},
+		"world": _serialize_world_state()
+	}
+
+
+func restore_snapshot(snapshot_data: Dictionary) -> Dictionary:
+	var normalized := _normalize_saved_snapshot(snapshot_data)
+	if String(normalized.get("status", "")) == "error":
+		return normalized
+
+	fixed_step_seconds = float(normalized.get("fixed_step_seconds", DEFAULT_FIXED_STEP))
+	_accumulator_seconds = float(normalized.get("accumulator_seconds", 0.0))
+	_clone_sequence = int(normalized.get("clone_sequence", 0))
+	_world_state = normalized.get("world_state", {}).duplicate(true)
+	_world_state["fixed_step_seconds"] = fixed_step_seconds
+
+	_refresh_rule_relationships()
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	var rule_ids: Array = installed_rules.keys()
+	rule_ids.sort()
+	for rule_id in rule_ids:
+		_initialize_rule_targets(installed_rules[rule_id])
+
+	return {
+		"status": "loaded",
+		"snapshot": get_snapshot(),
+		"saved_snapshot": create_snapshot()
+	}
+
+
+func save_snapshot(file_path: String) -> Dictionary:
+	var normalized_path := String(file_path).strip_edges()
+	if normalized_path.is_empty():
+		return {
+			"status": "error",
+			"message": "保存先のパスが空です。"
+		}
+
+	var snapshot := create_snapshot()
+	var file := FileAccess.open(normalized_path, FileAccess.WRITE)
+	if file == null:
+		var open_error := FileAccess.get_open_error()
+		return {
+			"status": "error",
+			"message": "スナップショットを保存できませんでした: %s" % error_string(open_error),
+			"path": normalized_path,
+			"error_code": open_error
+		}
+
+	file.store_string("%s\n" % JSON.stringify(snapshot, "\t", true))
+	return {
+		"status": "saved",
+		"path": normalized_path,
+		"snapshot": snapshot
+	}
+
+
+func load_snapshot(file_path: String) -> Dictionary:
+	var normalized_path := String(file_path).strip_edges()
+	if normalized_path.is_empty():
+		return {
+			"status": "error",
+			"message": "読み込み元のパスが空です。"
+		}
+
+	var file := FileAccess.open(normalized_path, FileAccess.READ)
+	if file == null:
+		var open_error := FileAccess.get_open_error()
+		return {
+			"status": "error",
+			"message": "スナップショットを開けませんでした: %s" % error_string(open_error),
+			"path": normalized_path,
+			"error_code": open_error
+		}
+
+	var parser := JSON.new()
+	var parse_error := parser.parse(file.get_as_text())
+	if parse_error != OK:
+		return {
+			"status": "error",
+			"message": "スナップショット JSON を解析できませんでした: %s" % parser.get_error_message(),
+			"path": normalized_path,
+			"line": parser.get_error_line()
+		}
+
+	if not (parser.data is Dictionary):
+		return {
+			"status": "error",
+			"message": "スナップショットのルートは Dictionary である必要があります。",
+			"path": normalized_path
+		}
+
+	var load_result := restore_snapshot(parser.data)
+	load_result["path"] = normalized_path
+	return load_result
 
 
 func advance_tick(delta_seconds: float) -> void:
@@ -499,6 +614,161 @@ func dispatch_input_event(event_name: String, context: Dictionary = {}) -> Dicti
 	}
 
 
+func _serialize_world_state() -> Dictionary:
+	var serialized_world := _world_state.duplicate(true)
+	serialized_world["fixed_step_seconds"] = fixed_step_seconds
+	serialized_world["concepts"] = _normalize_string_array(_duplicate_array(serialized_world.get("concepts", [])))
+	serialized_world["preview_3d"] = _serialize_preview_state(serialized_world.get("preview_3d", {}))
+	serialized_world["entities"] = _serialize_entities(serialized_world.get("entities", {}))
+	serialized_world["installed_rules"] = _serialize_installed_rules(serialized_world.get("installed_rules", {}))
+	serialized_world["player_task_history"] = _duplicate_array(serialized_world.get("player_task_history", []))
+	serialized_world["event_log"] = _duplicate_array(serialized_world.get("event_log", []))
+	return serialized_world
+
+
+func _normalize_saved_snapshot(snapshot_data: Dictionary) -> Dictionary:
+	var snapshot_type := String(snapshot_data.get("snapshot_type", ""))
+	if snapshot_type != WORLD_SNAPSHOT_TYPE:
+		return {
+			"status": "error",
+			"message": "未対応のスナップショット形式です: %s" % snapshot_type
+		}
+
+	var snapshot_version := int(snapshot_data.get("snapshot_version", 0))
+	if snapshot_version != WORLD_SNAPSHOT_VERSION:
+		return {
+			"status": "error",
+			"message": "未対応のスナップショットバージョンです: %d" % snapshot_version
+		}
+
+	var runtime_data: Dictionary = snapshot_data.get("runtime", {}).duplicate(true) if snapshot_data.get("runtime", {}) is Dictionary else {}
+	var world_data: Dictionary = snapshot_data.get("world", {}).duplicate(true) if snapshot_data.get("world", {}) is Dictionary else {}
+	var next_fixed_step: float = max(0.001, float(runtime_data.get("fixed_step_seconds", world_data.get("fixed_step_seconds", DEFAULT_FIXED_STEP))))
+	var next_world_state := _build_null_world_with_fixed_step(next_fixed_step)
+	next_world_state = _merge_dictionaries(next_world_state, world_data)
+	next_world_state["fixed_step_seconds"] = next_fixed_step
+	next_world_state["concepts"] = _normalize_string_array(_duplicate_array(world_data.get("concepts", next_world_state.get("concepts", []))))
+	next_world_state["preview_3d"] = _serialize_preview_state(world_data.get("preview_3d", next_world_state.get("preview_3d", {})))
+	next_world_state["entities"] = _deserialize_entities(world_data.get("entities", next_world_state.get("entities", {})))
+	next_world_state["installed_rules"] = _deserialize_installed_rules(world_data.get("installed_rules", next_world_state.get("installed_rules", {})))
+	next_world_state["player_task_history"] = _duplicate_array(world_data.get("player_task_history", next_world_state.get("player_task_history", [])))
+	next_world_state["event_log"] = _duplicate_array(world_data.get("event_log", next_world_state.get("event_log", [])))
+	next_world_state["elapsed_seconds"] = max(0.0, float(world_data.get("elapsed_seconds", next_world_state.get("elapsed_seconds", 0.0))))
+	next_world_state["tick_index"] = max(0, int(world_data.get("tick_index", next_world_state.get("tick_index", 0))))
+
+	return {
+		"status": "ok",
+		"fixed_step_seconds": next_fixed_step,
+		"accumulator_seconds": max(0.0, float(runtime_data.get("accumulator_seconds", 0.0))),
+		"clone_sequence": max(0, int(runtime_data.get("clone_sequence", 0))),
+		"world_state": next_world_state
+	}
+
+
+func _build_null_world_with_fixed_step(step_seconds: float) -> Dictionary:
+	var previous_fixed_step := fixed_step_seconds
+	fixed_step_seconds = step_seconds
+	var world_state := _build_null_world()
+	fixed_step_seconds = previous_fixed_step
+	world_state["fixed_step_seconds"] = step_seconds
+	return world_state
+
+
+func _serialize_preview_state(raw_preview: Variant) -> Dictionary:
+	var merged_preview := _build_default_three_d_preview_state()
+	if raw_preview is Dictionary:
+		merged_preview = _merge_dictionaries(merged_preview, raw_preview)
+
+	var enabled := bool(merged_preview.get("enabled", false))
+	merged_preview["enabled"] = enabled
+	merged_preview["lighting"] = _normalize_preview_lighting(merged_preview.get("lighting", {}), enabled)
+	merged_preview["gravity"] = _normalize_preview_gravity(merged_preview.get("gravity", {}), enabled)
+	merged_preview["camera"] = _normalize_preview_camera(merged_preview.get("camera", {}))
+	return merged_preview
+
+
+func _serialize_entities(raw_entities: Variant) -> Array:
+	var serialized_entities: Array = []
+	if not (raw_entities is Dictionary):
+		return serialized_entities
+
+	var entity_ids: Array = raw_entities.keys()
+	entity_ids.sort()
+	for entity_id in entity_ids:
+		if not (raw_entities[entity_id] is Dictionary):
+			continue
+		var entity_data: Dictionary = raw_entities[entity_id].duplicate(true)
+		if String(entity_data.get("id", "")).is_empty():
+			entity_data["id"] = String(entity_id)
+		var normalized_entity := _normalize_entity(entity_data)
+		if not normalized_entity.is_empty():
+			serialized_entities.append(normalized_entity)
+	return serialized_entities
+
+
+func _serialize_installed_rules(raw_rules: Variant) -> Array:
+	var serialized_rules: Array = []
+	if not (raw_rules is Dictionary):
+		return serialized_rules
+
+	var rule_ids: Array = raw_rules.keys()
+	rule_ids.sort()
+	for rule_id in rule_ids:
+		if not (raw_rules[rule_id] is Dictionary):
+			continue
+		var rule_data: Dictionary = raw_rules[rule_id].duplicate(true)
+		if String(rule_data.get("id", "")).is_empty():
+			rule_data["id"] = String(rule_id)
+		serialized_rules.append(rule_data)
+	return serialized_rules
+
+
+func _deserialize_entities(raw_entities: Variant) -> Dictionary:
+	var entities: Dictionary = {}
+	if raw_entities is Dictionary:
+		var entity_ids: Array = raw_entities.keys()
+		entity_ids.sort()
+		for entity_id in entity_ids:
+			if not (raw_entities[entity_id] is Dictionary):
+				continue
+			var entity_data: Dictionary = raw_entities[entity_id].duplicate(true)
+			if String(entity_data.get("id", "")).is_empty():
+				entity_data["id"] = String(entity_id)
+			var normalized_entity := _normalize_entity(entity_data)
+			if not normalized_entity.is_empty():
+				entities[String(normalized_entity.get("id", entity_id))] = normalized_entity
+	elif raw_entities is Array:
+		for raw_entity in raw_entities:
+			if not (raw_entity is Dictionary):
+				continue
+			var normalized_entity := _normalize_entity(raw_entity.duplicate(true))
+			if not normalized_entity.is_empty():
+				entities[String(normalized_entity.get("id", ""))] = normalized_entity
+	return entities
+
+
+func _deserialize_installed_rules(raw_rules: Variant) -> Dictionary:
+	var installed_rules: Dictionary = {}
+	if raw_rules is Dictionary:
+		var rule_ids: Array = raw_rules.keys()
+		rule_ids.sort()
+		for rule_id in rule_ids:
+			if not (raw_rules[rule_id] is Dictionary):
+				continue
+			var rule_data: Dictionary = raw_rules[rule_id].duplicate(true)
+			if String(rule_data.get("id", "")).is_empty():
+				rule_data["id"] = String(rule_id)
+			var normalized_rule := _normalize_rule_patch(rule_data, false)
+			if not normalized_rule.is_empty():
+				installed_rules[String(normalized_rule.get("id", rule_id))] = normalized_rule
+	elif raw_rules is Array:
+		for raw_rule in raw_rules:
+			if not (raw_rule is Dictionary):
+				continue
+			var normalized_rule := _normalize_rule_patch(raw_rule.duplicate(true), false)
+			if not normalized_rule.is_empty():
+				installed_rules[String(normalized_rule.get("id", ""))] = normalized_rule
+	return installed_rules
 func _build_null_world() -> Dictionary:
 	return {
 		"world_id": "starter-plaza",
@@ -774,10 +1044,10 @@ func _install_normalized_rule(normalized_rule: Dictionary) -> Dictionary:
 	}
 
 
-func _normalize_rule_patch(rule_patch: Dictionary) -> Dictionary:
+func _normalize_rule_patch(rule_patch: Dictionary, merge_template: bool = true) -> Dictionary:
 	var base_rule: Dictionary = {}
 	var template_id := String(rule_patch.get("template_id", ""))
-	if not template_id.is_empty() and _template_index.has(template_id):
+	if merge_template and not template_id.is_empty() and _template_index.has(template_id):
 		base_rule = _template_index[template_id].get("rule_patch", {}).duplicate(true)
 
 	var merged_rule := _merge_dictionaries(base_rule, rule_patch)
@@ -1092,6 +1362,67 @@ func _duplicate_dictionary(value) -> Dictionary:
 	return value.duplicate(true) if value is Dictionary else {}
 
 
+func _build_world_clock_summary(installed_rules_by_id: Dictionary, snapshot: Dictionary) -> Dictionary:
+	var provider := _find_world_clock_provider(installed_rules_by_id)
+	if provider.is_empty():
+		return {}
+	var source_field := String(provider.get("source_field", "elapsed_seconds"))
+	return {
+		"elapsed_seconds": float(snapshot.get("elapsed_seconds", 0.0)),
+		"total_ticks": int(snapshot.get("tick_index", 0)),
+		"source_field": source_field,
+		"source_package_id": String(provider.get("source_package_id", "")),
+		"source_rule_id": String(provider.get("source_rule_id", "")),
+		"description": String(provider.get("description", "WorldState.%s をプレイヤー向けの時計として見える化します。" % source_field))
+	}
+
+
+func _find_world_clock_provider(installed_rules_by_id: Dictionary) -> Dictionary:
+	for rule in installed_rules_by_id.values():
+		if not (rule is Dictionary):
+			continue
+		var rule_data: Dictionary = rule
+		var metadata: Dictionary = rule_data.get("metadata", {})
+		var package_id := String(metadata.get("package_id", ""))
+		var rule_id := String(rule_data.get("id", ""))
+		var source_field := ""
+		for effect in rule_data.get("effects", []):
+			if not (effect is Dictionary):
+				continue
+			var effect_data: Dictionary = effect
+			if String(effect_data.get("component", "")) == "time":
+				source_field = String(effect_data.get("field", ""))
+				if source_field == "elapsed_seconds":
+					break
+		if package_id == "builtin.time":
+			if source_field.is_empty():
+				source_field = "elapsed_seconds"
+			return {
+				"source_field": source_field,
+				"source_package_id": package_id,
+				"source_rule_id": rule_id,
+				"description": "builtin.time は WorldState.%s をプレイヤー向けの時計として見える化します。" % source_field
+			}
+		for provided_kind in rule_data.get("provides_rule_kinds", []):
+			if String(provided_kind) == "world-clock":
+				if source_field.is_empty():
+					source_field = "elapsed_seconds"
+				var provider_id := package_id if not package_id.is_empty() else rule_id
+				return {
+					"source_field": source_field,
+					"source_package_id": package_id,
+					"source_rule_id": rule_id,
+					"description": "%s は WorldState.%s をプレイヤー向けの時計として見える化します。" % [provider_id if not provider_id.is_empty() else "このルール", source_field]
+				}
+		if source_field == "elapsed_seconds":
+			var provider_id := package_id if not package_id.is_empty() else rule_id
+			return {
+				"source_field": source_field,
+				"source_package_id": package_id,
+				"source_rule_id": rule_id,
+				"description": "%s は WorldState.%s をプレイヤー向けの時計として見える化します。" % [provider_id if not provider_id.is_empty() else "このルール", source_field]
+			}
+	return {}
 func _build_default_three_d_preview_state() -> Dictionary:
 	return {
 		"enabled": false,
@@ -1712,6 +2043,21 @@ func _normalize_install_actions(raw_actions: Array) -> Array:
 		if not String(action.get("op", "")).is_empty():
 			normalized_actions.append(action)
 	return normalized_actions
+
+
+func _duplicate_array(raw_value: Variant) -> Array:
+	var duplicated: Array = []
+	if not (raw_value is Array):
+		return duplicated
+
+	for item in raw_value:
+		if item is Dictionary:
+			duplicated.append(item.duplicate(true))
+		elif item is Array:
+			duplicated.append(item.duplicate(true))
+		else:
+			duplicated.append(item)
+	return duplicated
 
 
 func _normalize_entity(entity: Dictionary) -> Dictionary:

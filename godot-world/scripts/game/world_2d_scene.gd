@@ -1,6 +1,7 @@
 extends Node2D
 
 signal gm_interaction_requested
+signal rule_tree_toggle_requested
 
 const VisualEffectBurstScript := preload("res://scripts/game/visual_effect_burst_2d.gd")
 
@@ -19,6 +20,7 @@ const UI_TEXT := {
 		"tick_prefix": "Tick ",
 		"goal": "矢印キーで2Dの世界を歩き、GMのところまで移動してください。",
 		"subgoal": "GMとの会話で 3D化 を適用すると、プレイヤーがいる世界そのものが3Dに切り替わります。",
+		"tree_hint": "Tキーでルールツリー表示",
 		"world_fallback": "2D広場",
 		"player_status": "プレイヤーは2D世界の中を移動できます。",
 		"gm_status": "GMは2D世界の中に存在し、会話できます。"
@@ -34,6 +36,7 @@ var _world_state: Node = null
 var _hud_layer: CanvasLayer = null
 var _world_name_label: Label = null
 var _clock_label: Label = null
+var _tree_hint_label: Label = null
 var _goal_hint: Label = null
 var _status_hint: Label = null
 var _effects_overlay: Node2D = null
@@ -77,6 +80,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_T or key_event.physical_keycode == KEY_T):
+			rule_tree_toggle_requested.emit()
+			get_viewport().set_input_as_handled()
+			return
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():
 			gm_interaction_requested.emit()
 		_dispatch_runtime_input_event(key_event)
@@ -127,6 +134,19 @@ func _setup_hud() -> void:
 	_clock_label.add_theme_color_override("font_color", Color(0.08, 0.1, 0.12, 1.0))
 	_clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_clock_label)
+
+	_tree_hint_label = Label.new()
+	_tree_hint_label.position = Vector2(1010.0, 52.0)
+	_tree_hint_label.size = Vector2(380.0, 26.0)
+	_tree_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_tree_hint_label.text = _text("tree_hint")
+	_tree_hint_label.add_theme_font_size_override("font_size", 14)
+	_tree_hint_label.add_theme_color_override("font_color", Color(0.12, 0.14, 0.17, 0.9))
+	_tree_hint_label.add_theme_color_override("font_shadow_color", Color(1.0, 1.0, 1.0, 0.72))
+	_tree_hint_label.add_theme_constant_override("shadow_offset_x", 1)
+	_tree_hint_label.add_theme_constant_override("shadow_offset_y", 1)
+	_tree_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_layer.add_child(_tree_hint_label)
 
 	interaction_hint.visible = false
 	interaction_hint.modulate.a = 0.0

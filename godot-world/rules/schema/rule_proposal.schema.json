@@ -14,8 +14,7 @@
     "risk_notes",
     "validation",
     "review_status",
-    "issue",
-    "suggested_pr_target"
+    "issue"
   ],
   "properties": {
     "schema_version": {
@@ -39,15 +38,8 @@
       "const": "rule_package_v1"
     },
     "suggested_pr_target": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "required": [
-        "repo",
-        "base_ref",
-        "package_id"
-      ],
+      "type": ["object", "null"],
+      "required": ["repo", "base_ref", "package_id"],
       "properties": {
         "repo": {
           "type": "string",
@@ -66,10 +58,7 @@
     },
     "patch": {
       "type": "object",
-      "required": [
-        "format",
-        "operations"
-      ],
+      "required": ["format", "operations"],
       "properties": {
         "format": {
           "type": "string",
@@ -80,36 +69,7 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": [
-              "op",
-              "stat_id",
-              "value_type",
-              "default",
-              "min",
-              "max",
-              "ui_group",
-              "rule_id",
-              "rule_type",
-              "event",
-              "target_rule",
-              "target_stat",
-              "watch_stat",
-              "delta",
-              "delta_source_field",
-              "delta_per_point",
-              "interval_seconds",
-              "environment_key",
-              "clamp_to_stat_bounds",
-              "binding_id",
-              "relation_id",
-              "source",
-              "target",
-              "design_prompt",
-              "comparator",
-              "value",
-              "effects",
-              "safety_notes"
-            ],
+            "required": ["op"],
             "properties": {
               "op": {
                 "type": "string",
@@ -120,51 +80,47 @@
                   "add_relation"
                 ]
               },
-              "stat_id": {"type": ["string", "null"]},
-              "value_type": {"type": ["string", "null"]},
-              "default": {"type": ["number", "null"]},
-              "min": {"type": ["number", "null"]},
-              "max": {"type": ["number", "null"]},
-              "ui_group": {"type": ["string", "null"]},
-              "rule_id": {"type": ["string", "null"]},
-              "rule_type": {"type": ["string", "null"]},
-              "event": {"type": ["string", "null"]},
-              "target_rule": {"type": ["string", "null"]},
-              "target_stat": {"type": ["string", "null"]},
-              "watch_stat": {"type": ["string", "null"]},
-              "delta": {"type": ["number", "null"]},
-              "delta_source_field": {"type": ["string", "null"]},
-              "delta_per_point": {"type": ["number", "null"]},
-              "interval_seconds": {"type": ["number", "null"]},
-              "environment_key": {"type": ["string", "null"]},
-              "clamp_to_stat_bounds": {"type": ["boolean", "null"]},
-              "binding_id": {"type": ["string", "null"]},
-              "relation_id": {"type": ["string", "null"]},
-              "source": {"type": ["string", "null"]},
-              "target": {"type": ["string", "null"]},
-              "design_prompt": {"type": ["string", "null"]},
-              "comparator": {"type": ["string", "null"]},
-              "value": {
-                "type": ["number", "string", "boolean", "null"]
-              },
+              "stat_id": { "type": ["string", "null"] },
+              "value_type": { "type": ["string", "null"] },
+              "default": { "type": ["number", "null"] },
+              "min": { "type": ["number", "null"] },
+              "max": { "type": ["number", "null"] },
+              "ui_group": { "type": ["string", "null"] },
+              "rule_id": { "type": ["string", "null"] },
+              "rule_type": { "type": ["string", "null"] },
+              "event": { "type": ["string", "null"] },
+              "target_rule": { "type": ["string", "null"] },
+              "target_stat": { "type": ["string", "null"] },
+              "watch_stat": { "type": ["string", "null"] },
+              "delta": { "type": ["number", "null"] },
+              "delta_source_field": { "type": ["string", "null"] },
+              "delta_per_point": { "type": ["number", "null"] },
+              "interval_seconds": { "type": ["number", "null"] },
+              "environment_key": { "type": ["string", "null"] },
+              "clamp_to_stat_bounds": { "type": ["boolean", "null"] },
+              "binding_id": { "type": ["string", "null"] },
+              "relation_id": { "type": ["string", "null"] },
+              "source": { "type": ["string", "null"] },
+              "target": { "type": ["string", "null"] },
+              "design_prompt": { "type": ["string", "null"] },
+              "comparator": { "type": ["string", "null"] },
+              "value": { "type": ["number", "string", "boolean", "null"] },
               "effects": {
                 "type": ["array", "null"],
                 "items": {
                   "type": "object",
-                  "properties": {
-                    "effect_type": {"type": "string"},
-                    "tag": {"type": ["string", "null"]},
-                    "value": {
-                      "type": ["number", "string", "boolean", "null"]
-                    }
-                  },
                   "required": ["effect_type", "tag", "value"],
+                  "properties": {
+                    "effect_type": { "type": "string" },
+                    "tag": { "type": ["string", "null"] },
+                    "value": { "type": ["number", "string", "boolean", "null"] }
+                  },
                   "additionalProperties": false
                 }
               },
               "safety_notes": {
                 "type": ["array", "null"],
-                "items": {"type": "string"}
+                "items": { "type": "string" }
               }
             },
             "additionalProperties": false
@@ -175,36 +131,23 @@
     },
     "touched_surfaces": {
       "type": "object",
-      "required": [
-        "stats",
-        "rules",
-        "event_bindings",
-        "relations"
-      ],
+      "required": ["stats", "rules", "event_bindings", "relations"],
       "properties": {
         "stats": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string" }
         },
         "rules": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string" }
         },
         "event_bindings": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string" }
         },
         "relations": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string" }
         }
       },
       "additionalProperties": false
@@ -217,45 +160,25 @@
     },
     "validation": {
       "type": "object",
-      "required": [
-        "status",
-        "findings"
-      ],
+      "required": ["status", "findings"],
       "properties": {
         "status": {
           "type": "string",
-          "enum": [
-            "valid",
-            "repairable",
-            "needs_human_review",
-            "rejected"
-          ]
+          "enum": ["valid", "repairable", "needs_human_review", "rejected"]
         },
         "findings": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "category",
-              "severity",
-              "message"
-            ],
+            "required": ["category", "severity", "message"],
             "properties": {
               "category": {
                 "type": "string",
-                "enum": [
-                  "schema",
-                  "semantic",
-                  "safety"
-                ]
+                "enum": ["schema", "semantic", "safety"]
               },
               "severity": {
                 "type": "string",
-                "enum": [
-                  "info",
-                  "warning",
-                  "error"
-                ]
+                "enum": ["info", "warning", "error"]
               },
               "message": {
                 "type": "string",
@@ -270,18 +193,11 @@
     },
     "review_status": {
       "type": "string",
-      "enum": [
-        "needs_design_review",
-        "repair_required",
-        "rejected"
-      ]
+      "enum": ["needs_design_review", "repair_required", "rejected"]
     },
     "issue": {
       "type": "object",
-      "required": [
-        "title",
-        "body_sections"
-      ],
+      "required": ["title", "body_sections"],
       "properties": {
         "title": {
           "type": "string",
@@ -289,25 +205,12 @@
         },
         "body_sections": {
           "type": "object",
-          "required": [
-            "summary",
-            "proposal",
-            "validation",
-            "review"
-          ],
+          "required": ["summary", "proposal", "validation", "review"],
           "properties": {
-            "summary": {
-              "type": "string"
-            },
-            "proposal": {
-              "type": "string"
-            },
-            "validation": {
-              "type": "string"
-            },
-            "review": {
-              "type": "string"
-            }
+            "summary": { "type": "string" },
+            "proposal": { "type": "string" },
+            "validation": { "type": "string" },
+            "review": { "type": "string" }
           },
           "additionalProperties": false
         }

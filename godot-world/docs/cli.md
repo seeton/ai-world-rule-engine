@@ -124,6 +124,20 @@ actuation はすべて `scripts/cli/cli_actions.gd` 経由で行われ、Tier 2 
 
 T キー overlay (rule tree) と GM screen とは排他制御される。GM screen が開いている間は C キー入力は無視される。Tier 1 から復旧しきれない場合は Tier 2 (`bash scripts/world_cli.sh`) に降りる。
 
+### 自動オープン (CollapseWatcher)
+
+`scripts/game/collapse_watcher.gd` が `WorldState` を約 0.5 秒間隔でポーリングし、`world_status.collapse_signals` に**新しいシグナルが立ち上がった瞬間**にだけ overlay を自動で開く。プレイヤーが「世界が壊れたっぽい」を能動的に察知できないケースでも、復旧導線への入り口を見せるための仕組み。
+
+- **トリガ条件**:
+  - 既知のシグナルしか無い状態 → 立ち上がっていなければ open しない
+  - 起動直後の baseline (`no_installed_rules` のみ) → emit しない (baseline poll は黙って観測)
+  - 新たに `disabled_rules_present` / `rules_with_unmet_requirements` が現れた → open
+- **抑制**:
+  - GM screen が開いている間は auto-open を保留し、GM screen を閉じた直後に保留分を流す
+  - プレイヤーが overlay を手動で閉じた直後は、その時の理由 signal について **8 秒のクールダウン** を貼る (同じ理由では再 open しない)
+  - 既に overlay が開いていれば再 open しない (badge が積み上がるのを避ける)
+- **手動 open との関係**: C キーで開いた overlay には badge は付かない。auto-open の場合のみ overlay 上部に「自動オープン: <理由>」が出て、自動か手動かを区別できる。
+
 ## 想定する復旧フロー (UI 不能化時)
 
 1. 別ターミナルから `bash scripts/world_cli.sh <issue> --snapshot user://last_known.json -- inspect` を叩いて崩壊状態を観測する。
@@ -139,13 +153,15 @@ T キー overlay (rule tree) と GM screen とは排他制御される。GM scre
 - `godot-world/scripts/tests/cli_smoke_test.gd` — CLI ディスパッチャーが依存する engine-safe API を直接突き、`set_rule_enabled` の disable/enable、disable 済みルールがティック時に適用されないこと、snapshot dump → load の往復で `enabled` フラグが保持されることを検証する。
 - `godot-world/scripts/tests/cli_inspect_overlay_smoke_test.gd` — `inspect_report.gd` (overlay と CLI が共有する集計モジュール) が、ルール導入直後 / disable 直後 / 連続呼び出しで安定したレポートを返すことを検証する。
 - `godot-world/scripts/tests/cli_actions_smoke_test.gd` — `cli_actions.gd` (Tier 1 / Tier 2 共有の actuation surface) を経由して set_rule_enabled / save_snapshot / load_snapshot が同じ engine-safe 結果を返すこと、null world や存在しない rule_id でエラーステータスを返すこと、`list_user_snapshots` が `cli_inspect_*.json` プレフィックスのみ拾うことを検証する。
+- `godot-world/scripts/tests/collapse_watcher_smoke_test.gd` — `collapse_watcher.gd` の signal-edge 検出を直接突き、初期 baseline で emit しないこと、`disabled_rules_present` が新たに立った瞬間にだけ emit すること、再 poll で重複 emit しないこと、`reset_baseline` で baseline をやり直せることを検証する。
 
 実行例:
 
 ```bash
-bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_smoke_test.gd
-bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_inspect_overlay_smoke_test.gd
-bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_actions_smoke_test.gd
+bash scripts/launch_godot.sh 100 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 100 -- --headless --script res://scripts/tests/cli_inspect_overlay_smoke_test.gd
+bash scripts/launch_godot.sh 100 -- --headless --script res://scripts/tests/cli_actions_smoke_test.gd
+bash scripts/launch_godot.sh 100 -- --headless --script res://scripts/tests/collapse_watcher_smoke_test.gd
 ```
 
 ## 既知の制約 / Phase 2 への TODO

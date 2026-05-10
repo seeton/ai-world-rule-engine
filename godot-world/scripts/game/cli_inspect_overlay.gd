@@ -13,7 +13,15 @@ const InspectReportScript = preload("res://scripts/cli/inspect_report.gd")
 const CliActionsScript = preload("res://scripts/cli/cli_actions.gd")
 const REFRESH_INTERVAL: float = 0.35
 
+const COLLAPSE_SIGNAL_LABELS := {
+	"no_installed_rules": "ルールが 1 つも導入されていません",
+	"disabled_rules_present": "無効化されたルールがあります",
+	"rules_with_unmet_requirements": "親ルールが解決できないルールがあります"
+}
+
 var _world_state: Node = null
+var _auto_open_reasons: PackedStringArray = PackedStringArray()
+var _auto_open_badge: Label = null
 var _world_label: Label = null
 var _summary_label: Label = null
 var _signals_label: Label = null
@@ -169,6 +177,14 @@ func _build_header(layout: VBoxContainer) -> void:
 	help_label.add_theme_font_size_override("font_size", 12)
 	help_label.add_theme_color_override("font_color", Color(0.74, 0.80, 0.90, 0.85))
 	title_wrap.add_child(help_label)
+
+	if _auto_open_reasons.size() > 0:
+		_auto_open_badge = Label.new()
+		_auto_open_badge.text = _format_auto_open_reasons(_auto_open_reasons)
+		_auto_open_badge.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_auto_open_badge.add_theme_font_size_override("font_size", 13)
+		_auto_open_badge.add_theme_color_override("font_color", Color(1.0, 0.78, 0.36, 1.0))
+		title_wrap.add_child(_auto_open_badge)
 
 	var close_button := Button.new()
 	close_button.text = "閉じる (C / Esc)"
@@ -357,6 +373,22 @@ func _to_string_array(values: Array) -> PackedStringArray:
 
 func _yes_no(value: bool) -> String:
 	return "あり" if value else "なし"
+
+
+# Called by game_scene.gd after instantiating the overlay but before adding
+# it to the scene tree, so the badge is built during _ready().
+func set_auto_open_reasons(reasons: PackedStringArray) -> void:
+	_auto_open_reasons = reasons.duplicate()
+
+
+func _format_auto_open_reasons(reasons: PackedStringArray) -> String:
+	if reasons.is_empty():
+		return ""
+	var lines: PackedStringArray = PackedStringArray()
+	for reason in reasons:
+		var label := String(COLLAPSE_SIGNAL_LABELS.get(reason, reason))
+		lines.append("  - %s (%s)" % [label, reason])
+	return "自動オープン:\n%s" % "\n".join(lines)
 
 
 func _on_rule_toggle_pressed(rule_id: String, enabled: bool) -> void:

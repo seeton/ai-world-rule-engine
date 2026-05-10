@@ -551,8 +551,7 @@ func _build_codex_details(executable: Dictionary, workdir: String, cli_output: S
 		"sandbox": String(parsed.get("sandbox", "dangerously-bypass-sandbox" if unsafe_enabled else "default")).strip_edges(),
 		"exit_code": exit_code,
 		"cli_output_excerpt": _summarize_codex_cli_output(cli_output),
-		"cli_output_line_count": _count_non_empty_output_lines(cli_output),
-		"cli_output": cli_output
+		"cli_output_line_count": _count_non_empty_output_lines(cli_output)
 	}
 
 

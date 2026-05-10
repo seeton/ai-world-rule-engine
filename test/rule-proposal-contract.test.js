@@ -214,7 +214,7 @@ test("PoC4 backend API is exposed from WorldState and SimulationRuntime", () => 
     '"review": review,',
     '"apply_result": _duplicate_dictionary(poc4_state.get("apply_result", {}))',
     '"execution": _duplicate_dictionary(poc4_state.get("execution", {}))',
-    'snapshot["poc4"] = _get_poc4_state()',
+    'snapshot["poc4"] = _build_snapshot_poc4_state()',
   ]) {
     assert.equal(runtimeSource.includes(signature), true, `Missing runtime PoC4 state hook: ${signature}`);
   }
@@ -338,6 +338,7 @@ test("PoC4 runtime supports input-driven visual effects for applied rules", () =
 
   for (const snippet of [
     'elif rule_type in ["event_visual_effect"]',
+    'deferred_operations.append(op.duplicate(true))',
     '"add_event_binding", "add_relation":',
   ]) {
     assert.equal(compilerSource.includes(snippet), true, `Missing compiler support for visual effect rule ops: ${snippet}`);
@@ -369,6 +370,7 @@ test("PoC4 review fixes keep workflow portable and results consistent", () => {
   const runtimeSource = fs.readFileSync(runtimePath, "utf8");
   const gmDialogSource = fs.readFileSync(gmDialogPath, "utf8");
   const timeRule = readJson(timeRulePath);
+  const codexDetailsSection = workflowSource.split("func _build_codex_details")[1]?.split("func _parse_codex_cli_output")[0] ?? "";
 
   for (const snippet of [
     'const WORKSPACE_RUNTIME_DIR := "user://.poc4_runtime"',
@@ -379,14 +381,19 @@ test("PoC4 review fixes keep workflow portable and results consistent", () => {
     'if OS.has_environment("POC4_ALLOW_UNSAFE_CODEX"):',
     'return " --dangerously-bypass-approvals-and-sandbox" if _allow_unsafe_codex_flags() else ""',
     'if resolution_seed.has("suggested_pr_target"):',
+    '"cli_output_excerpt": _summarize_codex_cli_output(cli_output)',
+    '"cli_output_line_count": _count_non_empty_output_lines(cli_output)',
   ]) {
     assert.equal(workflowSource.includes(snippet), true, `Missing workflow portability/safety fix: ${snippet}`);
   }
+  assert.equal(codexDetailsSection.includes('"cli_output": cli_output'), false, "Codex details should not persist the full CLI output in runtime state");
 
   for (const snippet of [
     '"total_operation_count": operations.size()',
     '"total_operation_types": _extract_operation_types(operations)',
     "var applied_operations: Array = _filter_applied_operations(operations, deferred_operations)",
+    "func _build_snapshot_poc4_state() -> Dictionary:",
+    "func _compact_poc4_codex(codex: Dictionary) -> Dictionary:",
   ]) {
     assert.equal(runtimeSource.includes(snippet), true, `Missing apply result consistency fix: ${snippet}`);
   }
@@ -395,6 +402,22 @@ test("PoC4 review fixes keep workflow portable and results consistent", () => {
 
   assert.equal(timeRule.patch.operations[0].max > 100, true, "elapsed_seconds stat max should be above the old compiler clamp");
   assert.equal(timeRule.patch.operations[1].max > 100, true, "time tick rule max should be above the old compiler clamp");
+});
+
+test("WorldState polls async proposals without blocking reset cleanup", () => {
+  const worldStateSource = fs.readFileSync(worldStatePath, "utf8");
+
+  for (const snippet of [
+    "var _proposal_thread_request_serial: int = 0",
+    "var _proposal_thread_task_text: String = \"\"",
+    "static var _detached_proposal_threads: Array = []",
+    "_poll_pending_proposal_thread()",
+    'Callable(_proposal_workflow, "generate_proposal").bind(trimmed)',
+    "_cancel_pending_proposal_thread(false)",
+    "func _reap_detached_proposal_threads() -> void:",
+  ]) {
+    assert.equal(worldStateSource.includes(snippet), true, `Missing non-blocking async cleanup hook: ${snippet}`);
+  }
 });
 
 test("playable GM overlay reaches both PoC4 conversation and admin UI", () => {

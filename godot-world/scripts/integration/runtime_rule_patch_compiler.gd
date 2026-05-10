@@ -50,11 +50,11 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 					else:
 						deferred_operations.append(op.duplicate(true))
 				elif rule_type in ["event_visual_effect"]:
-					continue
+					deferred_operations.append(op.duplicate(true))
 				else:
 					deferred_operations.append(op.duplicate(true))
 			"add_event_binding", "add_relation":
-				continue
+				deferred_operations.append(op.duplicate(true))
 			_:
 				deferred_operations.append(op.duplicate(true))
 

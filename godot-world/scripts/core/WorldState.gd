@@ -17,14 +17,19 @@ var _available_templates: Array = []
 var _proposal_workflow = null
 var _proposal_thread: Thread = null
 var _proposal_request_serial: int = 0
+var _proposal_thread_request_serial: int = 0
+var _proposal_thread_task_text: String = ""
+
+static var _detached_proposal_threads: Array = []
 
 
 func _ready() -> void:
+    _reap_detached_proposal_threads()
     _reset_world()
 
 
 func _exit_tree() -> void:
-    _cancel_pending_proposal_thread()
+    _cancel_pending_proposal_thread(false)
 
 
 func submit_player_task(task_text: String) -> Dictionary:
@@ -140,6 +145,7 @@ func request_rule_proposal(task_text: String) -> Dictionary:
 func request_rule_proposal_async(task_text: String) -> Dictionary:
     _ensure_runtime()
     _ensure_workflow()
+    _poll_pending_proposal_thread()
     var trimmed := task_text.strip_edges()
     if trimmed.is_empty():
         return {
@@ -168,9 +174,13 @@ func request_rule_proposal_async(task_text: String) -> Dictionary:
     _proposal_request_serial += 1
     var request_serial := _proposal_request_serial
     _proposal_thread = Thread.new()
-    var start_error := _proposal_thread.start(Callable(self, "_run_rule_proposal_async").bind(request_serial, trimmed))
+    _proposal_thread_request_serial = request_serial
+    _proposal_thread_task_text = trimmed
+    var start_error := _proposal_thread.start(Callable(_proposal_workflow, "generate_proposal").bind(trimmed))
     if start_error != OK:
         _proposal_thread = null
+        _proposal_thread_request_serial = 0
+        _proposal_thread_task_text = ""
         var error_result := {
             "status": "error",
             "error_code": "proposal_thread_start_failed",
@@ -192,6 +202,7 @@ func request_rule_proposal_async(task_text: String) -> Dictionary:
 
 func get_pending_rule_proposal() -> Dictionary:
     _ensure_runtime()
+    _poll_pending_proposal_thread()
     return _runtime.get_pending_poc4_proposal_state()
 
 
@@ -382,7 +393,8 @@ func dispatch_input_event(event_name: String, context: Dictionary = {}) -> Dicti
 
 
 func _reset_world() -> void:
-    _cancel_pending_proposal_thread()
+    _reap_detached_proposal_threads()
+    _cancel_pending_proposal_thread(false)
     _rule_package_repository = RulePackageRepositoryScript.new()
     _rule_compiler = RuleCompilerScript.new(_rule_package_repository)
     _runtime_rule_patch_compiler = RuntimeRulePatchCompilerScript.new()
@@ -393,6 +405,7 @@ func _reset_world() -> void:
 
 
 func _ensure_runtime() -> void:
+    _reap_detached_proposal_threads()
     if _runtime == null:
         _reset_world()
         return
@@ -419,22 +432,6 @@ func _ensure_workflow() -> void:
         _proposal_workflow = RuleProposalWorkflowScript.new()
 
 
-func _run_rule_proposal_async(request_serial: int, task_text: String) -> void:
-    var proposal_result: Dictionary = _proposal_workflow.generate_proposal(task_text)
-    call_deferred("_complete_rule_proposal_async", request_serial, task_text, proposal_result)
-
-
-func _complete_rule_proposal_async(request_serial: int, task_text: String, proposal_result: Dictionary) -> void:
-    if _proposal_thread != null:
-        _proposal_thread.wait_to_finish()
-        _proposal_thread = null
-    if request_serial != _proposal_request_serial:
-        return
-    if _runtime == null:
-        return
-    _runtime.record_poc4_proposal(task_text, proposal_result)
-
-
 func _gm_response_for_proposal_result(result: Dictionary) -> String:
     var status := String(result.get("status", ""))
     match status:
@@ -454,12 +451,64 @@ func _gm_response_for_proposal_result(result: Dictionary) -> String:
             return String(result.get("message", "ゲームマスターが相談内容を受け取りました。"))
 
 
-func _cancel_pending_proposal_thread() -> void:
+func _poll_pending_proposal_thread() -> void:
+    if _proposal_thread == null:
+        return
+    if _proposal_thread.is_alive():
+        return
+
+    var finished_thread := _proposal_thread
+    var request_serial := _proposal_thread_request_serial
+    var task_text := _proposal_thread_task_text
+    _proposal_thread = null
+    _proposal_thread_request_serial = 0
+    _proposal_thread_task_text = ""
+
+    var thread_result = finished_thread.wait_to_finish()
+    if request_serial != _proposal_request_serial or _runtime == null:
+        return
+    if thread_result is Dictionary:
+        _runtime.record_poc4_proposal(task_text, thread_result)
+        return
+
+    _runtime.record_poc4_proposal(task_text, {
+        "status": "error",
+        "error_code": "proposal_thread_invalid_result",
+        "message": "PoC4 proposal generation thread が不正な結果を返しました。"
+    })
+
+
+func _cancel_pending_proposal_thread(blocking: bool = true) -> void:
     _proposal_request_serial += 1
     if _proposal_thread == null:
+        _proposal_thread_request_serial = 0
+        _proposal_thread_task_text = ""
+        return
+    if not blocking and _proposal_thread.is_alive():
+        _detached_proposal_threads.append(_proposal_thread)
+        _proposal_thread = null
+        _proposal_thread_request_serial = 0
+        _proposal_thread_task_text = ""
         return
     _proposal_thread.wait_to_finish()
     _proposal_thread = null
+    _proposal_thread_request_serial = 0
+    _proposal_thread_task_text = ""
+
+
+static func _reap_detached_proposal_threads() -> void:
+    if _detached_proposal_threads.is_empty():
+        return
+    var remaining_threads: Array = []
+    for entry in _detached_proposal_threads:
+        if not (entry is Thread):
+            continue
+        var thread: Thread = entry
+        if thread.is_alive():
+            remaining_threads.append(thread)
+            continue
+        thread.wait_to_finish()
+    _detached_proposal_threads = remaining_threads
 
 
 func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:

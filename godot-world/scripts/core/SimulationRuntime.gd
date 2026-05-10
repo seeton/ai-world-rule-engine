@@ -396,7 +396,7 @@ func get_snapshot() -> Dictionary:
 	if not world_clock.is_empty():
 		snapshot["world_clock"] = world_clock
 	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
-	snapshot["poc4"] = _get_poc4_state()
+	snapshot["poc4"] = _build_snapshot_poc4_state()
 	snapshot["visual_effects"] = _build_visual_effects_snapshot(Array(_world_state.get("visual_effects", [])))
 	return snapshot
 
@@ -1273,6 +1273,12 @@ func _get_poc4_state() -> Dictionary:
 	return poc4_state.duplicate(true) if poc4_state is Dictionary else _build_default_poc4_state()
 
 
+func _build_snapshot_poc4_state() -> Dictionary:
+	var poc4_state := _get_poc4_state()
+	poc4_state["codex"] = _compact_poc4_codex(_duplicate_dictionary(poc4_state.get("codex", {})))
+	return poc4_state
+
+
 func _extract_poc4_error(result: Dictionary) -> Dictionary:
 	return {
 		"status": String(result.get("status", "error")),
@@ -1284,11 +1290,28 @@ func _extract_poc4_error(result: Dictionary) -> Dictionary:
 
 func _extract_poc4_codex(result: Dictionary) -> Dictionary:
 	if result.get("codex", {}) is Dictionary:
-		return _duplicate_dictionary(result.get("codex", {}))
+		return _compact_poc4_codex(_duplicate_dictionary(result.get("codex", {})))
 	var details: Dictionary = result.get("details", {})
 	if details.get("codex", {}) is Dictionary:
-		return _duplicate_dictionary(details.get("codex", {}))
+		return _compact_poc4_codex(_duplicate_dictionary(details.get("codex", {})))
 	return {}
+
+
+func _compact_poc4_codex(codex: Dictionary) -> Dictionary:
+	if codex.is_empty():
+		return {}
+	return {
+		"status": String(codex.get("status", "")),
+		"path": String(codex.get("path", "")),
+		"session_id": String(codex.get("session_id", "")),
+		"model": String(codex.get("model", "")),
+		"workdir": String(codex.get("workdir", "")),
+		"approval": String(codex.get("approval", "")),
+		"sandbox": String(codex.get("sandbox", "")),
+		"exit_code": int(codex.get("exit_code", 0)),
+		"cli_output_excerpt": String(codex.get("cli_output_excerpt", "")),
+		"cli_output_line_count": int(codex.get("cli_output_line_count", 0))
+	}
 
 
 func _build_runtime_rule_package_from_proposal(proposal: Dictionary) -> Dictionary:

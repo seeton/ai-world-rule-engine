@@ -3,15 +3,10 @@ class_name RuleProposalWorkflow
 
 const RulePackageRepositoryScript = preload("res://scripts/integration/rule_package_repository.gd")
 
-const CODEX_EXECUTABLE_CANDIDATES := [
-	"/Users/seeton/.bun/bin/codex",
-	"/opt/homebrew/bin/codex",
-	"/usr/local/bin/codex"
-]
 const RULE_PROPOSAL_SCHEMA_PATH := "res://rules/schema/rule_proposal.schema.json"
-const WORKSPACE_RUNTIME_DIR := "res://.poc4_runtime"
-const CODEX_OUTPUT_FILE := "res://.poc4_runtime/rule_proposal_output.json"
-const CODEX_PROMPT_FILE := "res://.poc4_runtime/rule_proposal_prompt.txt"
+const WORKSPACE_RUNTIME_DIR := "user://.poc4_runtime"
+const CODEX_OUTPUT_FILE_NAME := "rule_proposal_output.json"
+const CODEX_PROMPT_FILE_NAME := "rule_proposal_prompt.txt"
 const VALIDATION_STATUSES := ["valid", "repairable", "needs_human_review", "rejected"]
 const REVIEW_STATUSES := ["needs_design_review", "repair_required", "rejected"]
 const ALLOWED_OPERATION_TYPES := ["upsert_stat", "upsert_rule", "add_event_binding", "add_relation"]
@@ -57,8 +52,8 @@ func generate_proposal(player_request: String) -> Dictionary:
 	var resolution_seed: Dictionary = _build_resolution_seed(trimmed_request, clone_candidates)
 	var prompt: String = _build_codex_prompt(trimmed_request, available_packages, clone_candidates, resolution_seed)
 	var workdir := ProjectSettings.globalize_path("res://")
-	var output_path := ProjectSettings.globalize_path(CODEX_OUTPUT_FILE)
-	var prompt_path := ProjectSettings.globalize_path(CODEX_PROMPT_FILE)
+	var output_path := _runtime_file_path(CODEX_OUTPUT_FILE_NAME)
+	var prompt_path := _runtime_file_path(CODEX_PROMPT_FILE_NAME)
 	_cleanup_output_file(output_path)
 	_cleanup_output_file(prompt_path)
 	var prompt_write_error := _write_text_file(prompt_path, prompt)
@@ -66,9 +61,10 @@ func generate_proposal(player_request: String) -> Dictionary:
 		return _error_result("prompt_write_failed", "Codex prompt file を書き込めませんでした。", {"path": prompt_path, "error": prompt_write_error})
 
 	var process_output: Array = []
-	var command := "cat %s | %s exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --cd %s --output-schema %s -o %s -" % [
+	var command := "cat %s | %s exec --skip-git-repo-check%s --cd %s --output-schema %s -o %s -" % [
 		_shell_escape(prompt_path),
 		_shell_escape(String(executable.get("path", "codex"))),
+		_build_codex_safety_flags(),
 		_shell_escape(workdir),
 		_shell_escape(schema_path),
 		_shell_escape(output_path)
@@ -287,9 +283,12 @@ func _normalize_proposal(proposal: Dictionary, player_request: String, resolutio
 	normalized["touched_surfaces"] = touched_surfaces
 
 	if normalized.get("suggested_pr_target", null) == null:
-		var workflow: Dictionary = resolution_seed.get("workflow", {})
-		if workflow.has("suggested_pr_target"):
-			normalized["suggested_pr_target"] = workflow.get("suggested_pr_target")
+		if resolution_seed.has("suggested_pr_target"):
+			normalized["suggested_pr_target"] = resolution_seed.get("suggested_pr_target")
+		else:
+			var candidate: Dictionary = resolution_seed.get("candidate", {})
+			if not candidate.is_empty():
+				normalized["suggested_pr_target"] = candidate.get("suggested_pr_target", null)
 
 	var validation: Dictionary = normalized.get("validation", {}).duplicate(true)
 	validation["status"] = String(validation.get("status", "needs_human_review"))
@@ -474,9 +473,10 @@ func _finding(category: String, severity: String, message: String) -> Dictionary
 
 
 func _resolve_codex_executable() -> Dictionary:
-	for candidate in CODEX_EXECUTABLE_CANDIDATES:
-		if FileAccess.file_exists(candidate):
-			return {"status": "ok", "path": candidate}
+	if OS.has_environment("POC4_CODEX_PATH"):
+		var configured_path := OS.get_environment("POC4_CODEX_PATH").strip_edges()
+		if not configured_path.is_empty() and FileAccess.file_exists(configured_path):
+			return {"status": "ok", "path": configured_path}
 
 	var output: Array = []
 	var exit_code := OS.execute("which", ["codex"], output, true)
@@ -496,6 +496,22 @@ func _ensure_runtime_directory() -> Dictionary:
 	if make_result != OK:
 		return _error_result("runtime_directory_error", "PoC4 runtime directory を作成できませんでした。", {"path": absolute_path, "error": make_result})
 	return {"status": "ok", "path": absolute_path}
+
+
+func _runtime_file_path(file_name: String) -> String:
+	return ProjectSettings.globalize_path("%s/%s" % [WORKSPACE_RUNTIME_DIR, file_name])
+
+
+func _allow_unsafe_codex_flags() -> bool:
+	if not OS.is_debug_build():
+		return false
+	if OS.has_environment("POC4_ALLOW_UNSAFE_CODEX"):
+		return OS.get_environment("POC4_ALLOW_UNSAFE_CODEX").strip_edges() == "1"
+	return false
+
+
+func _build_codex_safety_flags() -> String:
+	return " --dangerously-bypass-approvals-and-sandbox" if _allow_unsafe_codex_flags() else ""
 
 
 func _write_text_file(path: String, content: String) -> int:
@@ -524,14 +540,15 @@ func _join_output(lines: Array) -> String:
 
 func _build_codex_details(executable: Dictionary, workdir: String, cli_output: String = "", exit_code: int = 0) -> Dictionary:
 	var parsed := _parse_codex_cli_output(cli_output)
+	var unsafe_enabled := _allow_unsafe_codex_flags()
 	return {
 		"status": "ok" if exit_code == 0 else "error",
 		"path": executable.get("path", "codex"),
 		"session_id": String(parsed.get("session_id", "")),
 		"model": String(parsed.get("model", "")),
 		"workdir": String(parsed.get("workdir", workdir)).strip_edges(),
-		"approval": String(parsed.get("approval", "dangerously-bypass-approvals")).strip_edges(),
-		"sandbox": String(parsed.get("sandbox", "dangerously-bypass-sandbox")).strip_edges(),
+		"approval": String(parsed.get("approval", "dangerously-bypass-approvals" if unsafe_enabled else "default")).strip_edges(),
+		"sandbox": String(parsed.get("sandbox", "dangerously-bypass-sandbox" if unsafe_enabled else "default")).strip_edges(),
 		"exit_code": exit_code,
 		"cli_output_excerpt": _summarize_codex_cli_output(cli_output),
 		"cli_output_line_count": _count_non_empty_output_lines(cli_output),

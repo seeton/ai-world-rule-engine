@@ -39,6 +39,7 @@
         "value_type": "float",
         "default": 0.0,
         "min": 0.0,
+        "max": 3153600000.0,
         "ui_group": "time"
       },
       {
@@ -48,7 +49,8 @@
         "target_stat": "elapsed_seconds",
         "delta": 1.0,
         "interval_seconds": 1.0,
-        "min": 0.0
+        "min": 0.0,
+        "max": 3153600000.0
       }
     ]
   }

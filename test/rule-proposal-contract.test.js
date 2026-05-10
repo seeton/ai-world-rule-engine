@@ -222,6 +222,41 @@ test("PoC4 runtime supports input-driven visual effects for applied rules", () =
   }
 });
 
+test("PoC4 review fixes keep workflow portable and results consistent", () => {
+  const workflowPath = path.join(repoRoot, "godot-world", "scripts", "integration", "rule_proposal_workflow.gd");
+  const timeRulePath = path.join(repoRoot, "godot-world", "rules", "packages", "time.rule.json");
+  const workflowSource = fs.readFileSync(workflowPath, "utf8");
+  const runtimeSource = fs.readFileSync(runtimePath, "utf8");
+  const gmDialogSource = fs.readFileSync(gmDialogPath, "utf8");
+  const timeRule = readJson(timeRulePath);
+
+  for (const snippet of [
+    'const WORKSPACE_RUNTIME_DIR := "user://.poc4_runtime"',
+    'const CODEX_OUTPUT_FILE_NAME := "rule_proposal_output.json"',
+    'const CODEX_PROMPT_FILE_NAME := "rule_proposal_prompt.txt"',
+    'if OS.has_environment("POC4_CODEX_PATH"):',
+    'if not OS.is_debug_build():',
+    'if OS.has_environment("POC4_ALLOW_UNSAFE_CODEX"):',
+    'return " --dangerously-bypass-approvals-and-sandbox" if _allow_unsafe_codex_flags() else ""',
+    'if resolution_seed.has("suggested_pr_target"):',
+  ]) {
+    assert.equal(workflowSource.includes(snippet), true, `Missing workflow portability/safety fix: ${snippet}`);
+  }
+
+  for (const snippet of [
+    '"total_operation_count": operations.size()',
+    '"total_operation_types": _extract_operation_types(operations)',
+    'var applied_operations: Array = _filter_applied_operations(operations, deferred_operations)',
+  ]) {
+    assert.equal(runtimeSource.includes(snippet), true, `Missing apply result consistency fix: ${snippet}`);
+  }
+
+  assert.equal(gmDialogSource.includes('"review_update_failed"'), true, "Missing localized review update failure text");
+
+  assert.equal(timeRule.patch.operations[0].max > 100, true, "elapsed_seconds stat max should be above the old compiler clamp");
+  assert.equal(timeRule.patch.operations[1].max > 100, true, "time tick rule max should be above the old compiler clamp");
+});
+
 test("playable GM overlay reaches both PoC4 conversation and admin UI", () => {
   const overlaySource = fs.readFileSync(gmScreenOverlayPath, "utf8");
 

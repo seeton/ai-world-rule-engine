@@ -264,6 +264,7 @@ func apply_pending_poc4_proposal() -> Dictionary:
 		return apply_error
 
 	var deferred_operations: Array = Array(compile_result.get("deferred_operations", [])).duplicate(true)
+	var applied_operations: Array = _filter_applied_operations(operations, deferred_operations)
 	var runtime_rule: Dictionary = _duplicate_dictionary(install_result.get("rule", {}))
 	var apply_result := {
 		"status": "applied_with_warnings" if not deferred_operations.is_empty() else "applied",
@@ -273,8 +274,10 @@ func apply_pending_poc4_proposal() -> Dictionary:
 		"runtime_rule_id": runtime_rule.get("id", runtime_patch.get("id", "")),
 		"runtime_rule": runtime_rule,
 		"review": review.duplicate(true),
-		"applied_operation_count": operations.size(),
-		"applied_operation_types": _extract_operation_types(operations),
+		"total_operation_count": operations.size(),
+		"total_operation_types": _extract_operation_types(operations),
+		"applied_operation_count": applied_operations.size(),
+		"applied_operation_types": _extract_operation_types(applied_operations),
 		"deferred_operation_count": deferred_operations.size(),
 		"deferred_operations": deferred_operations,
 		"touched_surfaces": _duplicate_dictionary(proposal.get("touched_surfaces", {}))
@@ -1661,6 +1664,37 @@ func _append_unique_string(target: Array, value: String) -> void:
 	if normalized_value.is_empty() or target.has(normalized_value):
 		return
 	target.append(normalized_value)
+
+
+func _filter_applied_operations(operations: Array, deferred_operations: Array) -> Array:
+	if deferred_operations.is_empty():
+		return operations.duplicate(true)
+
+	var deferred_counts: Dictionary = {}
+	for deferred_operation_variant in deferred_operations:
+		var deferred_signature := _operation_signature(deferred_operation_variant)
+		if deferred_signature.is_empty():
+			continue
+		deferred_counts[deferred_signature] = int(deferred_counts.get(deferred_signature, 0)) + 1
+
+	var applied_operations: Array = []
+	for operation_variant in operations:
+		var signature := _operation_signature(operation_variant)
+		if signature.is_empty():
+			continue
+		var remaining_deferred := int(deferred_counts.get(signature, 0))
+		if remaining_deferred > 0:
+			deferred_counts[signature] = remaining_deferred - 1
+			continue
+		if operation_variant is Dictionary:
+			applied_operations.append(operation_variant.duplicate(true))
+	return applied_operations
+
+
+func _operation_signature(operation_variant: Variant) -> String:
+	if not (operation_variant is Dictionary):
+		return ""
+	return JSON.stringify(operation_variant)
 
 
 func _normalize_install_actions(raw_actions: Array) -> Array:

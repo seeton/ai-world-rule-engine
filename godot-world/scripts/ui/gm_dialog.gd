@@ -27,6 +27,7 @@ const UI_TEXT := {
 		"consent_updated": "[color=cyan]ゲームマスター:[/color] proposal の確認状態を更新しました。",
 		"consent_cancelled": "[color=cyan]ゲームマスター:[/color] 確認状態を外しました。proposal は review 欄に残っています。",
 		"consent_required": "[color=red]エラー:[/color] 先に proposal 内容を確認してください。",
+		"review_update_failed": "[color=red]エラー:[/color] review 更新に失敗しました。",
 		"apply_succeeded": "[color=green]完了:[/color] proposal をゲームへ適用しました。",
 		"apply_failed": "[color=red]エラー:[/color] proposal のゲーム適用に失敗しました。",
 		"review_refresh_failed": "[color=red]エラー:[/color] PoC4 review 状態を取得できませんでした。"
@@ -54,6 +55,7 @@ const UI_TEXT := {
 		"consent_updated": "[color=cyan]Game Master:[/color] Updated proposal review acknowledgement.",
 		"consent_cancelled": "[color=cyan]Game Master:[/color] Review acknowledgement was cleared. The proposal remains visible.",
 		"consent_required": "[color=red]Error:[/color] Review acknowledgement is required first.",
+		"review_update_failed": "[color=red]Error:[/color] Failed to update review acknowledgement.",
 		"apply_succeeded": "[color=green]Done:[/color] Proposal applied to the game.",
 		"apply_failed": "[color=red]Error:[/color] Failed to apply the proposal to the game.",
 		"review_refresh_failed": "[color=red]Error:[/color] Failed to refresh PoC4 review state."
@@ -540,7 +542,7 @@ func _on_consent_toggled(pressed: bool) -> void:
 		"screen": "poc4_review"
 	})
 	if String(result.get("status", "")) == "error":
-		_append_response("[color=red]エラー:[/color] " + String(result.get("message", "review 更新に失敗しました。")))
+		_append_response("%s %s" % [_text("review_update_failed"), String(result.get("message", "review update failed."))])
 		_refresh_review_state(false)
 		return
 

@@ -2,9 +2,13 @@ extends Control
 
 signal closed
 
+const GM_DIALOG_SCRIPT := preload("res://scripts/ui/gm_dialog.gd")
 const MAIN_DESKTOP_SCRIPT := preload("res://scripts/ui/main_desktop.gd")
 
-var _shell: Control
+var _conversation_view: Control
+var _admin_view: Control
+var _conversation_button: Button
+var _admin_button: Button
 
 
 func _ready() -> void:
@@ -56,7 +60,7 @@ func _build_ui() -> void:
 	layout.add_child(header)
 
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 16)
+	top_row.add_theme_constant_override("separation", 12)
 	header.add_child(top_row)
 
 	var title_wrap := VBoxContainer.new()
@@ -65,14 +69,32 @@ func _build_ui() -> void:
 	top_row.add_child(title_wrap)
 
 	var title := Label.new()
-	title.text = "PoC3 / GMとの会話 / 世界管理"
+	title.text = "PoC4 / GMとの会話"
 	title.add_theme_font_size_override("font_size", 24)
 	title_wrap.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "ここはプレイ世界の中でGMに話しかけたときだけ開く補助画面です。ここで3D化や各種ルールを適用し、終わったら世界へ戻って続けられます。"
+	subtitle.text = "プレイヤー向け会話から PoC4 proposal / Codex detail / 同意 / issue 結果まで確認できます。必要なら管理・デバッグ画面へ切り替えて既存の GM 操作も続けられます。"
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_wrap.add_child(subtitle)
+
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 10)
+	header.add_child(mode_row)
+
+	_conversation_button = Button.new()
+	_conversation_button.text = "プレイヤー会話 / PoC4 review"
+	_conversation_button.pressed.connect(func() -> void:
+		_set_mode("conversation")
+	)
+	mode_row.add_child(_conversation_button)
+
+	_admin_button = Button.new()
+	_admin_button.text = "管理 / デバッグ"
+	_admin_button.pressed.connect(func() -> void:
+		_set_mode("admin")
+	)
+	mode_row.add_child(_admin_button)
 
 	var back_button := Button.new()
 	back_button.text = "← 会話を終えて世界へ戻る"
@@ -81,21 +103,29 @@ func _build_ui() -> void:
 	back_button.call_deferred("grab_focus")
 
 	var help_label := Label.new()
-	help_label.text = "Escキーでも閉じられます。メイン画面は背後のプレイ世界です。"
+	help_label.text = "Escキーでも閉じられます。最初はプレイヤー向け会話が開き、必要なら上の切り替えで管理画面へ移動できます。"
 	help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	header.add_child(help_label)
 
-	var shell_host := Control.new()
-	shell_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	shell_host.size_flags_horizontal = SIZE_EXPAND_FILL
-	shell_host.size_flags_vertical = SIZE_EXPAND_FILL
-	layout.add_child(shell_host)
+	var content_host := Control.new()
+	content_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	content_host.size_flags_horizontal = SIZE_EXPAND_FILL
+	content_host.size_flags_vertical = SIZE_EXPAND_FILL
+	layout.add_child(content_host)
 
-	_shell = MAIN_DESKTOP_SCRIPT.new()
-	_shell.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	if _shell.has_signal("close_requested"):
-		_shell.close_requested.connect(_close)
-	shell_host.add_child(_shell)
+	_conversation_view = GM_DIALOG_SCRIPT.new()
+	_conversation_view.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	if _conversation_view.has_signal("closed"):
+		_conversation_view.closed.connect(_close)
+	content_host.add_child(_conversation_view)
+
+	_admin_view = MAIN_DESKTOP_SCRIPT.new()
+	_admin_view.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	if _admin_view.has_signal("close_requested"):
+		_admin_view.close_requested.connect(_close)
+	content_host.add_child(_admin_view)
+
+	_set_mode("conversation")
 
 
 func _fade_in() -> void:
@@ -110,3 +140,17 @@ func _close() -> void:
 		closed.emit()
 		queue_free()
 	)
+
+
+func _set_mode(mode: String) -> void:
+	var showing_conversation := mode != "admin"
+	if _conversation_view != null:
+		_conversation_view.visible = showing_conversation
+		if showing_conversation and _conversation_view.has_method("notify_overlay_visible"):
+			_conversation_view.call("notify_overlay_visible")
+	if _admin_view != null:
+		_admin_view.visible = not showing_conversation
+	if _conversation_button != null:
+		_conversation_button.disabled = showing_conversation
+	if _admin_button != null:
+		_admin_button.disabled = not showing_conversation

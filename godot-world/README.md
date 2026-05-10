@@ -10,7 +10,7 @@ This folder contains a data-driven rule package workflow for a Godot 4 simulatio
 
 ## Main folders
 
-- `rules/schema/` — JSON schema-style contract for safe rule packages.
+- `rules/schema/` — JSON schema-style contracts for safe rule packages and PoC4 rule proposals.
 - `rules/packages/` — built-in reusable mechanics.
 - `scripts/integration/` — repository and compiler helpers for Godot-side integration.
 - `docs/` — workflow notes for clone/fork/PR behavior.
@@ -57,6 +57,7 @@ The launcher resolves `godot-world` inside `.agent-workspaces/issue-<number>/`, 
 
 - move the in-world player directly inside a simple 2D plaza first
 - approach the in-world GM and interact with `E` or left click
+- the in-world GM now opens the player-facing PoC4 conversation first; use the overlay toggle when you also need the admin/debug shell
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
 - view rules, world state, and admin-heavy inspectors only after entering the GM screen
 - continue play in the quarter-view third-person 3D world after the conversion
@@ -84,12 +85,20 @@ If a requested mechanic does not already map to a built-in package, it should st
 ### WorldState API
 
 - `submit_player_task(task_text: String) -> Dictionary`
+- `talk_to_game_master(message: String) -> Dictionary`
+- `request_rule_proposal(task_text: String) -> Dictionary`
+- `get_pending_rule_proposal() -> Dictionary`
+- `update_pending_rule_review(reviewed: bool, metadata: Dictionary = {}) -> Dictionary`
+- `apply_pending_rule_proposal() -> Dictionary`
+- `get_last_rule_apply_result() -> Dictionary`
 - `clone_rule(rule_id: String) -> Dictionary`
 - `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary`
 - `get_world_snapshot() -> Dictionary`
 - `get_available_rule_templates() -> Array`
 - `advance_tick(delta_seconds: float) -> void`
 - `set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary`
+
+PoC4 backend/UI handoff validates proposal payloads against `rules/schema/rule_proposal.schema.json`, stores the pending proposal/review/apply state under `snapshot["poc4"]`, and uses an apply-only flow: generate a proposal, review it in the GM UI, then apply the compiled runtime patch directly to the live game.
 
 ### Desktop inspector (PoC2)
 

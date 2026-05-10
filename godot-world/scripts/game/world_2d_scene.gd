@@ -2,6 +2,8 @@ extends Node2D
 
 signal gm_interaction_requested
 
+const VisualEffectBurstScript := preload("res://scripts/game/visual_effect_burst_2d.gd")
+
 const PLAYER_ENTITY_ID := "origin_entity"
 const GM_ENTITY_ID := "gm_entity"
 const PIXELS_PER_UNIT_X: float = 92.0
@@ -34,11 +36,13 @@ var _world_name_label: Label = null
 var _clock_label: Label = null
 var _goal_hint: Label = null
 var _status_hint: Label = null
+var _effects_overlay: Node2D = null
 var _is_hovering_gm: bool = false
 var _player_position_initialized: bool = false
 var _last_synced_player_position: Vector2 = Vector2(9999.0, 9999.0)
 var _interaction_paused: bool = false
 var _entity_nodes: Dictionary = {}
+var _effect_nodes: Dictionary = {}
 
 
 func _ready() -> void:
@@ -75,6 +79,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key_event := event as InputEventKey
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():
 			gm_interaction_requested.emit()
+		_dispatch_runtime_input_event(key_event)
 
 
 func set_interaction_paused(paused: bool) -> void:
@@ -127,6 +132,10 @@ func _setup_hud() -> void:
 	interaction_hint.modulate.a = 0.0
 	interaction_hint.text = _text("hint_near")
 
+	_effects_overlay = Node2D.new()
+	_effects_overlay.name = "VisualEffectsOverlay"
+	_hud_layer.add_child(_effects_overlay)
+
 
 func _get_world_snapshot() -> Dictionary:
 	if _world_state != null and _world_state.has_method("get_world_snapshot"):
@@ -146,6 +155,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	_apply_player_entity(entities.get(PLAYER_ENTITY_ID, {}))
 	_apply_gm_entity(entities.get(GM_ENTITY_ID, {}))
 	_sync_world_entities(entities)
+	_sync_visual_effects(snapshot.get("visual_effects", []))
 
 
 func _apply_player_entity(entity_variant: Variant) -> void:
@@ -283,6 +293,54 @@ func _update_clock(snapshot: Dictionary) -> void:
 		_text("tick_prefix"),
 		int(world_clock.get("total_ticks", snapshot.get("tick_index", 0)))
 	]
+
+
+func _dispatch_runtime_input_event(key_event: InputEventKey) -> void:
+	if _world_state == null or not _world_state.has_method("dispatch_input_event"):
+		return
+	if not key_event.pressed or key_event.echo:
+		return
+	var key_name := OS.get_keycode_string(key_event.keycode).strip_edges().to_lower()
+	if key_name.is_empty():
+		return
+	_world_state.call("dispatch_input_event", "input.key.%s.pressed" % key_name, {
+		"entity_id": PLAYER_ENTITY_ID,
+		"world_mode": "two_d"
+	})
+
+
+func _sync_visual_effects(effects_variant: Variant) -> void:
+	if _effects_overlay == null:
+		return
+	var active_effect_ids: Dictionary = {}
+	if effects_variant is Array:
+		for effect_variant in effects_variant:
+			if not (effect_variant is Dictionary):
+				continue
+			var effect: Dictionary = effect_variant
+			var effect_id := String(effect.get("id", "")).strip_edges()
+			if effect_id.is_empty():
+				continue
+			active_effect_ids[effect_id] = true
+			var effect_node: Node2D = _effect_nodes.get(effect_id, null)
+			if effect_node == null:
+				effect_node = VisualEffectBurstScript.new()
+				effect_node.name = "Effect_%s" % effect_id
+				_effects_overlay.add_child(effect_node)
+				_effect_nodes[effect_id] = effect_node
+			effect_node.call("apply_effect", effect, _effect_screen_position(effect))
+
+	for effect_id in _effect_nodes.keys():
+		if active_effect_ids.has(effect_id):
+			continue
+		var stale_node: Node = _effect_nodes[effect_id]
+		stale_node.queue_free()
+		_effect_nodes.erase(effect_id)
+
+
+func _effect_screen_position(effect: Dictionary) -> Vector2:
+	var position := _vector3_from_variant(effect.get("position", {}), Vector3.ZERO)
+	return _world_to_screen(position)
 
 
 func _on_gm_interaction() -> void:

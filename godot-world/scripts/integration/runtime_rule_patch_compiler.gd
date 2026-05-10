@@ -21,14 +21,19 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
 				stat_components[String(op.get("stat_id", ""))] = compiled_effect.get("component", "stats")
 				effects.append(compiled_effect)
 			"upsert_rule":
-				if String(op.get("rule_type", "")) == "tick_delta":
+				var rule_type := String(op.get("rule_type", ""))
+				if rule_type == "tick_delta":
 					var compiled_tick := _compile_tick_delta(op, stat_components)
 					if not compiled_tick.is_empty():
 						effects.append(compiled_tick)
 					else:
 						deferred_operations.append(op.duplicate(true))
+				elif rule_type in ["event_visual_effect"]:
+					continue
 				else:
 					deferred_operations.append(op.duplicate(true))
+			"add_event_binding", "add_relation":
+				continue
 			_:
 				deferred_operations.append(op.duplicate(true))
 
@@ -72,7 +77,7 @@ func _compile_tick_delta(operation: Dictionary, stat_components: Dictionary) -> 
 	if stat_id.is_empty():
 		return {}
 
-	var interval_seconds := max(float(operation.get("interval_seconds", 1.0)), 0.001)
+	var interval_seconds: float = max(float(operation.get("interval_seconds", 1.0)), 0.001)
 	return {
 		"component": stat_components.get(stat_id, _resolve_component(stat_id, "")),
 		"field": stat_id,

@@ -1,18 +1,57 @@
-# Collapse-safe CLI (Phase 1)
+# World CLI (Tier 1 + Tier 2)
 
 ## このページが扱うこと
 
-Godot 内 UI と GM 対話に依存しない、**最終防衛地点としての CLI** の使い方をまとめる。world rule の崩壊や `builtin.space` の無効化で、プレイヤー入力・カメラ・HUD・GM ダイアログのいずれかが反応しなくなったときでも、別プロセスからエンジン状態を観測し、ルールを無効化・再有効化し、スナップショットで状態を退避できるようにする。
+世界が崩壊しても復旧導線へ届くための CLI 系統をまとめる。CLI は **2 つの階層 (Tier)** に分かれていて、**両方が同じコマンド文法・同じ engine-safe API 経路** を共有する (`scripts/cli/cli_command_parser.gd`):
 
-普段の運用 (デバッグ・QA・自動化) でも一次操作面として使える。
+- **Tier 1 — In-game text CLI overlay**: `C` キーで開く overlay。LineEdit にコマンドを打つと、headless CLI と同じパーサに渡って実行される。崩壊シグナル検知で自動オープンも行う。Godot は生きていて入力も拾える「軽度〜中程度の崩壊」を**ゲーム内で完結**して復旧する一次手段。
+- **Tier 2 — Headless CLI**: `bash scripts/world_cli.sh` で起動する別プロセスの CLI。Godot 自体が起動しない / 入力 rule まで死んだ場合のための **最終防衛地点 (last-line-of-defense)**。Tier 1 が立ち上がらない状況でも snapshot 経由で観測・復旧できる。
 
-## なぜ別プロセスなのか
+普段の運用 (デバッグ・QA・自動化) では Tier 1 を一次操作面として使い、Tier 2 は `--json` 出力で CI / バッチ用途に使う。
 
-CLI も world rule 崩壊に巻き込まれてはいけないので、稼働中の世界には attach せず、必ず `godot --headless` を新規プロセスとして起動する。状態をやり取りしたい場合はスナップショットファイルを介する。
+## なぜ別プロセスなのか (Tier 2)
+
+Tier 2 の headless CLI も world rule 崩壊に巻き込まれてはいけないので、稼働中の世界には attach せず、必ず `godot --headless` を新規プロセスとして起動する。状態をやり取りしたい場合はスナップショットファイルを介する (Tier 1 の overlay から `snapshot dump` で書き出して、Tier 2 から `--snapshot <path>` で読み込む)。
 
 `SimulationRuntime` / `WorldState` の engine-safe API のみを呼び、ティック評価ループは起動時には走らせない (`advance_tick` を明示的に呼ばない)。
 
-## 起動方法
+## Tier 1 — In-game text CLI overlay
+
+ゲームを起動した状態で **`C` キー** を押すと overlay が出る。下部の LineEdit にコマンドを打って Enter で送信。例:
+
+```
+world> help
+world> inspect
+world> rule disable some_rule_id
+world> rule enable some_rule_id
+world> package list
+world> snapshot dump user://world.json
+world> snapshot load user://world.json
+world> clear
+```
+
+- スクロールバックはコマンド (青) / 出力 (淡色) / エラー (橙) で色分け
+- ↑↓ キーで過去コマンドを呼び戻し可能 (best-effort, ヒストリは overlay インスタンス単位)
+- `clear` でスクロールバックを消去
+- C キーまたは Esc で閉じる (LineEdit にフォーカスが当たっている間は C キーを文字入力として受け取る)
+- T キー overlay (rule tree) と GM screen とは排他制御。GM screen 中は C キー入力は無視される
+- Tier 1 から復旧しきれない場合は Tier 2 (`bash scripts/world_cli.sh`) に降りる
+
+### 自動オープン (CollapseWatcher)
+
+`scripts/game/collapse_watcher.gd` が `WorldState` を約 0.5 秒間隔でポーリングし、`world_status.collapse_signals` に**新しいシグナルが立ち上がった瞬間**にだけ overlay を自動で開く。
+
+- **トリガ条件**:
+  - 既知のシグナルしか無い状態 → emit しない
+  - 起動直後の baseline (`no_installed_rules` のみ) → emit しない (baseline poll は黙って観測)
+  - 新たに `disabled_rules_present` / `rules_with_unmet_requirements` が現れた → open
+- **抑制**:
+  - GM screen が開いている間は auto-open を保留し、GM screen を閉じた直後に保留分を流す
+  - プレイヤーが overlay を手動で閉じた直後は、その時の理由 signal について **8 秒のクールダウン** を貼る (同じ理由では再 open しない)
+  - 既に overlay が開いていれば再 open しない
+- **手動 open との関係**: C キーで開いた overlay には badge は付かない。auto-open の場合のみ overlay 上部に「自動オープン: <理由>」が表示される。
+
+## Tier 2 — Headless CLI 起動方法
 
 issue worktree から `scripts/world_cli.sh` を使う。`scripts/launch_godot.sh` と同様、repo root から直接 `godot-world` を触ることを拒否する。
 
@@ -120,16 +159,16 @@ UI が立ち上がらない状態で何が起きているかを判断するた�
 
 ## smoke test
 
-`godot-world/scripts/tests/cli_smoke_test.gd` が、CLI ディスパッチャーが依存する engine-safe API を直接突いて以下を検証する:
-
-- `set_rule_enabled` の disable/enable が `installed_rules_by_id[*].enabled` に反映されること
-- disable 済みルールの effects が `advance_tick` で適用されないこと
-- snapshot dump → load の往復で `enabled` フラグが保持されること
+- `godot-world/scripts/tests/cli_smoke_test.gd` — CLI が依存する engine-safe API を直接突き、`set_rule_enabled` の disable/enable、disable 済みルールがティック時に適用されないこと、snapshot dump → load の往復で `enabled` フラグが保持されることを検証する。
+- `godot-world/scripts/tests/cli_command_parser_smoke_test.gd` — Tier 1 / Tier 2 が共有する `cli_command_parser.gd` を直接呼び、help / inspect / rule disable (成功 + 不在エラー) / package list / snapshot dump+load / clear directive / 不明コマンドのすべてが期待どおりの status / exit_code / payload を返すことを検証する。
+- `godot-world/scripts/tests/collapse_watcher_smoke_test.gd` — `collapse_watcher.gd` の signal-edge 検出を直接突き、初期 baseline で emit しないこと、`disabled_rules_present` が新たに立った瞬間にだけ emit すること、再 poll で重複 emit しないこと、`reset_baseline` で baseline をやり直せることを検証する。
 
 実行例:
 
 ```bash
-bash scripts/launch_godot.sh 93 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 104 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 104 -- --headless --script res://scripts/tests/cli_command_parser_smoke_test.gd
+bash scripts/launch_godot.sh 104 -- --headless --script res://scripts/tests/collapse_watcher_smoke_test.gd
 ```
 
 ## 既知の制約 / Phase 2 への TODO

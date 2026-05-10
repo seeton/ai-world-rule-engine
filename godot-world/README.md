@@ -33,6 +33,10 @@ The validator checks:
 
 If you also changed repository-side tests or rule package contracts, follow it with `node --test` from the repository root before opening a PR.
 
+## Collapse-safe CLI
+
+If the in-game UI or GM dialog becomes unresponsive (for example after a world rule collapse or `builtin.space` disable), use the headless rule-engine CLI as a last-line-of-defense control surface. See [`docs/cli.md`](docs/cli.md). Invoke it from an issue worktree via `bash scripts/world_cli.sh <issue-number> -- <subcommand>`; the wrapper refuses repo-root invocations.
+
 ## Safety model
 
 Rule packages only contain structured patch operations such as:

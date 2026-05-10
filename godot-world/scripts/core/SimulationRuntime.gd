@@ -228,6 +228,41 @@ func load_snapshot(file_path: String) -> Dictionary:
 	return load_result
 
 
+func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
+	var normalized_id := String(rule_id).strip_edges()
+	if normalized_id.is_empty():
+		return {
+			"status": "error",
+			"message": "ルール ID が空です。"
+		}
+
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	if not installed_rules.has(normalized_id):
+		return {
+			"status": "error",
+			"message": "ルール '%s' は導入されていません。" % normalized_id,
+			"rule_id": normalized_id
+		}
+
+	var rule: Dictionary = installed_rules[normalized_id]
+	var previous_enabled := bool(rule.get("enabled", true))
+	rule["enabled"] = enabled
+	installed_rules[normalized_id] = rule
+	_world_state["installed_rules"] = installed_rules
+
+	if previous_enabled != enabled:
+		var event_type := "rule_enabled" if enabled else "rule_disabled"
+		var message := "ルール '%s' を有効化しました。" % normalized_id if enabled else "ルール '%s' を無効化しました。" % normalized_id
+		_append_event(event_type, message, {"rule_id": normalized_id})
+
+	return {
+		"status": "enabled" if enabled else "disabled",
+		"rule_id": normalized_id,
+		"previous_enabled": previous_enabled,
+		"enabled": enabled
+	}
+
+
 func advance_tick(delta_seconds: float) -> void:
 	if delta_seconds <= 0.0:
 		return

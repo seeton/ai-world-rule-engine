@@ -48,6 +48,7 @@
 - Godot 作業では repo root から直接 `godot --path godot-world` を実行しない。
 - issue 用 worktree の `godot-world/` へ移動して `godot --path .` を実行し、必要なら `godot --editor --path .` を使う。
 - 作業完了後の issue close は、GitHub 上で対象 issue / PR の状態を確認して行う。
+- UI / GM 対話が反応せず GUI から復旧導線へ手が届かないときは、最終防衛地点として `bash scripts/world_cli.sh <issue-number> -- <subcommand>` を使う。詳しくは `godot-world/docs/cli.md` を参照。
 
 ## ドキュメント記述ガイド
 

@@ -6,6 +6,7 @@ extends SceneTree
 
 const WorldStateScript = preload("res://scripts/core/WorldState.gd")
 const InspectReportScript = preload("res://scripts/cli/inspect_report.gd")
+const CliActionsScript = preload("res://scripts/cli/cli_actions.gd")
 
 const EXIT_OK := 0
 const EXIT_USAGE := 2
@@ -91,7 +92,7 @@ func _run_rule(args: Array) -> void:
 			_die_usage("rule subcommand action must be 'enable' or 'disable'.")
 			return
 
-	var result: Dictionary = _world.set_rule_enabled(rule_id, enabled)
+	var result: Dictionary = CliActionsScript.set_rule_enabled(_world, rule_id, enabled)
 	var status := String(result.get("status", ""))
 	_emit_result(result)
 	if status == "enabled" or status == "disabled":
@@ -124,7 +125,7 @@ func _run_snapshot(args: Array) -> void:
 	var path := String(args[1])
 	match action:
 		"dump":
-			var save_result: Dictionary = _world.save_world_snapshot(path)
+			var save_result: Dictionary = CliActionsScript.save_snapshot(_world, path)
 			_emit_result({
 				"status": save_result.get("status", ""),
 				"path": save_result.get("path", path),
@@ -135,7 +136,7 @@ func _run_snapshot(args: Array) -> void:
 			else:
 				_quit_with(EXIT_RUNTIME)
 		"load":
-			var load_result: Dictionary = _world.load_world_snapshot(path)
+			var load_result: Dictionary = CliActionsScript.load_snapshot(_world, path)
 			_emit_result({
 				"status": load_result.get("status", ""),
 				"path": load_result.get("path", path),

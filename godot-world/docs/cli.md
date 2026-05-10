@@ -2,9 +2,12 @@
 
 ## このページが扱うこと
 
-Godot 内 UI と GM 対話に依存しない、**最終防衛地点としての CLI** の使い方をまとめる。world rule の崩壊や `builtin.space` の無効化で、プレイヤー入力・カメラ・HUD・GM ダイアログのいずれかが反応しなくなったときでも、別プロセスからエンジン状態を観測し、ルールを無効化・再有効化し、スナップショットで状態を退避できるようにする。
+世界が崩壊しても復旧導線へ届くための CLI 系統をまとめる。CLI 機能は **2 つの階層 (Tier)** に分かれる:
 
-普段の運用 (デバッグ・QA・自動化) でも一次操作面として使える。
+- **Tier 1 (in-game)** — `C` キーで開く in-game overlay。`inspect` の集計表示に加え、ルールの enable/disable とスナップショットの保存・読み込みを直接実行できる。actuation を `scripts/cli/cli_actions.gd` に集約しているので、Tier 2 と同じ engine-safe API 経路を辿る。Godot は生きていて入力も拾える「軽度〜中程度の崩壊」を **ゲーム内で完結** して復旧する一次手段。
+- **Tier 2 (headless CLI)** — `bash scripts/world_cli.sh` で起動する別プロセスの CLI。Godot 自体が起動しない / 入力 rule まで死んだ場合のための **最終防衛地点 (last-line-of-defense)**。Tier 1 が立ち上がらない状況でも snapshot 経由で観測・復旧できる。
+
+普段の運用 (デバッグ・QA・自動化) では Tier 1 を一次操作面として使い、Tier 2 は `--json` 出力で CI / バッチ用途に使う。
 
 ## なぜ別プロセスなのか
 
@@ -108,14 +111,18 @@ issue worktree 以外 (repo root の `godot-world/` を含む) からの実行�
 
 UI が立ち上がらない状態で何が起きているかを判断するための軽量シグナルで、復旧手順を決める入り口として使う。
 
-## In-game の C キー overlay (検証導線)
+## Tier 1 — In-game C キー overlay
 
-実際にワールドを崩壊させて headless CLI の挙動を確認するのは現状そう簡単ではない。そのため稼働中のワールドに対して **`C` キー** で in-game overlay を開き、CLI `inspect` と同じレポートを画面で確認できるようにしている。
+稼働中のワールドに対して **`C` キー** で overlay を開く。表示内容は headless CLI の `inspect` と同じ集計 (共通モジュール `scripts/cli/inspect_report.gd` 経由) で、画面上から actuation も実行できる:
 
-- overlay と headless CLI は `scripts/cli/inspect_report.gd` という共通モジュールを呼ぶので、表示内容は二重管理にならない
-- overlay 上の「スナップショットを保存」ボタンで `user://cli_inspect_<timestamp>.json` に書き出せる。headless CLI 側で `bash scripts/world_cli.sh <issue> --snapshot <そのパス> -- inspect` を叩けば、別プロセスからも同じ観測になることを突き合わせ確認できる
-- T キー overlay (rule tree) と GM screen とは排他制御される。GM screen が開いている間は C キー入力は無視される
-- overlay は read-only な観測 + snapshot dump のみ。`rule disable` / `snapshot load` などの actuation は引き続き headless CLI 側に集約する (UI 崩壊時に届かない overlay に actuation を持たせない)
+- **ルールの enable/disable**: 各ルール行の「無効化」/「有効化」ボタンが `WorldState.set_rule_enabled` を呼ぶ
+- **スナップショット保存**: 「現在の世界を保存」で `user://cli_inspect_<timestamp>.json` に書き出す
+- **スナップショット読み込み**: ドロップダウンで `user://cli_inspect_*.json` を選んで「選択を読み込む」で適用する。「再スキャン」でリストを更新できる
+- 操作結果は overlay 下部のステータス行に表示される
+
+actuation はすべて `scripts/cli/cli_actions.gd` 経由で行われ、Tier 2 (headless CLI) と同じ関数を呼ぶ。表示と操作のどちらも二重管理にならない。
+
+T キー overlay (rule tree) と GM screen とは排他制御される。GM screen が開いている間は C キー入力は無視される。Tier 1 から復旧しきれない場合は Tier 2 (`bash scripts/world_cli.sh`) に降りる。
 
 ## 想定する復旧フロー (UI 不能化時)
 
@@ -131,12 +138,14 @@ UI が立ち上がらない状態で何が起きているかを判断するた�
 
 - `godot-world/scripts/tests/cli_smoke_test.gd` — CLI ディスパッチャーが依存する engine-safe API を直接突き、`set_rule_enabled` の disable/enable、disable 済みルールがティック時に適用されないこと、snapshot dump → load の往復で `enabled` フラグが保持されることを検証する。
 - `godot-world/scripts/tests/cli_inspect_overlay_smoke_test.gd` — `inspect_report.gd` (overlay と CLI が共有する集計モジュール) が、ルール導入直後 / disable 直後 / 連続呼び出しで安定したレポートを返すことを検証する。
+- `godot-world/scripts/tests/cli_actions_smoke_test.gd` — `cli_actions.gd` (Tier 1 / Tier 2 共有の actuation surface) を経由して set_rule_enabled / save_snapshot / load_snapshot が同じ engine-safe 結果を返すこと、null world や存在しない rule_id でエラーステータスを返すこと、`list_user_snapshots` が `cli_inspect_*.json` プレフィックスのみ拾うことを検証する。
 
 実行例:
 
 ```bash
-bash scripts/launch_godot.sh 97 -- --headless --script res://scripts/tests/cli_smoke_test.gd
-bash scripts/launch_godot.sh 97 -- --headless --script res://scripts/tests/cli_inspect_overlay_smoke_test.gd
+bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_smoke_test.gd
+bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_inspect_overlay_smoke_test.gd
+bash scripts/launch_godot.sh 99 -- --headless --script res://scripts/tests/cli_actions_smoke_test.gd
 ```
 
 ## 既知の制約 / Phase 2 への TODO

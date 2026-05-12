@@ -77,7 +77,7 @@ var _pending_proposal_state: Dictionary = {}
 var _last_apply_result: Dictionary = {}
 var _async_request_running := false
 var _async_poll_elapsed := 0.0
-var compact_mode := false
+var compact_mode: bool = false
 
 
 func _ready() -> void:

@@ -67,6 +67,11 @@ const CHARACTER_TAG_HINTS: Array = ["agent", "character", "human", "mortal", "np
 const OBJECT_ARCHETYPE_HINTS: Array = ["container", "item", "location", "object", "place", "prop", "resource", "structure", "tool"]
 const OBJECT_TAG_HINTS: Array = ["container", "item", "location", "object", "portable", "prop", "resource", "structure", "tool"]
 const PROPOSAL_REVIEW_DEBOUNCE_SECONDS := 0.35
+const TAB_HOME := "統合画面"
+const TAB_CHAT := "GM相談"
+const TAB_REVIEW := "提案レビュー"
+const TAB_RULES := "稼働ルール"
+const TAB_WORLD := "世界・履歴"
 
 var _world_state: Node = null
 var _task_input: TextEdit
@@ -290,7 +295,7 @@ func _build_ui() -> void:
 
 func _build_home_tab() -> Control:
     var tab := VBoxContainer.new()
-    tab.name = "統合画面"
+    tab.name = TAB_HOME
     tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
     tab.add_theme_constant_override("separation", 12)
@@ -307,10 +312,10 @@ func _build_home_tab() -> Control:
     cards.add_theme_constant_override("separation", 12)
     tab.add_child(cards)
 
-    cards.add_child(_build_home_card("GM相談", "世界ルールの相談と PoC4 proposal の作成を行います。", 1))
-    cards.add_child(_build_home_card("提案レビュー", "生成された提案を確認・承認してからゲームへ適用します。", 2))
-    cards.add_child(_build_home_card("稼働ルール", "現在のルール依存ツリーを現行UIのまま確認します。", 3))
-    cards.add_child(_build_home_card("世界・履歴", "エンティティ関係ツリー、スナップショット、イベント履歴を確認します。", 4))
+    cards.add_child(_build_home_card("GM相談", "世界ルールの相談と PoC4 proposal の作成を行います。", TAB_CHAT))
+    cards.add_child(_build_home_card("提案レビュー", "生成された提案を確認・承認してからゲームへ適用します。", TAB_REVIEW))
+    cards.add_child(_build_home_card("稼働ルール", "現在のルール依存ツリーを現行UIのまま確認します。", TAB_RULES))
+    cards.add_child(_build_home_card("世界・履歴", "エンティティ関係ツリー、スナップショット、イベント履歴を確認します。", TAB_WORLD))
 
     var return_button := Button.new()
     return_button.text = "世界へ戻って観察"
@@ -318,7 +323,7 @@ func _build_home_tab() -> Control:
     tab.add_child(return_button)
     return tab
 
-func _build_home_card(title_text: String, description: String, tab_index: int) -> Control:
+func _build_home_card(title_text: String, description: String, target_tab_name: String) -> Control:
     var panel := _make_panel_section(title_text, description)
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -326,14 +331,14 @@ func _build_home_card(title_text: String, description: String, tab_index: int) -
     var button := Button.new()
     button.text = "開く"
     button.pressed.connect(func() -> void:
-        _tabs.current_tab = tab_index
+        _select_tab_by_name(target_tab_name)
     )
     body.add_child(button)
     return panel
 
 func _build_chat_tab() -> Control:
     var host := Control.new()
-    host.name = "GM相談"
+    host.name = TAB_CHAT
     host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     host.size_flags_vertical = Control.SIZE_EXPAND_FILL
     _chat_view = GMDialogScript.new()
@@ -345,7 +350,7 @@ func _build_chat_tab() -> Control:
     return host
 
 func _build_review_tab() -> Control:
-    var scroll := _make_tab_scroll("提案レビュー")
+    var scroll := _make_tab_scroll(TAB_REVIEW)
     var body := scroll.get_child(0) as VBoxContainer
     body.add_child(_build_task_panel())
     body.add_child(_build_proposal_panel())
@@ -353,7 +358,7 @@ func _build_review_tab() -> Control:
     return scroll
 
 func _build_rules_tab() -> Control:
-    var scroll := _make_tab_scroll("稼働ルール")
+    var scroll := _make_tab_scroll(TAB_RULES)
     var body := scroll.get_child(0) as VBoxContainer
     body.add_child(_build_installed_rules_panel())
     body.add_child(_build_template_panel())
@@ -362,7 +367,7 @@ func _build_rules_tab() -> Control:
     return scroll
 
 func _build_world_tab() -> Control:
-    var scroll := _make_tab_scroll("世界・履歴")
+    var scroll := _make_tab_scroll(TAB_WORLD)
     var body := scroll.get_child(0) as VBoxContainer
     body.add_child(_build_world_state_panel())
     body.add_child(_build_text_panel("会話ログと世界イベント", "GM会話中の操作履歴と最近の世界イベントを表示します。", "event_log", 180))
@@ -378,6 +383,15 @@ func _make_tab_scroll(tab_name: String) -> ScrollContainer:
     body.add_theme_constant_override("separation", 10)
     scroll.add_child(body)
     return scroll
+
+func _select_tab_by_name(tab_name: String) -> void:
+    if _tabs == null:
+        return
+    for index in range(_tabs.get_child_count()):
+        var child := _tabs.get_child(index)
+        if child.name == tab_name:
+            _tabs.current_tab = index
+            return
 
 func _build_task_panel() -> Control:
     var panel := _make_panel_section("GMへの相談", "ここでは既存テンプレート候補や即時に試せる方針を確認します。PoC4 の Codex proposal 生成は、プレイヤー向けの GM 会話画面から行ってください。")

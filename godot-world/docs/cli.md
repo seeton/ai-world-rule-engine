@@ -6,6 +6,8 @@ Godot 内 UI と GM 対話に依存しない、**最終防衛地点としての 
 
 普段の運用 (デバッグ・QA・自動化) でも一次操作面として使える。
 
+> **重要 (#106)**: CLI と GUI / GM / Codex / automation は **同じ UI ではないが、同じ World Operation API の別 surface である**。CLI 文法は string → `{ operation_type, request }` への変換であり、実際の状態遷移は `scripts/world_ops/dispatcher.gd` 経由で行われる。各 operation の契約 (validate / dry_run / execute / diff / rollback hint) は [`world_operations.md`](world_operations.md) を参照。
+
 ## なぜ別プロセスなのか
 
 CLI も world rule 崩壊に巻き込まれてはいけないので、稼働中の世界には attach せず、必ず `godot --headless` を新規プロセスとして起動する。状態をやり取りしたい場合はスナップショットファイルを介する。
@@ -32,33 +34,45 @@ bash scripts/world_cli.sh 93 --dry-run -- inspect
 
 issue worktree 以外 (repo root の `godot-world/` を含む) からの実行は `world_cli.sh` 側で拒否される。AGENTS.md の worktree 強制方針と整合している。
 
-## サブコマンド
+## サブコマンドと対応 operation
 
-| サブコマンド | 内容 |
-| --- | --- |
-| `inspect` | installed rules / installed packages / world clock / 崩壊シグナルを stdout に出す。 |
-| `rule enable <rule_id>` | 指定ルールの `enabled` を true に。 |
-| `rule disable <rule_id>` | 指定ルールの `enabled` を false に。`SimulationRuntime` のティックは即座にこのフラグを尊重する。 |
-| `package list` | `res://rules/packages` 配下から発見された package を列挙する。 |
-| `snapshot dump <path>` | `WorldState.save_world_snapshot` で deterministic snapshot を書き出す。 |
-| `snapshot load <path>` | `WorldState.load_world_snapshot` で読み込み、`inspect` 等と組み合わせて状態を再現する。 |
+CLI 文法 → operation request の対応表。actuation の中身は [`world_operations.md`](world_operations.md) で定義された operation contract に従う。
+
+| サブコマンド | 対応 operation_type | 内容 |
+| --- | --- | --- |
+| `inspect` | `InspectWorld` | installed rules / installed packages / world clock / 崩壊シグナルを返す。read-only。 |
+| `rule enable <rule_id>` | `EnableRule` | 指定ルールの `enabled` を true に。rule 不在は validation_error。 |
+| `rule disable <rule_id>` | `DisableRule` | 指定ルールの `enabled` を false に。 |
+| `package list` | `ListPackages` | `res://rules/packages` 配下から発見された package を列挙する。 |
+| `snapshot dump <path>` | `DumpSnapshot` | `WorldState.save_world_snapshot` で deterministic snapshot を書き出す。 |
+| `snapshot load <path>` | `LoadSnapshot` | `WorldState.load_world_snapshot` で現在世界を置換する。 |
 
 `snapshot load` 単独だと load 結果を表示して終わる。観測したい場合は `--snapshot <path> -- inspect` のようにグローバル `--snapshot` 経由で読み込んでから別コマンドを実行する。
 
 ## グローバルフラグ
 
-- `--json` : 結果を 1 行 JSON で stdout に出す。stderr は人向けログに使う。Godot 自体が起動時に `Godot Engine v...` のバナー行を stdout の冒頭に出すため、CI から扱う場合は `tail -n 1` か `grep '^{'` で末尾の JSON 行だけ取り出すこと。
-- `--snapshot <path>` : サブコマンドを実行する前にスナップショットを読み込む。
-- `--dry-run` : 実行されるコマンドを表示するだけで Godot を起動しない。
-- `--allow-detached-head` : 通常は worktree が detached HEAD だと拒否されるが、意図的に許可する場合に指定する。
+CLI 本体 (`scripts/cli/main.gd`) のフラグと、ラッパー (`scripts/world_cli.sh`) のフラグは **別物**。混乱を避けるため、適用範囲を明示する。
+
+### CLI 本体のフラグ (`--` の後ろに置く)
+
+- `--json` : 結果を 1 行 JSON envelope (`operation_type` / `status` / `exit_code` / `lines` / `payload` / `diff` / `audit` / `rollback` / `validation`) で stdout に出す。stderr は人向けログ。Godot 起動バナー行が冒頭に出るため、CI から扱う場合は `tail -n 1` か `grep '^{'` で末尾の JSON 行だけ取り出すこと。
+- `--dry-run` : operation の `dry_run` パスを呼び、WorldState を mutate せずに「何が起きるか」だけを返す。**ラッパーの `--dry-run` とは別物**。ラッパー経由で operation dry_run を使いたいときは、`--` の後ろに置く: `bash scripts/world_cli.sh 106 -- inspect --dry-run`。
+- `--snapshot <path>` : サブコマンドを実行する前にスナップショットを読み込む (内部的に LoadSnapshot operation を dispatch する)。
+
+### `world_cli.sh` ラッパー側のフラグ (`--` の前に置く)
+
+- `--dry-run` : Godot を起動せず、組み立てた launch コマンドだけを表示する **ラッパーレベルの diagnostic**。CLI 本体へは forward されない。
+- `--allow-detached-head` : worktree が detached HEAD でも launch を許可する。
 
 ## 終了コード
 
 | コード | 意味 |
 | --- | --- |
-| 0 | 成功 (操作が完了した、もしくは inspect が結果を返した) |
-| 2 | 使い方エラー (引数不足、未対応サブコマンド等) |
-| 3 | ランタイムエラー (ルール未導入、スナップショットファイル不正、保存失敗等) |
+| 0 | 成功 (`status: ok`) または `status: dry_run` または `status: directive` (help / clear など) |
+| 2 | 引数 / バリデーション関連の失敗。具体的には CLI surface 側の `status: usage_error` (未対応サブコマンド、引数不足、tokenize 失敗など) と operation 層側の `status: validation_error` (rule 不在、空 path などの事前検出) の両方を含む |
+| 3 | 実行エラー (`status: execution_error`、エンジン側で実装が失敗した場合) |
+
+> **既存運用との差分**: 以前は「ルール未導入」「snapshot 読み込み失敗」もすべて exit 3 で返していたが、operation layer 導入後は `validate()` で事前検出できるものは exit 2 (`validation_error`)、実際の execute 中に起きた失敗のみ exit 3 (`execution_error`) と切り分けられる。CLI 文法そのものの失敗 (`usage_error`) も exit 2 を返すが、`status` を見ると区別できる。
 
 ## inspect の JSON スキーマ (Phase 1)
 
@@ -137,3 +151,17 @@ bash scripts/launch_godot.sh 93 -- --headless --script res://scripts/tests/cli_s
 - 稼働中世界への live attach は提供しない。常に `--snapshot` 経由でやりとりする。
 - `restore` / `package install|remove` / `propose` は本フェーズでは未実装。それぞれ #92 / #90 / #85・#87・#63 の契約確定後に follow-up で追加する。
 - `scripts/cli/main.gd` が依存する WorldState API が今後変わる場合、`cli_smoke_test.gd` を一緒に更新する。
+
+## #104 / #105 (in-game text CLI overlay) の follow-up 方針
+
+#104 で議論し #105 で試作した in-game text CLI overlay は、**parser を中心に置く形** (overlay と CLI 本体が `cli_command_parser.gd` を共有する) で進めていた。本 PR (#106 / #107) で World Operation API を導入したことで、その路線は時代遅れになる。
+
+follow-up で overlay を再着手する場合の必須条件:
+
+- overlay は **World Operation API の surface adapter** として作り直す。LineEdit の文字列を `CliCommandParser.dispatch_string` 経由、または `{ operation_type, request }` を直接 `WorldOpDispatcher.dispatch` に渡す形にする。
+- overlay から `WorldState.set_rule_enabled` / `save_world_snapshot` / `load_world_snapshot` を **直接呼び出さない**。
+- ルールの enable/disable やスナップショット保存などの **すべての状態遷移** は dispatcher を経由する。
+- #105 にあった UI 差分 (RichTextLabel scrollback / LineEdit / 履歴 / 自動オープン watcher など) のうち UI として再利用したい部分を残す場合も、実 actuation は dispatcher 経由に置き換える。
+- overlay 経由と headless CLI 経由で同じ operation を呼んだとき結果が一致することを `world_op_surface_parity_smoke_test.gd` 相当のテストでカバーする (現在は CLI parser 経由 vs direct dispatcher 経由のみ)。
+
+要するに **`cli_command_parser.gd` 中心の共通化ではなく、`WorldOpDispatcher` 中心の共通化** に作り直す。#105 はその意味で PR としては close 済みであり、本 PR が main へ載った後に新 issue/PR として overlay を再着手する。

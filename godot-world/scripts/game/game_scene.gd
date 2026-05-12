@@ -161,12 +161,12 @@ func _refresh_world_overlay_state() -> void:
 	if _active_world == null or not _active_world.has_method("set_overlay_active"):
 		return
 
-	_active_world.call("set_overlay_active", _has_visible_overlay())
+	_active_world.call("set_overlay_active", _has_overlay_child())
 
 
-func _has_visible_overlay() -> bool:
+func _has_overlay_child() -> bool:
 	for child in overlay_layer.get_children():
-		if child is Node and not child.is_queued_for_deletion():
+		if not child.is_queued_for_deletion():
 			return true
 	return false
 

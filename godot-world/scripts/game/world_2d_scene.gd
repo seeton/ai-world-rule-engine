@@ -87,6 +87,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_interaction_paused(paused: bool) -> void:
 	_interaction_paused = paused
 	player.set_physics_process(not paused)
+	_refresh_world_hud_visibility()
 
 
 func _setup_hud() -> void:
@@ -146,6 +147,15 @@ func _setup_hud() -> void:
 	interaction_hint.visible = false
 	interaction_hint.modulate.a = 0.0
 	interaction_hint.text = _text("hint_near")
+	_refresh_world_hud_visibility()
+
+
+func _refresh_world_hud_visibility() -> void:
+	if _hud_layer != null:
+		_hud_layer.visible = not _interaction_paused
+	if _interaction_paused:
+		interaction_hint.visible = false
+		interaction_hint.modulate.a = 0.0
 
 
 func _get_world_snapshot() -> Dictionary:

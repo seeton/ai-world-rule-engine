@@ -100,6 +100,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_interaction_paused(paused: bool) -> void:
 	_interaction_paused = paused
 	player.set_physics_process(not paused)
+	_refresh_world_hud_visibility()
 
 
 func _setup_hud() -> void:
@@ -170,6 +171,12 @@ func _setup_hud() -> void:
 	_interaction_hint.add_theme_constant_override("shadow_offset_y", 1)
 	_interaction_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_interaction_hint)
+	_refresh_world_hud_visibility()
+
+
+func _refresh_world_hud_visibility() -> void:
+	if _hud_layer != null:
+		_hud_layer.visible = not _interaction_paused
 
 
 func _get_world_snapshot() -> Dictionary:

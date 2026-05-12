@@ -420,19 +420,25 @@ test("WorldState polls async proposals without blocking reset cleanup", () => {
   }
 });
 
-test("playable GM overlay reaches both PoC4 conversation and admin UI", () => {
+test("playable GM overlay hosts tabbed console and compact GM conversation tab", () => {
   const overlaySource = fs.readFileSync(gmScreenOverlayPath, "utf8");
+  const mainDesktopSource = fs.readFileSync(mainDesktopPath, "utf8");
 
   for (const snippet of [
-    'const GM_DIALOG_SCRIPT := preload("res://scripts/ui/gm_dialog.gd")',
     'const MAIN_DESKTOP_SCRIPT := preload("res://scripts/ui/main_desktop.gd")',
-    "_conversation_view = GM_DIALOG_SCRIPT.new()",
     "_admin_view = MAIN_DESKTOP_SCRIPT.new()",
-    '_set_mode("conversation")',
-    '_conversation_button.text = "プレイヤー会話 / PoC4 review"',
-    '_admin_button.text = "管理 / デバッグ"',
+    'back_button.text = "← 世界へ戻る (Esc)"',
   ]) {
     assert.equal(overlaySource.includes(snippet), true, `Missing playable overlay wiring: ${snippet}`);
+  }
+
+  for (const snippet of [
+    "_tabs = TabContainer.new()",
+    "_tabs.add_child(_build_chat_tab())",
+    "_chat_view = GMDialogScript.new()",
+    '_chat_view.set("compact_mode", true)',
+  ]) {
+    assert.equal(mainDesktopSource.includes(snippet), true, `Missing tabbed GM dialog wiring: ${snippet}`);
   }
 });
 

@@ -89,7 +89,6 @@ var _entity_tree: Tree
 var _world_state_view: TextEdit
 var _event_log_view: TextEdit
 var _poc4_state_view: TextEdit
-var _status_label: Label
 var _three_d_preview_renderer: Control
 var _tabs: TabContainer
 var _home_summary_label: Label
@@ -670,23 +669,6 @@ func _build_text_panel(title_text: String, description: String, panel_key: Strin
             _event_log_view = view
 
     return panel
-
-func _build_footer_bar() -> Control:
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 12)
-
-    var help_label := Label.new()
-    help_label.text = "会話を終えるとプレイヤー視点のプレイ世界へ戻ります。"
-    help_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    row.add_child(help_label)
-
-    var close_button := Button.new()
-    close_button.text = "会話を終えて世界へ戻る"
-    close_button.pressed.connect(_emit_close_requested)
-    row.add_child(close_button)
-
-    return row
 
 func _make_panel_section(title_text: String, description: String) -> PanelContainer:
     var panel := PanelContainer.new()
@@ -1350,8 +1332,6 @@ func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
     var poc4_status := _describe_poc4_status()
     var summary := "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
-    if _status_label != null:
-        _status_label.text = summary
     if _home_summary_label != null:
         _home_summary_label.text = summary
     if _tabs != null and _tabs.get_tab_count() >= 5:

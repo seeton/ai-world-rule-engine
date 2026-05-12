@@ -5,7 +5,6 @@ signal closed
 const MAIN_DESKTOP_SCRIPT := preload("res://scripts/ui/main_desktop.gd")
 
 var _admin_view: Control
-var _title_label: Label
 
 
 func _ready() -> void:
@@ -71,7 +70,6 @@ func _build_ui() -> void:
 	title.text = _get_world_title()
 	title.add_theme_font_size_override("font_size", 22)
 	title_wrap.add_child(title)
-	_title_label = title
 
 	var back_button := Button.new()
 	back_button.text = "← 世界へ戻る (Esc)"

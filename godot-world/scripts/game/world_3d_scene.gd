@@ -54,7 +54,7 @@ var _entity_nodes: Dictionary = {}
 var _effect_nodes: Dictionary = {}
 var _player_position_initialized: bool = false
 var _last_synced_player_position: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
-var _interaction_paused: bool = false
+var _overlay_active: bool = false
 
 
 func _ready() -> void:
@@ -72,7 +72,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _interaction_paused and _world_state != null and _world_state.has_method("advance_tick"):
+	if not _overlay_active and _world_state != null and _world_state.has_method("advance_tick"):
 		_world_state.call("advance_tick", delta)
 
 	_sync_player_to_world_state()
@@ -85,7 +85,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _interaction_paused:
+	if _overlay_active:
 		return
 
 	if event.is_action_pressed("ui_accept") and _is_player_in_range():
@@ -107,9 +107,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dispatch_runtime_input_event(key_event)
 
 
-func set_interaction_paused(paused: bool) -> void:
-	_interaction_paused = paused
-	player.set_physics_process(not paused)
+func set_overlay_active(active: bool) -> void:
+	_overlay_active = active
+	player.set_physics_process(not active)
+	if _hud_layer != null:
+		_hud_layer.visible = not active
 
 
 func _setup_hud() -> void:
@@ -341,7 +343,7 @@ func _desired_camera_position() -> Vector3:
 
 
 func _sync_player_to_world_state() -> void:
-	if not _player_position_initialized or _interaction_paused:
+	if not _player_position_initialized or _overlay_active:
 		return
 	if _world_state == null or not _world_state.has_method("set_entity_position"):
 		return
@@ -360,7 +362,7 @@ func _sync_player_to_world_state() -> void:
 
 
 func _update_interaction_hint(delta: float) -> void:
-	var should_show := (_is_player_in_range() or _is_hovering_gm) and not _interaction_paused
+	var should_show := (_is_player_in_range() or _is_hovering_gm) and not _overlay_active
 	if should_show:
 		_interaction_hint.visible = true
 		_interaction_hint.text = _text("hint_near") if _is_player_in_range() else _text("hint_far")
@@ -442,7 +444,7 @@ func _effect_screen_position(effect: Dictionary) -> Vector2:
 
 
 func _on_gm_interaction() -> void:
-	if _interaction_paused or not _is_player_in_range():
+	if _overlay_active or not _is_player_in_range():
 		return
 	gm_interaction_requested.emit()
 

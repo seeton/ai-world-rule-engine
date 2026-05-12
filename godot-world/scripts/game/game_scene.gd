@@ -24,6 +24,8 @@ var _pending_auto_open_signals: PackedStringArray = PackedStringArray()
 
 func _ready() -> void:
 	_world_state = get_node_or_null("/root/WorldState")
+	overlay_layer.child_entered_tree.connect(_on_overlay_layer_children_changed)
+	overlay_layer.child_exiting_tree.connect(_on_overlay_layer_children_changed)
 	_collapse_watcher = COLLAPSE_WATCHER_SCRIPT.new()
 	_collapse_watcher.collapse_signals_appeared.connect(_on_collapse_signals_appeared)
 	add_child(_collapse_watcher)
@@ -60,7 +62,7 @@ func _switch_world(world_mode: String) -> void:
 		_active_world.cli_overlay_toggle_requested.connect(_on_cli_overlay_toggle_requested)
 	world_host.add_child(_active_world)
 	_active_mode = world_mode
-	_refresh_active_world_interaction_pause()
+	_refresh_world_overlay_state()
 
 
 func _on_gm_interaction_requested() -> void:
@@ -73,7 +75,6 @@ func _on_gm_interaction_requested() -> void:
 	_gm_screen = GM_SCREEN_OVERLAY_SCRIPT.new()
 	_gm_screen.closed.connect(_on_gm_screen_closed)
 	overlay_layer.add_child(_gm_screen)
-	_refresh_active_world_interaction_pause()
 
 
 func _on_gm_screen_closed() -> void:
@@ -82,8 +83,6 @@ func _on_gm_screen_closed() -> void:
 	var desired_mode := _desired_world_mode()
 	if desired_mode != _active_mode:
 		_switch_world(desired_mode)
-	else:
-		_refresh_active_world_interaction_pause()
 	_drain_pending_auto_open()
 
 
@@ -99,7 +98,6 @@ func _on_rule_tree_toggle_requested() -> void:
 	_rule_tree_overlay = RULE_TREE_OVERLAY_SCRIPT.new()
 	_rule_tree_overlay.closed.connect(_on_rule_tree_overlay_closed)
 	overlay_layer.add_child(_rule_tree_overlay)
-	_refresh_active_world_interaction_pause()
 
 
 func _close_rule_tree_overlay() -> void:
@@ -115,7 +113,6 @@ func _close_rule_tree_overlay() -> void:
 
 func _on_rule_tree_overlay_closed() -> void:
 	_rule_tree_overlay = null
-	_refresh_active_world_interaction_pause()
 	_drain_pending_auto_open()
 
 
@@ -137,7 +134,6 @@ func _open_cli_inspect_overlay(auto_open_reasons: PackedStringArray) -> void:
 		_cli_inspect_overlay.call("set_auto_open_reasons", auto_open_reasons)
 	_cli_inspect_overlay.closed.connect(_on_cli_inspect_overlay_closed.bind(auto_open_reasons))
 	overlay_layer.add_child(_cli_inspect_overlay)
-	_refresh_active_world_interaction_pause()
 
 
 func _close_cli_inspect_overlay() -> void:
@@ -155,14 +151,24 @@ func _on_cli_inspect_overlay_closed(auto_open_reasons: PackedStringArray = Packe
 	_cli_inspect_overlay = null
 	for reason in auto_open_reasons:
 		_signal_cooldowns[String(reason)] = AUTO_OPEN_COOLDOWN_SECONDS
-	_refresh_active_world_interaction_pause()
 
 
-func _refresh_active_world_interaction_pause() -> void:
-	if _active_world == null or not _active_world.has_method("set_interaction_paused"):
+func _on_overlay_layer_children_changed(_node: Node) -> void:
+	call_deferred("_refresh_world_overlay_state")
+
+
+func _refresh_world_overlay_state() -> void:
+	if _active_world == null or not _active_world.has_method("set_overlay_active"):
 		return
 
-	_active_world.call("set_interaction_paused", _gm_screen != null or _rule_tree_overlay != null or _cli_inspect_overlay != null)
+	_active_world.call("set_overlay_active", _has_visible_overlay())
+
+
+func _has_visible_overlay() -> bool:
+	for child in overlay_layer.get_children():
+		if child is Node and not child.is_queued_for_deletion():
+			return true
+	return false
 
 
 func _on_collapse_signals_appeared(new_signals: PackedStringArray) -> void:

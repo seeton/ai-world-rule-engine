@@ -33,6 +33,10 @@ The validator checks:
 
 If you also changed repository-side tests or rule package contracts, follow it with `node --test` from the repository root before opening a PR.
 
+## World Operation API
+
+Per #106, every surface that mutates the world (CLI, GUI, GM, Codex, automation) goes through the same World Operation API in `scripts/world_ops/`. CLI string syntax / GUI buttons / GM proposals are all just adapters that build a `{ operation_type, request }` and dispatch through `scripts/world_ops/dispatcher.gd`. See [`docs/world_operations.md`](docs/world_operations.md) for the operation catalog, result schema, and validate / dry_run / execute contract.
+
 ## Collapse-safe CLI
 
 If the in-game UI or GM dialog becomes unresponsive (for example after a world rule collapse or `builtin.space` disable), use the headless rule-engine CLI as a last-line-of-defense control surface. See [`docs/cli.md`](docs/cli.md). Invoke it from an issue worktree via `bash scripts/world_cli.sh <issue-number> -- <subcommand>`; the wrapper refuses repo-root invocations.

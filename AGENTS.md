@@ -43,6 +43,22 @@
 
 もし将来 helper script を使う運用にするなら、その script を同じブランチで追跡対象に追加してから、この文書へ具体名を書くこと。
 
+## World Operation API は今後の実装基準 (#106)
+
+`godot-world/` の世界状態 (rules / entities / snapshots / packages 等) を**観測または変更する**新しい surface (CLI / GUI / GM 対話 / Codex / automation) は、原則として `scripts/world_ops/dispatcher.gd` を経由すること。
+
+- surface の責務は string / button / form / proposal を `{ operation_type, request }` に変換する **adapter** に留めること。
+- surface から `WorldState` の mutator (`set_rule_enabled` / `save_world_snapshot` / `load_world_snapshot` 等) や scene node を**直接** mutate しないこと。直接読みが必要な read-only 経路 (HUD のスナップショット表示など) も、可能な限り `InspectWorld` operation 経由に統一する。
+- 新しい世界操作を追加する場合は、次をワンセットで揃えること:
+  1. `scripts/world_ops/ops/<name>.gd` に `operation_type()` / `validate()` / `dry_run()` / `execute()` を実装
+  2. `scripts/world_ops/dispatcher.gd` の `OPERATION_SCRIPTS` registry に preload を追加
+  3. uniform result contract (`scripts/world_ops/result.gd`) を経由して結果を返す
+  4. validation / dry_run / error / rollback hint の挙動を operation 内に閉じる
+  5. `scripts/tests/world_op_dispatcher_smoke_test.gd` に新 operation のテストケースを追加
+  6. CLI から呼びたい場合は `scripts/cli/cli_command_parser.gd` に文法マッピングを足し、`scripts/tests/world_op_surface_parity_smoke_test.gd` に parity ケースを足す
+- 既存 surface (`scripts/cli/main.gd` / 将来の GUI overlay / GM apply / Codex 等) を変更する PR では、operation API 経由になっているか PR 本文で明示すること。直接 mutate を残す場合は理由 (例: engine bootstrap、test fixture) を PR コメントに記載すること。
+- 詳細な契約 (status taxonomy / exit code mapping / rollback hint / surface parity test) は `godot-world/docs/world_operations.md` を参照。
+
 ## Godot の起動とクローズ
 
 - Godot 作業では repo root から直接 `godot --path godot-world` を実行しない。

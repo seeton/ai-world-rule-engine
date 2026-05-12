@@ -99,6 +99,18 @@ Do not add `@copilot レビューをお願いします` when opening a brand-new
 
 Do not document helper scripts or workflow tooling unless that helper is tracked in the same branch/repository. If the repository does not contain the helper, document the real `git`, `godot`, or test commands directly.
 
+## World Operation API checklist (`godot-world/` gameplay / runtime / UI / GM changes)
+
+PR が `godot-world/` の gameplay / runtime / UI / GM / Codex 経路に触れる場合、PR 本文に次のチェックリストを含めてください (該当しない項目は理由付きで `N/A` と書く)。
+
+- [ ] 世界状態の観測・変更は `scripts/world_ops/dispatcher.gd` 経由になっているか (surface は adapter に留まっているか)
+- [ ] `WorldState` の mutator や scene node を直接 mutate していないか (engine bootstrap / test fixture など例外がある場合は理由を明記)
+- [ ] 新しい operation を追加した場合、`scripts/world_ops/ops/`、dispatcher registry、uniform result contract、validation / dry-run / error handling、rollback hint がすべて揃っているか
+- [ ] 新しい operation について `scripts/tests/world_op_dispatcher_smoke_test.gd` にテストケースを追加したか
+- [ ] CLI から呼べる operation を追加した場合、`scripts/cli/cli_command_parser.gd` の文法マッピングと `scripts/tests/world_op_surface_parity_smoke_test.gd` の parity ケースを追加したか
+
+詳細な契約・status taxonomy・exit code mapping は `godot-world/docs/world_operations.md`、運用上の鉄則は `AGENTS.md` の「World Operation API は今後の実装基準」節を参照。
+
 ## Merge decision gates
 
 `mergeable=true` on GitHub only means the branch can merge mechanically. It is not enough on its own for this repository.
@@ -108,7 +120,8 @@ Before merging a PR that changes `godot-world/`, gameplay/runtime scripts, scene
 - `git diff --check`
 - a headless Godot startup command such as `godot --headless --path godot-world --quit-after 1`, or an equivalent command that actually exists in the branch being reviewed
 - any parse/schema/contract checks relevant to the edited files
-- confirmation that unresolved review threads were addressed or intentionally deferred
+- the "World Operation API checklist" above when the PR changes `godot-world/` gameplay / runtime / UI / GM / Codex code
+- confirmation that unresolved review threads were addressed or intentionally deferred (the deferred reason should be visible in the PR body or a comment, not only in the resolved thread itself)
 
 If a stale PR is being retired instead of merged, the closing comment should point to the replacement PR, merged commit, or issue comment that now owns the work.
 

@@ -151,3 +151,17 @@ bash scripts/launch_godot.sh 93 -- --headless --script res://scripts/tests/cli_s
 - 稼働中世界への live attach は提供しない。常に `--snapshot` 経由でやりとりする。
 - `restore` / `package install|remove` / `propose` は本フェーズでは未実装。それぞれ #92 / #90 / #85・#87・#63 の契約確定後に follow-up で追加する。
 - `scripts/cli/main.gd` が依存する WorldState API が今後変わる場合、`cli_smoke_test.gd` を一緒に更新する。
+
+## #104 / #105 (in-game text CLI overlay) の follow-up 方針
+
+#104 で議論し #105 で試作した in-game text CLI overlay は、**parser を中心に置く形** (overlay と CLI 本体が `cli_command_parser.gd` を共有する) で進めていた。本 PR (#106 / #107) で World Operation API を導入したことで、その路線は時代遅れになる。
+
+follow-up で overlay を再着手する場合の必須条件:
+
+- overlay は **World Operation API の surface adapter** として作り直す。LineEdit の文字列を `CliCommandParser.dispatch_string` 経由、または `{ operation_type, request }` を直接 `WorldOpDispatcher.dispatch` に渡す形にする。
+- overlay から `WorldState.set_rule_enabled` / `save_world_snapshot` / `load_world_snapshot` を **直接呼び出さない**。
+- ルールの enable/disable やスナップショット保存などの **すべての状態遷移** は dispatcher を経由する。
+- #105 にあった UI 差分 (RichTextLabel scrollback / LineEdit / 履歴 / 自動オープン watcher など) のうち UI として再利用したい部分を残す場合も、実 actuation は dispatcher 経由に置き換える。
+- overlay 経由と headless CLI 経由で同じ operation を呼んだとき結果が一致することを `world_op_surface_parity_smoke_test.gd` 相当のテストでカバーする (現在は CLI parser 経由 vs direct dispatcher 経由のみ)。
+
+要するに **`cli_command_parser.gd` 中心の共通化ではなく、`WorldOpDispatcher` 中心の共通化** に作り直す。#105 はその意味で PR としては close 済みであり、本 PR が main へ載った後に新 issue/PR として overlay を再着手する。

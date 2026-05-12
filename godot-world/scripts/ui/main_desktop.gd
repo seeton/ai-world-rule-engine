@@ -3,6 +3,7 @@ extends Control
 signal close_requested
 
 const ThreeDPreviewRendererScript = preload("res://scripts/ui/three_d_preview_renderer.gd")
+const GMDialogScript = preload("res://scripts/ui/gm_dialog.gd")
 const FALLBACK_TEMPLATES: Array = [
     {
         "id": "starter-farming",
@@ -66,6 +67,11 @@ const CHARACTER_TAG_HINTS: Array = ["agent", "character", "human", "mortal", "np
 const OBJECT_ARCHETYPE_HINTS: Array = ["container", "item", "location", "object", "place", "prop", "resource", "structure", "tool"]
 const OBJECT_TAG_HINTS: Array = ["container", "item", "location", "object", "portable", "prop", "resource", "structure", "tool"]
 const PROPOSAL_REVIEW_DEBOUNCE_SECONDS := 0.35
+const TAB_HOME := "統合画面"
+const TAB_CHAT := "GM相談"
+const TAB_REVIEW := "提案レビュー"
+const TAB_RULES := "稼働ルール"
+const TAB_WORLD := "世界・履歴"
 
 var _world_state: Node = null
 var _task_input: TextEdit
@@ -88,8 +94,10 @@ var _entity_tree: Tree
 var _world_state_view: TextEdit
 var _event_log_view: TextEdit
 var _poc4_state_view: TextEdit
-var _status_label: Label
 var _three_d_preview_renderer: Control
+var _tabs: TabContainer
+var _home_summary_label: Label
+var _chat_view: Control
 
 var _template_cache: Array = []
 var _latest_task_result: Dictionary = {}
@@ -267,95 +275,123 @@ func _ready() -> void:
 func _build_ui() -> void:
     var root_margin := MarginContainer.new()
     root_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    root_margin.add_theme_constant_override("margin_left", 12)
-    root_margin.add_theme_constant_override("margin_top", 12)
-    root_margin.add_theme_constant_override("margin_right", 12)
-    root_margin.add_theme_constant_override("margin_bottom", 12)
+    root_margin.add_theme_constant_override("margin_left", 0)
+    root_margin.add_theme_constant_override("margin_top", 0)
+    root_margin.add_theme_constant_override("margin_right", 0)
+    root_margin.add_theme_constant_override("margin_bottom", 0)
     add_child(root_margin)
 
-    var main_column := VBoxContainer.new()
-    main_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    main_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    main_column.add_theme_constant_override("separation", 10)
-    root_margin.add_child(main_column)
+    _tabs = TabContainer.new()
+    _tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _tabs.drag_to_rearrange_enabled = false
+    root_margin.add_child(_tabs)
 
-    var header := VBoxContainer.new()
-    header.add_theme_constant_override("separation", 6)
-    main_column.add_child(header)
+    _tabs.add_child(_build_home_tab())
+    _tabs.add_child(_build_chat_tab())
+    _tabs.add_child(_build_review_tab())
+    _tabs.add_child(_build_rules_tab())
+    _tabs.add_child(_build_world_tab())
 
-    var top_row := HBoxContainer.new()
-    top_row.add_theme_constant_override("separation", 16)
-    header.add_child(top_row)
+func _build_home_tab() -> Control:
+    var tab := VBoxContainer.new()
+    tab.name = TAB_HOME
+    tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    tab.add_theme_constant_override("separation", 12)
 
-    var title_wrap := VBoxContainer.new()
-    title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    title_wrap.add_theme_constant_override("separation", 4)
-    top_row.add_child(title_wrap)
+    _home_summary_label = Label.new()
+    _home_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _home_summary_label.add_theme_font_size_override("font_size", 16)
+    tab.add_child(_home_summary_label)
 
-    var title := Label.new()
-    title.text = "PoC4: GM会話 / ルール確認と世界管理"
-    title.add_theme_font_size_override("font_size", 22)
-    title_wrap.add_child(title)
+    var cards := GridContainer.new()
+    cards.columns = 2
+    cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    cards.add_theme_constant_override("separation", 12)
+    tab.add_child(cards)
 
-    var subtitle := Label.new()
-    subtitle.text = "主画面はプレイ世界です。ここではGMに相談しながら、3D化・ルール・状態・PoC4 proposal / apply 状態を確認します。"
-    subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    title_wrap.add_child(subtitle)
+    cards.add_child(_build_home_card("GM相談", "世界ルールの相談と PoC4 proposal の作成を行います。", TAB_CHAT))
+    cards.add_child(_build_home_card("提案レビュー", "生成された提案を確認・承認してからゲームへ適用します。", TAB_REVIEW))
+    cards.add_child(_build_home_card("稼働ルール", "現在のルール依存ツリーを現行UIのまま確認します。", TAB_RULES))
+    cards.add_child(_build_home_card("世界・履歴", "エンティティ関係ツリー、スナップショット、イベント履歴を確認します。", TAB_WORLD))
 
-    var close_button := Button.new()
-    close_button.text = "世界へ戻る"
-    close_button.pressed.connect(_emit_close_requested)
-    top_row.add_child(close_button)
+    var return_button := Button.new()
+    return_button.text = "世界へ戻って観察"
+    return_button.pressed.connect(_emit_close_requested)
+    tab.add_child(return_button)
+    return tab
 
-    var help_label := Label.new()
-    help_label.text = "Esc またはボタンで会話終了。変更を確認したらプレイ世界へ戻って続けてください。"
-    help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    header.add_child(help_label)
+func _build_home_card(title_text: String, description: String, target_tab_name: String) -> Control:
+    var panel := _make_panel_section(title_text, description)
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    var body := panel.get_meta("body") as VBoxContainer
+    var button := Button.new()
+    button.text = "開く"
+    button.pressed.connect(func() -> void:
+        _select_tab_by_name(target_tab_name)
+    )
+    body.add_child(button)
+    return panel
 
-    _status_label = Label.new()
-    _status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    header.add_child(_status_label)
+func _build_chat_tab() -> Control:
+    var host := Control.new()
+    host.name = TAB_CHAT
+    host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _chat_view = GMDialogScript.new()
+    _chat_view.set("compact_mode", true)
+    _chat_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    if _chat_view.has_signal("closed"):
+        _chat_view.closed.connect(_emit_close_requested)
+    host.add_child(_chat_view)
+    return host
 
-    var split := HSplitContainer.new()
-    split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.split_offset = 450
-    main_column.add_child(split)
+func _build_review_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_REVIEW)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_task_panel())
+    body.add_child(_build_proposal_panel())
+    body.add_child(_build_poc4_admin_panel())
+    return scroll
 
-    var left_scroll := ScrollContainer.new()
-    left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.add_child(left_scroll)
+func _build_rules_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_RULES)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_installed_rules_panel())
+    body.add_child(_build_template_panel())
+    body.add_child(_build_tick_panel())
+    body.add_child(_build_three_d_preview_panel())
+    return scroll
 
-    var left_column := VBoxContainer.new()
-    left_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    left_column.custom_minimum_size = Vector2(420, 0)
-    left_column.add_theme_constant_override("separation", 10)
-    left_scroll.add_child(left_column)
+func _build_world_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_WORLD)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_world_state_panel())
+    body.add_child(_build_text_panel("会話ログと世界イベント", "GM会話中の操作履歴と最近の世界イベントを表示します。", "event_log", 180))
+    return scroll
 
-    left_column.add_child(_build_task_panel())
-    left_column.add_child(_build_proposal_panel())
-    left_column.add_child(_build_poc4_admin_panel())
-    left_column.add_child(_build_template_panel())
-    left_column.add_child(_build_tick_panel())
+func _make_tab_scroll(tab_name: String) -> ScrollContainer:
+    var scroll := ScrollContainer.new()
+    scroll.name = tab_name
+    scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    var body := VBoxContainer.new()
+    body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    body.add_theme_constant_override("separation", 10)
+    scroll.add_child(body)
+    return scroll
 
-    var right_scroll := ScrollContainer.new()
-    right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.add_child(right_scroll)
-
-    var right_column := VBoxContainer.new()
-    right_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    right_column.custom_minimum_size = Vector2(420, 0)
-    right_column.add_theme_constant_override("separation", 10)
-    right_scroll.add_child(right_column)
-
-    right_column.add_child(_build_installed_rules_panel())
-    right_column.add_child(_build_world_state_panel())
-    right_column.add_child(_build_three_d_preview_panel())
-    right_column.add_child(_build_text_panel("会話ログと世界イベント", "GM会話中の操作履歴と最近の世界イベントを表示します。", "event_log", 132))
-
-    main_column.add_child(_build_footer_bar())
+func _select_tab_by_name(tab_name: String) -> void:
+    if _tabs == null:
+        return
+    for index in range(_tabs.get_child_count()):
+        var child := _tabs.get_child(index)
+        if child.name == tab_name:
+            _tabs.current_tab = index
+            return
 
 func _build_task_panel() -> Control:
     var panel := _make_panel_section("GMへの相談", "ここでは既存テンプレート候補や即時に試せる方針を確認します。PoC4 の Codex proposal 生成は、プレイヤー向けの GM 会話画面から行ってください。")
@@ -647,23 +683,6 @@ func _build_text_panel(title_text: String, description: String, panel_key: Strin
             _event_log_view = view
 
     return panel
-
-func _build_footer_bar() -> Control:
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 12)
-
-    var help_label := Label.new()
-    help_label.text = "会話を終えるとプレイヤー視点のプレイ世界へ戻ります。"
-    help_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    row.add_child(help_label)
-
-    var close_button := Button.new()
-    close_button.text = "会話を終えて世界へ戻る"
-    close_button.pressed.connect(_emit_close_requested)
-    row.add_child(close_button)
-
-    return row
 
 func _make_panel_section(title_text: String, description: String) -> PanelContainer:
     var panel := PanelContainer.new()
@@ -1326,7 +1345,15 @@ func _update_poc4_state_view() -> void:
 func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
     var poc4_status := _describe_poc4_status()
-    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
+    var summary := "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
+    if _home_summary_label != null:
+        _home_summary_label.text = summary
+    if _tabs != null and _tabs.get_tab_count() >= 5:
+        _tabs.set_tab_title(0, "◐ 統合画面")
+        _tabs.set_tab_title(1, "✎ GM相談")
+        _tabs.set_tab_title(2, "▤ 提案レビュー (%d)" % _proposal_cache.size())
+        _tabs.set_tab_title(3, "⌥ 稼働ルール (%d)" % _installed_rule_cache.size())
+        _tabs.set_tab_title(4, "▦ 世界・履歴")
 
 func _emit_close_requested() -> void:
     close_requested.emit()

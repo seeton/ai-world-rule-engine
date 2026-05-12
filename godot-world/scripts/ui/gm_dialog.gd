@@ -77,6 +77,7 @@ var _pending_proposal_state: Dictionary = {}
 var _last_apply_result: Dictionary = {}
 var _async_request_running := false
 var _async_poll_elapsed := 0.0
+var compact_mode: bool = false
 
 
 func _ready() -> void:
@@ -127,17 +128,19 @@ func _fade_in() -> void:
 
 
 func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color(0.1, 0.1, 0.15, 1.0)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	if not compact_mode:
+		var bg := ColorRect.new()
+		bg.color = Color(0.1, 0.1, 0.15, 1.0)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(bg)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 32)
-	margin.add_theme_constant_override("margin_top", 32)
-	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_bottom", 32)
+	var page_margin := 0 if compact_mode else 32
+	margin.add_theme_constant_override("margin_left", page_margin)
+	margin.add_theme_constant_override("margin_top", page_margin)
+	margin.add_theme_constant_override("margin_right", page_margin)
+	margin.add_theme_constant_override("margin_bottom", page_margin)
 	add_child(margin)
 
 	var vbox := VBoxContainer.new()
@@ -146,20 +149,21 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	margin.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	vbox.add_child(header)
+	if not compact_mode:
+		var header := HBoxContainer.new()
+		header.add_theme_constant_override("separation", 12)
+		vbox.add_child(header)
 
-	var title := Label.new()
-	title.text = _text("title")
-	title.add_theme_font_size_override("font_size", 28)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
+		var title := Label.new()
+		title.text = _text("title")
+		title.add_theme_font_size_override("font_size", 28)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		header.add_child(title)
 
-	_back_button = Button.new()
-	_back_button.text = _text("back")
-	_back_button.pressed.connect(_on_back_pressed)
-	header.add_child(_back_button)
+		_back_button = Button.new()
+		_back_button.text = _text("back")
+		_back_button.pressed.connect(_on_back_pressed)
+		header.add_child(_back_button)
 
 	var response_container := PanelContainer.new()
 	response_container.size_flags_vertical = Control.SIZE_EXPAND_FILL

@@ -352,6 +352,11 @@ func advance_tick(delta_seconds: float) -> void:
     _runtime.advance_tick(delta_seconds)
 
 
+func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
+    _ensure_runtime()
+    return _runtime.set_rule_enabled(rule_id, enabled)
+
+
 func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary:
     _ensure_runtime()
     return _runtime.set_entity_position(entity_id, position_patch)

@@ -2,6 +2,7 @@ extends Node2D
 
 signal gm_interaction_requested
 signal rule_tree_toggle_requested
+signal cli_overlay_toggle_requested
 
 const VisualEffectBurstScript := preload("res://scripts/game/visual_effect_burst_2d.gd")
 
@@ -20,7 +21,7 @@ const UI_TEXT := {
 		"tick_prefix": "Tick ",
 		"goal": "矢印キーで2Dの世界を歩き、GMのところまで移動してください。",
 		"subgoal": "GMとの会話で 3D化 を適用すると、プレイヤーがいる世界そのものが3Dに切り替わります。",
-		"tree_hint": "Tキーでルールツリー表示",
+		"tree_hint": "Tキー: ルールツリー / Cキー: CLI",
 		"world_fallback": "2D広場",
 		"player_status": "プレイヤーは2D世界の中を移動できます。",
 		"gm_status": "GMは2D世界の中に存在し、会話できます。"
@@ -82,6 +83,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key_event := event as InputEventKey
 		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_T or key_event.physical_keycode == KEY_T):
 			rule_tree_toggle_requested.emit()
+			get_viewport().set_input_as_handled()
+			return
+		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_C or key_event.physical_keycode == KEY_C):
+			cli_overlay_toggle_requested.emit()
 			get_viewport().set_input_as_handled()
 			return
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():

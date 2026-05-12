@@ -8,6 +8,7 @@ extends SceneTree
 
 const WorldStateScript = preload("res://scripts/core/WorldState.gd")
 const CliCommandParserScript = preload("res://scripts/cli/cli_command_parser.gd")
+const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
 
 const EXIT_OK := 0
 const EXIT_USAGE := 2
@@ -51,10 +52,22 @@ func _initialize() -> void:
 	_world = WorldStateScript.new()
 
 	if not _snapshot_path.is_empty():
-		var load_result: Dictionary = _world.load_world_snapshot(_snapshot_path)
-		if String(load_result.get("status", "")) != "loaded":
-			_emit_log("Failed to load snapshot from %s: %s" % [_snapshot_path, JSON.stringify(load_result)])
-			_quit_with(EXIT_RUNTIME)
+		# Route the pre-load through the operation dispatcher so the CLI
+		# surface never calls WorldState directly. Dispatched with a fresh
+		# audit so the snapshot pre-load shows up like any other operation.
+		var load_result: Dictionary = WorldOpDispatcherScript.dispatch(
+			_world,
+			"LoadSnapshot",
+			{"path": _snapshot_path},
+			{}
+		)
+		if String(load_result.get("status", "")) != "ok":
+			var fallback_lines: PackedStringArray = load_result.get("lines", PackedStringArray())
+			if fallback_lines.is_empty():
+				fallback_lines.append("Failed to load snapshot from %s" % _snapshot_path)
+			for line in fallback_lines:
+				_emit_log(String(line))
+			_quit_with(int(load_result.get("exit_code", EXIT_RUNTIME)))
 			return
 
 	var options := {
@@ -77,6 +90,7 @@ func _render_result(result: Dictionary) -> void:
 			"operation_type": String(result.get("operation_type", "")),
 			"status": String(result.get("status", "")),
 			"exit_code": int(result.get("exit_code", EXIT_OK)),
+			"lines": result.get("lines", PackedStringArray()),
 			"payload": result.get("payload", {}),
 			"diff": result.get("diff", {}),
 			"audit": result.get("audit", {}),

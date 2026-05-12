@@ -12,7 +12,6 @@ class_name CliCommandParser
 # different syntax, same dispatcher.
 
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
-const WorldOpResultScript = preload("res://scripts/world_ops/result.gd")
 
 const EXIT_OK := 0
 const EXIT_USAGE := 2

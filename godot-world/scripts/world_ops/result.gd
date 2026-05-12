@@ -9,8 +9,8 @@ class_name WorldOpResult
 # Result schema:
 # {
 #   "operation_type": String,
-#   "status":         "ok" | "validation_error" | "execution_error" | "dry_run",
-#   "exit_code":      int,                       # CLI mapping: 0 / 2 / 3 / 0
+#   "status":         String,                    # see "status taxonomy" below
+#   "exit_code":      int,                       # CLI mapping: 0 / 2 / 3
 #   "lines":          PackedStringArray,         # human-readable
 #   "payload":        Dictionary,                # machine-readable, --json target
 #   "diff":           Dictionary,                # before/after summary (may be empty)
@@ -27,6 +27,17 @@ class_name WorldOpResult
 #     "warnings":     PackedStringArray
 #   }
 # }
+#
+# Status taxonomy
+# - Built here by the operation layer (this file): "ok" / "validation_error"
+#   / "execution_error" / "dry_run". These are what every surface should
+#   expect from WorldOpDispatcher.dispatch().
+# - Surface-only statuses produced ABOVE the dispatcher (e.g.
+#   CliCommandParser): "usage_error" (CLI syntax problem, never reaches
+#   the dispatcher; exit_code 2) and "directive" (surface meta command
+#   like 'help' / 'clear'; exit_code 0). Callers that consume results
+#   from a surface adapter (CLI parser, GUI binding) should handle these
+#   in addition to the four built here.
 
 const EXIT_OK := 0
 const EXIT_USAGE := 2

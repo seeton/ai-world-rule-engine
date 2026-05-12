@@ -42,20 +42,10 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "inspect parity mismatch: %s" % diff_message
 
-	# 2. rule disable parity (use a fresh rule each side to avoid mutation interference).
+	# 2. rule disable parity. Both surfaces target the same rule and use
+	# dry_run so neither call mutates state between them; that way the
+	# returned diff previews are guaranteed deterministic.
 	if exit_code == 0:
-		var second_install: Dictionary = world.create_rule_from_patch({
-			"template_id": "hunger",
-			"id": "parity_smoke_rule_2",
-			"metadata": {"package_id": "parity.smoke"}
-		})
-		if String(second_install.get("status", "")) != "installed":
-			exit_code = 1
-			failure_message = "Second rule install failed."
-
-	if exit_code == 0:
-		# Use dry_run on both sides so neither one mutates the world before
-		# the other runs (so the diff previews are guaranteed identical).
 		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(
 			world,
 			PackedStringArray(["rule", "disable", "parity_smoke_rule"]),

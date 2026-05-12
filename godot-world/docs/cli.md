@@ -51,20 +51,28 @@ CLI 文法 → operation request の対応表。actuation の中身は [`world_o
 
 ## グローバルフラグ
 
-- `--json` : 結果を 1 行 JSON envelope (`operation_type` / `status` / `payload` / `diff` / `audit` / `rollback` / `validation`) で stdout に出す。stderr は人向けログ。Godot 起動バナー行が冒頭に出るため、CI から扱う場合は `tail -n 1` か `grep '^{'` で末尾の JSON 行だけ取り出すこと。
-- `--dry-run` : operation の `dry_run` パスを呼び、WorldState を mutate せずに「何が起きるか」だけを返す。
-- `--snapshot <path>` : サブコマンドを実行する前にスナップショットを読み込む。
-- `--allow-detached-head` : 通常は worktree が detached HEAD だと拒否されるが、意図的に許可する場合に指定する (`world_cli.sh` のオプション)。
+CLI 本体 (`scripts/cli/main.gd`) のフラグと、ラッパー (`scripts/world_cli.sh`) のフラグは **別物**。混乱を避けるため、適用範囲を明示する。
+
+### CLI 本体のフラグ (`--` の後ろに置く)
+
+- `--json` : 結果を 1 行 JSON envelope (`operation_type` / `status` / `exit_code` / `lines` / `payload` / `diff` / `audit` / `rollback` / `validation`) で stdout に出す。stderr は人向けログ。Godot 起動バナー行が冒頭に出るため、CI から扱う場合は `tail -n 1` か `grep '^{'` で末尾の JSON 行だけ取り出すこと。
+- `--dry-run` : operation の `dry_run` パスを呼び、WorldState を mutate せずに「何が起きるか」だけを返す。**ラッパーの `--dry-run` とは別物**。ラッパー経由で operation dry_run を使いたいときは、`--` の後ろに置く: `bash scripts/world_cli.sh 106 -- inspect --dry-run`。
+- `--snapshot <path>` : サブコマンドを実行する前にスナップショットを読み込む (内部的に LoadSnapshot operation を dispatch する)。
+
+### `world_cli.sh` ラッパー側のフラグ (`--` の前に置く)
+
+- `--dry-run` : Godot を起動せず、組み立てた launch コマンドだけを表示する **ラッパーレベルの diagnostic**。CLI 本体へは forward されない。
+- `--allow-detached-head` : worktree が detached HEAD でも launch を許可する。
 
 ## 終了コード
 
 | コード | 意味 |
 | --- | --- |
-| 0 | 成功 (`status: ok`) または `dry_run` |
-| 2 | バリデーションエラー / 使い方エラー (`validation_error`、未対応サブコマンド、引数不足など) |
-| 3 | 実行エラー (`execution_error`、エンジン側で実装が失敗した場合) |
+| 0 | 成功 (`status: ok`) または `status: dry_run` または `status: directive` (help / clear など) |
+| 2 | 引数 / バリデーション関連の失敗。具体的には CLI surface 側の `status: usage_error` (未対応サブコマンド、引数不足、tokenize 失敗など) と operation 層側の `status: validation_error` (rule 不在、空 path などの事前検出) の両方を含む |
+| 3 | 実行エラー (`status: execution_error`、エンジン側で実装が失敗した場合) |
 
-> **既存運用との差分**: 以前は「ルール未導入」「snapshot 読み込み失敗」もすべて exit 3 で返していたが、operation layer 導入後は `validate()` で事前検出できるものは exit 2 (`validation_error`)、実際の execute 中に起きた失敗のみ exit 3 (`execution_error`) と切り分けられる。
+> **既存運用との差分**: 以前は「ルール未導入」「snapshot 読み込み失敗」もすべて exit 3 で返していたが、operation layer 導入後は `validate()` で事前検出できるものは exit 2 (`validation_error`)、実際の execute 中に起きた失敗のみ exit 3 (`execution_error`) と切り分けられる。CLI 文法そのものの失敗 (`usage_error`) も exit 2 を返すが、`status` を見ると区別できる。
 
 ## inspect の JSON スキーマ (Phase 1)
 

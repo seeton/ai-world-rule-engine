@@ -38,8 +38,8 @@ dispatcher / operation が返す Dictionary は常にこの形:
 ```
 {
   "operation_type": String,             # 例: "DisableRule"
-  "status":         String,             # "ok" / "validation_error" / "execution_error" / "dry_run" / "directive"
-  "exit_code":      int,                # CLI mapping: 0 (ok/dry_run) / 2 (validation/usage) / 3 (execution)
+  "status":         String,             # 下記 taxonomy
+  "exit_code":      int,                # CLI mapping: 0 / 2 / 3
   "lines":          PackedStringArray,  # human-readable
   "payload":        Dictionary,         # machine-readable (CLI --json で出る本体)
   "diff":           Dictionary,         # before/after summary (空の場合あり)
@@ -58,7 +58,21 @@ dispatcher / operation が返す Dictionary は常にこの形:
 }
 ```
 
-`directive` status は surface 専用 (overlay の `clear` など、operation layer に届かないコマンド) のためで、headless CLI では無視される。
+### status taxonomy
+
+operation layer (`WorldOpDispatcher.dispatch`) が返す status は次の 4 種:
+
+- `ok` — execute が成功した。`exit_code: 0`
+- `dry_run` — `options.dry_run=true` で実行され、世界は mutate されていない。`exit_code: 0`
+- `validation_error` — `validate()` が事前検出した不備 (rule 不在、空 path など)。`exit_code: 2`
+- `execution_error` — execute 中にエンジン側で失敗した。`exit_code: 3`
+
+surface adapter (CLI parser など) は **operation layer に届かないメタコマンド** のために追加で 2 種を返す:
+
+- `usage_error` — surface 文法の問題 (未対応サブコマンド、引数不足など)。`exit_code: 2`。`validation_error` と区別される
+- `directive` — surface 専用のメタコマンド (`help` / `clear` など)。`exit_code: 0`
+
+`directive` / `usage_error` は CLI 文字列 / GUI ボタン等の surface adapter 層で完結するため dispatcher には届かない。surface 結果を消費する側 (CLI envelope renderer, overlay scrollback, GUI button feedback など) はこの 6 種を扱う前提で実装する。
 
 ## Phase 1 で実装済みの operations
 

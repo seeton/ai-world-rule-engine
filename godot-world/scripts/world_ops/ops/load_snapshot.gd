@@ -28,7 +28,7 @@ static func dry_run(_world: Object, request: Dictionary) -> Dictionary:
 	var path := String(request.get("path", "")).strip_edges()
 	var lines := PackedStringArray()
 	lines.append("[dry-run] would load snapshot from %s and replace current world." % path)
-	return WorldOpResultScript.dry_run(TYPE, lines, {"would_load_from": path}, {"snapshot_path": path}, {"supported": false, "hint": "Take a DumpSnapshot of the current world before LoadSnapshot to enable rollback."})
+	return WorldOpResultScript.dry_run(TYPE, lines, {"would_load_from": path}, {"world_replaced_from": path}, {"supported": false, "hint": "Take a DumpSnapshot of the current world before LoadSnapshot to enable rollback."})
 
 
 static func execute(world: Object, request: Dictionary) -> Dictionary:

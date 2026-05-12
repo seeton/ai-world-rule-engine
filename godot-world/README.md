@@ -39,7 +39,7 @@ Per #106, every surface that mutates the world (CLI, GUI, GM, Codex, automation)
 
 ## Collapse-safe CLI
 
-If the in-game UI or GM dialog becomes unresponsive (for example after a world rule collapse or `builtin.space` disable), use the headless rule-engine CLI as a last-line-of-defense control surface. See [`docs/cli.md`](docs/cli.md). Invoke it from an issue worktree via `bash scripts/world_cli.sh <issue-number> -- <subcommand>`; the wrapper refuses repo-root invocations.
+If the in-game UI or GM dialog becomes unresponsive (for example after a world rule collapse or `builtin.space` disable), use the CLI surfaces as a last-line-of-defense control surface. See [`docs/cli.md`](docs/cli.md). The headless path is `bash scripts/world_cli.sh <issue-number> -- <subcommand>`, and the playable scene also exposes the same dispatcher-backed commands from the in-game `World CLI` overlay on the `C` key.
 
 ## Safety model
 
@@ -93,6 +93,7 @@ Launch Godot from the issue-specific worktree instead of validating against the 
 - GM画面で相談を送ると、提案されたルールパッチを JSON とメタデータ付きで確認し、承認してから導入できます
 - add `時間ルール` from the GM screen when you want the playable 2D/3D world HUD to expose the shared `elapsed_seconds` clock
 - press `T` in either the 2D or 3D world to toggle the live rule tree overlay
+- press `C` in either the 2D or 3D world to open the dispatcher-backed `World CLI` overlay (`inspect`, `rule`, `package`, `snapshot`, `help`, `clear`)
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
 - view rules, world state, and admin-heavy inspectors only after entering the GM screen
 - continue play in the quarter-view third-person 3D world after the conversion

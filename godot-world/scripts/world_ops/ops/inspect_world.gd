@@ -19,7 +19,10 @@ static func validate(_world: Object, _request: Dictionary) -> Dictionary:
 
 
 static func dry_run(world: Object, request: Dictionary) -> Dictionary:
-	return execute(world, request)
+	var snapshot_loaded_from := String(request.get("snapshot_loaded_from", ""))
+	var report: Dictionary = InspectReportScript.build(world, snapshot_loaded_from)
+	var lines := _format_lines(report)
+	return WorldOpResultScript.dry_run(TYPE, lines, report, {}, {"supported": true, "hint": "Re-run InspectWorld is idempotent (read-only)."})
 
 
 static func execute(world: Object, request: Dictionary) -> Dictionary:

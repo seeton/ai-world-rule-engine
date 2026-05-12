@@ -46,7 +46,7 @@ static func execute(world: Object, request: Dictionary) -> Dictionary:
 	var was_enabled := bool(rule_before.get("enabled", true))
 	var action_result: Dictionary = CliActionsScript.set_rule_enabled(world, rule_id, true)
 	var status := String(action_result.get("status", ""))
-	if status == "enabled" or status == "disabled":
+	if status == "enabled":
 		var lines := PackedStringArray()
 		lines.append("rule '%s' enabled (was %s)." % [rule_id, "true" if was_enabled else "false"])
 		var diff := _build_diff(rule_id, was_enabled, true)

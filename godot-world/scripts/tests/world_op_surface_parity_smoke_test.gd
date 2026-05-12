@@ -42,7 +42,16 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "inspect parity mismatch: %s" % diff_message
 
-	# 2. rule disable parity. Both surfaces target the same rule and use
+	# 2. inspect dry-run parity.
+	if exit_code == 0:
+		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["inspect"]), {"dry_run": true})
+		var via_direct: Dictionary = WorldOpDispatcherScript.dispatch(world, "InspectWorld", {}, {"dry_run": true})
+		var diff_message := _compare_results(via_cli, via_direct)
+		if not diff_message.is_empty():
+			exit_code = 1
+			failure_message = "inspect dry-run parity mismatch: %s" % diff_message
+
+	# 3. rule disable parity. Both surfaces target the same rule and use
 	# dry_run so neither call mutates state between them; that way the
 	# returned diff previews are guaranteed deterministic.
 	if exit_code == 0:
@@ -62,7 +71,7 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "rule disable dry-run parity mismatch: %s" % diff_message
 
-	# 3. snapshot dump parity (dry_run; no file written).
+	# 4. snapshot dump parity (dry_run; no file written).
 	if exit_code == 0:
 		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(
 			world,
@@ -80,7 +89,7 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "snapshot dump dry-run parity mismatch: %s" % diff_message
 
-	# 4. package list parity.
+	# 5. package list parity.
 	if exit_code == 0:
 		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "list"]), {})
 		var via_direct: Dictionary = WorldOpDispatcherScript.dispatch(world, "ListPackages", {}, {})
@@ -88,6 +97,15 @@ func _initialize() -> void:
 		if not diff_message.is_empty():
 			exit_code = 1
 			failure_message = "package list parity mismatch: %s" % diff_message
+
+	# 6. package list dry-run parity.
+	if exit_code == 0:
+		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "list"]), {"dry_run": true})
+		var via_direct: Dictionary = WorldOpDispatcherScript.dispatch(world, "ListPackages", {}, {"dry_run": true})
+		var diff_message := _compare_results(via_cli, via_direct)
+		if not diff_message.is_empty():
+			exit_code = 1
+			failure_message = "package list dry-run parity mismatch: %s" % diff_message
 
 	for n in nodes_to_release:
 		if is_instance_valid(n):

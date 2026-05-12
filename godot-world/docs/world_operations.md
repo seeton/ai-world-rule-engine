@@ -118,7 +118,7 @@ bash scripts/launch_godot.sh 106 -- --headless --script res://scripts/tests/worl
 ## 既存 surface との関係
 
 - **CLI** (`scripts/cli/main.gd` + `scripts/cli/cli_command_parser.gd`): string → operation request の adapter。`--json` 指定時は dispatcher の result envelope (operation_type / status / payload / diff / audit / rollback / validation) をそのまま吐く。`--dry-run` で operation の dry_run を呼べる。
-- **In-game text CLI overlay** (将来): #104 / #105 で進めていたものを、本 layer の上に作り直す follow-up が必要。同じ `cli_command_parser.dispatch_string()` を呼べばよい。
+- **In-game text CLI overlay**: 現在のゲーム内 surface。`cli_command_parser.dispatch_string()` を呼び、headless CLI と同じ文法 / result envelope を使う。
 - **GUI / GM / Codex** (将来): 同じ `WorldOpDispatcher.dispatch()` を呼ぶことで CLI と同じ状態遷移になる。GUI ボタン / GM 提案を `{ operation_type, request }` に変換する layer をそれぞれの surface 側に置く。
 
 ## 設計上の鉄則 (#106 由来)

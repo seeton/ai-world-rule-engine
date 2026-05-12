@@ -116,6 +116,7 @@ func _close_rule_tree_overlay() -> void:
 func _on_rule_tree_overlay_closed() -> void:
 	_rule_tree_overlay = null
 	_refresh_active_world_interaction_pause()
+	_drain_pending_auto_open()
 
 
 func _on_cli_overlay_toggle_requested() -> void:
@@ -174,10 +175,8 @@ func _on_collapse_signals_appeared(new_signals: PackedStringArray) -> void:
 	if actionable.is_empty():
 		return
 
-	if _gm_screen != null:
-		for name in actionable:
-			if not _pending_auto_open_signals.has(name):
-				_pending_auto_open_signals.append(name)
+	if _gm_screen != null or _rule_tree_overlay != null:
+		_queue_pending_auto_open(actionable)
 		return
 
 	if _cli_inspect_overlay != null:
@@ -189,7 +188,7 @@ func _on_collapse_signals_appeared(new_signals: PackedStringArray) -> void:
 func _drain_pending_auto_open() -> void:
 	if _pending_auto_open_signals.is_empty():
 		return
-	if _gm_screen != null or _cli_inspect_overlay != null:
+	if _gm_screen != null or _rule_tree_overlay != null or _cli_inspect_overlay != null:
 		return
 	var reasons: PackedStringArray = PackedStringArray()
 	for raw in _pending_auto_open_signals:
@@ -201,6 +200,12 @@ func _drain_pending_auto_open() -> void:
 	if reasons.is_empty():
 		return
 	_open_cli_inspect_overlay(reasons)
+
+
+func _queue_pending_auto_open(signals: PackedStringArray) -> void:
+	for name in signals:
+		if not _pending_auto_open_signals.has(name):
+			_pending_auto_open_signals.append(name)
 
 
 func _tick_signal_cooldowns(delta: float) -> void:

@@ -6,6 +6,35 @@ extends SceneTree
 
 const WorldStateScript = preload("res://scripts/core/WorldState.gd")
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
+const WorldOpInspectWorldScript = preload("res://scripts/world_ops/ops/inspect_world.gd")
+const WorldOpListPackagesScript = preload("res://scripts/world_ops/ops/list_packages.gd")
+const WorldOpEnableRuleScript = preload("res://scripts/world_ops/ops/enable_rule.gd")
+const WorldOpDisableRuleScript = preload("res://scripts/world_ops/ops/disable_rule.gd")
+
+
+class FakeRuleToggleWorld extends RefCounted:
+	var _rule_snapshot: Dictionary
+	var _status_by_enabled: Dictionary
+
+	func _init(initial_enabled: bool, enabled_status: String, disabled_status: String) -> void:
+		_rule_snapshot = {
+			"installed_rules_by_id": {
+				"fake_rule": {"enabled": initial_enabled}
+			}
+		}
+		_status_by_enabled = {
+			true: enabled_status,
+			false: disabled_status
+		}
+
+	func get_world_snapshot() -> Dictionary:
+		return _rule_snapshot.duplicate(true)
+
+	func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
+		if not _rule_snapshot.get("installed_rules_by_id", {}).has(rule_id):
+			return {"status": "error", "message": "missing"}
+		_rule_snapshot["installed_rules_by_id"][rule_id]["enabled"] = enabled
+		return {"status": String(_status_by_enabled.get(enabled, "error"))}
 
 
 const REQUIRED_RESULT_KEYS := [
@@ -45,6 +74,13 @@ func _initialize() -> void:
 		elif String(inspect_result.get("audit", {}).get("operation_id", "")).is_empty():
 			exit_code = 1
 			failure_message = "InspectWorld audit.operation_id was empty."
+
+	# 1b. InspectWorld dry_run must return dry_run without mutating semantics.
+	if exit_code == 0:
+		var inspect_dry_run: Dictionary = WorldOpDispatcherScript.dispatch(world, "InspectWorld", {}, {"dry_run": true})
+		if String(inspect_dry_run.get("status", "")) != "dry_run":
+			exit_code = 1
+			failure_message = "InspectWorld dry_run did not return dry_run status."
 
 	# 2. Unknown operation_type -> validation_error / exit 2.
 	if exit_code == 0:
@@ -146,7 +182,41 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "ListPackages returned no packages: %s" % JSON.stringify(packages_result)
 
-	# 10. audit_id override is honored (so callers can correlate operations).
+	# 10. ListPackages dry_run should preserve read-only semantics and status.
+	if exit_code == 0:
+		var packages_dry_run: Dictionary = WorldOpDispatcherScript.dispatch(world, "ListPackages", {}, {"dry_run": true})
+		var packages: Array = packages_dry_run.get("payload", {}).get("packages", [])
+		if String(packages_dry_run.get("status", "")) != "dry_run" or packages.is_empty():
+			exit_code = 1
+			failure_message = "ListPackages dry_run did not return dry_run with packages: %s" % JSON.stringify(packages_dry_run)
+
+	# 11. EnableRule/DisableRule must reject unexpected terminal statuses.
+	if exit_code == 0:
+		var fake_enable_world := FakeRuleToggleWorld.new(false, "disabled", "disabled")
+		var enable_result: Dictionary = WorldOpEnableRuleScript.execute(fake_enable_world, {"rule_id": "fake_rule"})
+		if String(enable_result.get("status", "")) != "execution_error":
+			exit_code = 1
+			failure_message = "EnableRule accepted unexpected disabled status: %s" % JSON.stringify(enable_result)
+
+	if exit_code == 0:
+		var fake_disable_world := FakeRuleToggleWorld.new(true, "enabled", "enabled")
+		var disable_result: Dictionary = WorldOpDisableRuleScript.execute(fake_disable_world, {"rule_id": "fake_rule"})
+		if String(disable_result.get("status", "")) != "execution_error":
+			exit_code = 1
+			failure_message = "DisableRule accepted unexpected enabled status: %s" % JSON.stringify(disable_result)
+
+	# 12. Direct dry_run helpers should return dry_run on read-only operations.
+	if exit_code == 0:
+		var inspect_direct_dry: Dictionary = WorldOpInspectWorldScript.dry_run(world, {})
+		var packages_direct_dry: Dictionary = WorldOpListPackagesScript.dry_run(world, {})
+		if String(inspect_direct_dry.get("status", "")) != "dry_run":
+			exit_code = 1
+			failure_message = "InspectWorld.dry_run did not return dry_run."
+		elif String(packages_direct_dry.get("status", "")) != "dry_run":
+			exit_code = 1
+			failure_message = "ListPackages.dry_run did not return dry_run."
+
+	# 13. audit_id override is honored (so callers can correlate operations).
 	if exit_code == 0:
 		var inspect_with_id: Dictionary = WorldOpDispatcherScript.dispatch(world, "InspectWorld", {}, {"audit_id": "test-id-123"})
 		if String(inspect_with_id.get("audit", {}).get("operation_id", "")) != "test-id-123":

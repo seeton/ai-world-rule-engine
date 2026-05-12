@@ -50,6 +50,8 @@ var _entity_nodes: Dictionary = {}
 var _player_position_initialized: bool = false
 var _last_synced_player_position: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
 var _interaction_paused: bool = false
+var _overlay_active: bool = false
+var _overlay_hidden_hud_controls: Array[Control] = []
 
 
 func _ready() -> void:
@@ -100,7 +102,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func set_interaction_paused(paused: bool) -> void:
 	_interaction_paused = paused
 	player.set_physics_process(not paused)
-	_refresh_world_hud_visibility()
+
+
+func set_overlay_active(active: bool) -> void:
+	_overlay_active = active
+	_refresh_overlay_sensitive_hud_visibility()
 
 
 func _setup_hud() -> void:
@@ -134,6 +140,7 @@ func _setup_hud() -> void:
 	_status_hint.add_theme_color_override("font_color", Color(0.12, 0.14, 0.17, 0.88))
 	_status_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_status_hint)
+	_overlay_hidden_hud_controls = [_world_name_label, _goal_hint, _status_hint]
 
 	_clock_label = Label.new()
 	_clock_label.position = Vector2(980.0, 20.0)
@@ -171,12 +178,13 @@ func _setup_hud() -> void:
 	_interaction_hint.add_theme_constant_override("shadow_offset_y", 1)
 	_interaction_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_interaction_hint)
-	_refresh_world_hud_visibility()
+	_refresh_overlay_sensitive_hud_visibility()
 
 
-func _refresh_world_hud_visibility() -> void:
-	if _hud_layer != null:
-		_hud_layer.visible = not _interaction_paused
+func _refresh_overlay_sensitive_hud_visibility() -> void:
+	for control in _overlay_hidden_hud_controls:
+		if control != null:
+			control.visible = not _overlay_active
 
 
 func _get_world_snapshot() -> Dictionary:

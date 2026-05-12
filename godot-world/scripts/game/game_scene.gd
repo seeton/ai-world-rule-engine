@@ -103,7 +103,11 @@ func _on_rule_tree_overlay_closed() -> void:
 
 
 func _refresh_active_world_interaction_pause() -> void:
-	if _active_world == null or not _active_world.has_method("set_interaction_paused"):
+	if _active_world == null:
 		return
 
-	_active_world.call("set_interaction_paused", _gm_screen != null or _rule_tree_overlay != null)
+	var overlay_active := _gm_screen != null or _rule_tree_overlay != null
+	if _active_world.has_method("set_interaction_paused"):
+		_active_world.call("set_interaction_paused", overlay_active)
+	if _active_world.has_method("set_overlay_active"):
+		_active_world.call("set_overlay_active", overlay_active)

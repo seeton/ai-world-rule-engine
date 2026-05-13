@@ -83,5 +83,6 @@
         ]
       }
     ]
-  }
+  },
+  "package_dependencies": []
 }

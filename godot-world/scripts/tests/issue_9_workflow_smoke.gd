@@ -15,6 +15,7 @@ func _run_smoke(world_state: Node) -> void:
 	_test_clone_candidate_review(world_state)
 	_test_custom_draft_approval(world_state)
 	_test_install_actions_trace(world_state)
+	_test_multi_rule_package_install(world_state)
 	_test_runtime_helpers_reinitialize(world_state)
 	_test_invalid_patch_operations_fail_fast(world_state)
 	_test_invalid_install_actions_fail_fast(world_state)
@@ -90,6 +91,7 @@ func _test_install_actions_trace(world_state: Node) -> void:
 		"author": "smoke-test",
 		"source_repo": "local://smoke-tests",
 		"source_ref": "issue-9",
+		"package_dependencies": [],
 		"forked_from": null,
 		"suggested_pr_target": null,
 		"tags": ["smoke", "install-actions"],
@@ -128,6 +130,48 @@ func _test_install_actions_trace(world_state: Node) -> void:
 	var snapshot: Dictionary = world_state.call("get_world_snapshot")
 	var preview: Dictionary = snapshot.get("three_d_preview", {})
 	_expect(bool(preview.get("enabled", false)), "Declarative install_actions should update the world snapshot state.")
+
+
+func _test_multi_rule_package_install(world_state: Node) -> void:
+	var review: Dictionary = world_state.call("review_rule_package_proposal", world_state.call("_resolve_rule_package", {
+		"package_id": "builtin.peaceful_world_order"
+	}))
+	_expect(String(review.get("status", "")) == "ready_for_install", "Peaceful world order should review as ready_for_install.")
+	_expect(Array(review.get("package_dependencies", [])).has("builtin.default_package"), "Peaceful world order review should expose its default-package dependency.")
+	_expect(Array(review.get("compiled_runtime_rules", [])).size() >= 2, "Peaceful world order review should expose multiple runtime rules.")
+
+	var install_result: Dictionary = world_state.call("create_rule_from_patch", {
+		"package_id": "builtin.peaceful_world_order"
+	})
+	_expect(String(install_result.get("status", "")) == "installed", "Peaceful world order package should install successfully.")
+	_expect(Array(install_result.get("package_dependencies", [])).has("builtin.default_package"), "Package install should preserve package dependency metadata.")
+	_expect(Array(install_result.get("compiled_runtime_rules", [])).size() >= 2, "Package install should report compiled runtime rules.")
+	_expect(Array(install_result.get("installed_rule_ids", [])).has("default_package.foundation"), "Dependency install should include default package runtime rules.")
+	_expect(Array(install_result.get("installed_rule_ids", [])).has("world_order.peaceful_foundation"), "Package install should include peaceful world order runtime rules.")
+
+	var preview_result: Dictionary = world_state.call("create_rule_from_patch", {
+		"template_id": "three_d_preview_rule"
+	})
+	_expect(String(preview_result.get("status", "")) == "installed", "Three-dimensional preview should stay playable after the package split.")
+
+	var snapshot: Dictionary = world_state.call("get_world_snapshot")
+	var world_contract: Dictionary = snapshot.get("world_contract", {})
+	var default_package_contract: Dictionary = world_contract.get("default_package", {})
+	_expect(Array(default_package_contract.get("supports_world_modes", [])).has("two_d"), "Default package should declare two_d support in the snapshot.")
+	_expect(Array(default_package_contract.get("supports_world_modes", [])).has("three_d"), "Default package should declare three_d support in the snapshot.")
+
+	var world_order: Dictionary = snapshot.get("world_order", {})
+	_expect(String(world_order.get("foundation_package_id", "")) == "builtin.default_package", "World order snapshot should reference the default package foundation.")
+	_expect(String(snapshot.get("world_mode", "")) == "three_d", "Playable flow should still allow switching into three_d mode.")
+
+	var world_clock: Dictionary = snapshot.get("world_clock", {})
+	_expect(String(world_clock.get("source_package_id", "")) == "builtin.default_package", "Default package should provide the world clock after dependency install.")
+
+	var origin_needs: Dictionary = snapshot.get("entities", {}).get("origin_entity", {}).get("components", {}).get("needs", {})
+	var origin_stats: Dictionary = snapshot.get("entities", {}).get("origin_entity", {}).get("components", {}).get("stats", {})
+	_expect(origin_needs.has("hunger"), "Peaceful world order should still install hunger-related gameplay state.")
+	_expect(origin_stats.has("health"), "Peaceful world order should still install health-related gameplay state.")
+	_expect(origin_stats.has("money"), "Peaceful world order should still install money-related gameplay state.")
 
 
 func _test_runtime_helpers_reinitialize(world_state: Node) -> void:
@@ -173,6 +217,7 @@ func _test_invalid_patch_operations_fail_fast(world_state: Node) -> void:
 		"author": "smoke-test",
 		"source_repo": "local://smoke-tests",
 		"source_ref": "issue-9",
+		"package_dependencies": [],
 		"forked_from": null,
 		"suggested_pr_target": null,
 		"tags": ["smoke", "operations"],
@@ -209,6 +254,7 @@ func _test_invalid_install_actions_fail_fast(world_state: Node) -> void:
 		"author": "smoke-test",
 		"source_repo": "local://smoke-tests",
 		"source_ref": "issue-9",
+		"package_dependencies": [],
 		"forked_from": null,
 		"suggested_pr_target": null,
 		"tags": ["smoke", "install-actions"],

@@ -2171,6 +2171,7 @@ func _simulate_task_submission(task_text: String) -> Dictionary:
         "author": "fallback-shell",
         "source_repo": "local://fallback-preview",
         "source_ref": "draft",
+        "package_dependencies": [],
         "forked_from": {
             "package_id": "fallback.starter_farming",
             "source_repo": "local://fallback-preview",

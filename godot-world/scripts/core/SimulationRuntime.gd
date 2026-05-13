@@ -111,6 +111,7 @@ func get_snapshot() -> Dictionary:
 	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
 	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
+	snapshot["rule_dependency_status"] = _build_rule_dependency_status(installed_rules_by_id)
 	var world_clock := _build_world_clock_summary(installed_rules_by_id, snapshot)
 	if not world_clock.is_empty():
 		snapshot["world_clock"] = world_clock
@@ -588,6 +589,8 @@ func _run_tick(step_seconds: float) -> void:
 			var rule: Dictionary = installed_rules[rule_id]
 			if not bool(rule.get("enabled", true)):
 				continue
+			if bool(rule.get("blocked", false)) or bool(rule.get("inactive", false)):
+				continue
 			if not _entity_matches_rule(entity, rule):
 				continue
 			_apply_rule(entity, rule, step_seconds)
@@ -661,6 +664,9 @@ func _install_normalized_rule(normalized_rule: Dictionary) -> Dictionary:
 	normalized_rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
 	normalized_rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
 	normalized_rule["missing_required_rule_kinds"] = []
+	normalized_rule["blocked"] = false
+	normalized_rule["inactive"] = not bool(normalized_rule.get("enabled", true))
+	normalized_rule["dependency_status"] = "inactive" if bool(normalized_rule.get("inactive", false)) else "active"
 
 	installed_rules[rule_id] = normalized_rule
 	_world_state["installed_rules"] = installed_rules
@@ -709,6 +715,9 @@ func _normalize_rule_patch(rule_patch: Dictionary, merge_template: bool = true) 
 	merged_rule["resolved_parent_rule_ids"] = []
 	merged_rule["resolved_parent_rule_links"] = []
 	merged_rule["missing_required_rule_kinds"] = []
+	merged_rule["blocked"] = false
+	merged_rule["inactive"] = not bool(merged_rule.get("enabled", true))
+	merged_rule["dependency_status"] = "inactive" if bool(merged_rule.get("inactive", false)) else "active"
 	var target_tags: Array = []
 	for tag in merged_rule.get("target_tags", []):
 		target_tags.append(String(tag))
@@ -824,7 +833,16 @@ func _refresh_rule_relationships() -> void:
 		var parent_resolution := _resolve_parent_rule_links(rule, installed_rules)
 		rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
 		rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
-		rule["missing_required_rule_kinds"] = parent_resolution.get("missing_required_rule_kinds", []).duplicate(true)
+		var missing_required_rule_kinds: Array = parent_resolution.get("missing_required_rule_kinds", [])
+		rule["missing_required_rule_kinds"] = missing_required_rule_kinds.duplicate(true)
+		rule["blocked"] = not missing_required_rule_kinds.is_empty()
+		rule["inactive"] = bool(rule.get("blocked", false)) or not bool(rule.get("enabled", true))
+		if bool(rule.get("blocked", false)):
+			rule["dependency_status"] = "blocked"
+		elif bool(rule.get("inactive", false)):
+			rule["dependency_status"] = "inactive"
+		else:
+			rule["dependency_status"] = "active"
 		installed_rules[rule_id] = rule
 
 	_world_state["installed_rules"] = installed_rules
@@ -1286,6 +1304,10 @@ func _build_rule_tree(installed_rules_by_id: Dictionary) -> Dictionary:
 			"requires_rule_kinds": rule.get("requires_rule_kinds", []).duplicate(true),
 			"provides_rule_kinds": rule.get("provides_rule_kinds", []).duplicate(true),
 			"resolved_parent_rule_ids": rule.get("resolved_parent_rule_ids", []).duplicate(true),
+			"missing_required_rule_kinds": rule.get("missing_required_rule_kinds", []).duplicate(true),
+			"blocked": bool(rule.get("blocked", false)),
+			"inactive": bool(rule.get("inactive", false)),
+			"dependency_status": String(rule.get("dependency_status", "active")),
 			"child_rule_ids": []
 		}
 
@@ -1313,6 +1335,40 @@ func _build_rule_tree(installed_rules_by_id: Dictionary) -> Dictionary:
 		"root_rule_ids": root_rule_ids,
 		"nodes_by_rule_id": nodes_by_rule_id,
 		"roots": roots
+	}
+
+
+func _build_rule_dependency_status(installed_rules_by_id: Dictionary) -> Dictionary:
+	var unresolved_rule_ids: Array = []
+	var blocked_rule_ids: Array = []
+	var inactive_rule_ids: Array = []
+	var provided_rule_kinds: Array = []
+	var missing_required_rule_kinds_by_rule_id: Dictionary = {}
+	var rule_ids: Array = installed_rules_by_id.keys()
+	rule_ids.sort()
+
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules_by_id[rule_id]
+		for provided_kind_variant in rule.get("provides_rule_kinds", []):
+			var provided_kind := String(provided_kind_variant).strip_edges()
+			if not provided_kind.is_empty() and not provided_rule_kinds.has(provided_kind):
+				provided_rule_kinds.append(provided_kind)
+		var missing_required_rule_kinds: Array = rule.get("missing_required_rule_kinds", [])
+		if not missing_required_rule_kinds.is_empty():
+			unresolved_rule_ids.append(rule_id)
+			missing_required_rule_kinds_by_rule_id[rule_id] = missing_required_rule_kinds.duplicate(true)
+		if bool(rule.get("blocked", false)):
+			blocked_rule_ids.append(rule_id)
+		if bool(rule.get("inactive", false)):
+			inactive_rule_ids.append(rule_id)
+
+	provided_rule_kinds.sort()
+	return {
+		"provided_rule_kinds": provided_rule_kinds,
+		"unresolved_rule_ids": unresolved_rule_ids,
+		"blocked_rule_ids": blocked_rule_ids,
+		"inactive_rule_ids": inactive_rule_ids,
+		"missing_required_rule_kinds_by_rule_id": missing_required_rule_kinds_by_rule_id
 	}
 
 

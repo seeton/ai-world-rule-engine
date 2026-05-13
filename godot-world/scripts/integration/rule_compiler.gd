@@ -91,6 +91,7 @@ func _build_custom_draft(task: Dictionary, request_text: String, best_candidate:
 		"author": String(task.get("author", "player")),
 		"source_repo": String(task.get("source_repo", "local://player-drafts")),
 		"source_ref": String(task.get("source_ref", "draft")),
+		"package_dependencies": [],
 		"forked_from": forked_from,
 		"suggested_pr_target": _resolve_pr_target(task, best_candidate),
 		"tags": _draft_tags(request_text),

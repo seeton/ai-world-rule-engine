@@ -9,6 +9,8 @@ const validatorPath = path.join(repoRoot, "godot-world", "scripts", "validate_re
 const wrapperPath = path.join(repoRoot, "godot-world", "scripts", "validate_repo.sh");
 const schemaPath = path.join(repoRoot, "godot-world", "rules", "schema", "rule_package.schema.json");
 const packagePath = path.join(repoRoot, "godot-world", "rules", "packages", "time.rule.json");
+const defaultPackagePath = path.join(repoRoot, "godot-world", "rules", "packages", "default_package.rule.json");
+const peacefulWorldOrderPath = path.join(repoRoot, "godot-world", "rules", "packages", "peaceful_world_order.rule.json");
 const scratchRoot = path.join(repoRoot, "test", ".scratch", "repository-validation");
 
 function runValidator(args) {
@@ -94,6 +96,57 @@ test("repository validator reports duplicate package ids clearly", () => {
   assert.notEqual(result.status, 0);
   assert.match(output, /Duplicate package_id 'builtin\.time'; already defined in .*\.rule\.json\./);
   assert.match(output, /time\.rule\.json|time-copy\.rule\.json/);
+});
+
+test("repository validator reports unknown package dependencies clearly", () => {
+  const fixtureRoot = createFixture("missing-package-dependency");
+  const packageData = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+
+  packageData.package_dependencies = ["builtin.missing_dependency"];
+  writeJson(path.join(fixtureRoot, "rules", "packages", "time.rule.json"), packageData);
+
+  const result = runValidator(["--root", fixtureRoot]);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /Unknown package dependency 'builtin\.missing_dependency'\./);
+  assert.match(output, /\$\.package_dependencies\[0\]/);
+});
+
+test("repository validator enforces default package base capabilities", () => {
+  const fixtureRoot = createFixture("default-package-capabilities");
+  const defaultPackage = JSON.parse(fs.readFileSync(defaultPackagePath, "utf8"));
+  const peacefulWorldOrder = JSON.parse(fs.readFileSync(peacefulWorldOrderPath, "utf8"));
+
+  defaultPackage.runtime_contract.foundation_capabilities =
+    defaultPackage.runtime_contract.foundation_capabilities.filter((capability) => capability !== "basic-action");
+  writeJson(path.join(fixtureRoot, "rules", "packages", "default_package.rule.json"), defaultPackage);
+  writeJson(path.join(fixtureRoot, "rules", "packages", "peaceful_world_order.rule.json"), peacefulWorldOrder);
+
+  const result = runValidator(["--root", fixtureRoot]);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /Default package runtime_contract\.foundation_capabilities must include 'basic-action'\./);
+});
+
+test("repository validator rejects world-order coupling to default-package rule kinds", () => {
+  const fixtureRoot = createFixture("world-order-hard-coded-default-rule-kind");
+  const defaultPackage = JSON.parse(fs.readFileSync(defaultPackagePath, "utf8"));
+  const peacefulWorldOrder = JSON.parse(fs.readFileSync(peacefulWorldOrderPath, "utf8"));
+  const foundationOperation = peacefulWorldOrder.patch.operations.find(
+    (operation) => operation.rule_id === "world_order.peaceful_foundation"
+  );
+
+  foundationOperation.requires_rule_kinds = ["default-package.base"];
+  writeJson(path.join(fixtureRoot, "rules", "packages", "default_package.rule.json"), defaultPackage);
+  writeJson(path.join(fixtureRoot, "rules", "packages", "peaceful_world_order.rule.json"), peacefulWorldOrder);
+
+  const result = runValidator(["--root", fixtureRoot]);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /Peaceful world order must require world capabilities, not default-package-specific rule kinds\./);
 });
 
 test("repository validator reports broken ExtResource references clearly", () => {

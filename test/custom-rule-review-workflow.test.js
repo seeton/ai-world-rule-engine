@@ -15,8 +15,21 @@ test("WorldState routes package installs through review before runtime install",
 
   assert.match(source, /func review_rule_package_proposal\(rule_package: Dictionary\) -> Dictionary:/);
   assert.match(source, /if String\(review_result.get\("status", ""\)\) != "ready_for_install":/);
-  assert.match(source, /install_result\["install_source"\] = "rule_package"/);
-  assert.match(source, /install_result\["compiled_runtime_patch"\] = compilation.get\("runtime_patch", \{\}\)\.duplicate\(true\)/);
+  assert.match(source, /"install_source": "rule_package"/);
+  assert.match(source, /"compiled_runtime_patch": compilation.get\("runtime_patch", \{\}\)\.duplicate\(true\)/);
+  assert.match(source, /var dependency_resolution := _resolve_rule_package_dependencies\(rule_package\)/);
+  assert.match(source, /var compiled_runtime_rules := _extract_compiled_runtime_rules\(compilation\)/);
+  assert.match(source, /for runtime_target_variant in runtime_targets:/);
+});
+
+test("runtime exposes collapsed dependency state without making defaults engine invariants", () => {
+  const source = fs.readFileSync(path.join(repoRoot, "godot-world", "scripts", "core", "SimulationRuntime.gd"), "utf8");
+
+  assert.match(source, /snapshot\["rule_dependency_status"\] = _build_rule_dependency_status\(installed_rules_by_id\)/);
+  assert.match(source, /"blocked_rule_ids": blocked_rule_ids/);
+  assert.match(source, /"inactive_rule_ids": inactive_rule_ids/);
+  assert.match(source, /"missing_required_rule_kinds_by_rule_id": missing_required_rule_kinds_by_rule_id/);
+  assert.match(source, /rule\["blocked"\] = not missing_required_rule_kinds\.is_empty\(\)/);
 });
 
 test("GM UI exposes proposal review metadata and approval gating", () => {
@@ -34,8 +47,9 @@ test("GM UI exposes proposal review metadata and approval gating", () => {
 test("runtime compiler preserves declarative install actions for traceable installs", () => {
   const source = fs.readFileSync(compilerPath, "utf8");
 
-  assert.match(source, /var install_actions_result := _validate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
-  assert.match(source, /"install_actions": install_actions_result.get\("install_actions", \[\]\)\.duplicate\(true\)/);
+  assert.match(source, /var patch_install_actions_result := _validate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
+  assert.match(source, /"install_actions": patch_install_actions\.duplicate\(true\)/);
+  assert.match(source, /"runtime_rules": _duplicate_dictionary_array\(runtime_rules\)/);
   assert.match(source, /func _validate_install_actions\(raw_actions: Variant\) -> Dictionary:/);
   assert.match(source, /func _validate_operations\(raw_operations: Variant\) -> Dictionary:/);
   assert.match(source, /Rule package patch\.operations\[%d\] must be a dictionary\./);

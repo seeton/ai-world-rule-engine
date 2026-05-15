@@ -16,6 +16,19 @@ REFERENCE_GLOBS = ("project.godot", "scenes/**/*.tscn", "scripts/**/*.gd")
 RES_REFERENCE_PATTERN = re.compile(r"res://[A-Za-z0-9_./-]+")
 EXT_RESOURCE_USE_PATTERN = re.compile(r'ExtResource\("([^"]+)"\)')
 EXT_RESOURCE_ATTRIBUTE_PATTERN = re.compile(r'([A-Za-z_]+)="([^"]*)"')
+DEFAULT_PACKAGE_ID = "builtin.default_package"
+PEACEFUL_WORLD_ORDER_PACKAGE_ID = "builtin.peaceful_world_order"
+FOUNDATION_CAPABILITIES = (
+    "existence",
+    "representation",
+    "state",
+    "space",
+    "base-time",
+    "movement",
+    "basic-action",
+)
+WORLD_FOUNDATION_CAPABILITY = "world.foundation"
+WORLD_CAPABILITIES = tuple(f"world.{capability}" for capability in FOUNDATION_CAPABILITIES)
 
 
 @dataclass
@@ -206,6 +219,7 @@ def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) ->
         return 0
 
     package_ids: Dict[str, Path] = {}
+    package_entries: List[Tuple[Path, Dict[str, Any]]] = []
     for package_path in package_paths:
         package_data = read_json_file(package_path, problems)
         if package_data is None:
@@ -214,6 +228,7 @@ def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) ->
         validate_against_schema(package_data, schema, package_path, "$", problems)
         if not isinstance(package_data, dict):
             continue
+        package_entries.append((package_path, package_data))
 
         package_id = package_data.get("package_id")
         if isinstance(package_id, str):
@@ -228,7 +243,200 @@ def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) ->
             else:
                 package_ids[package_id] = package_path
 
+    for package_path, package_data in package_entries:
+        package_id = package_data.get("package_id")
+        raw_dependencies = package_data.get("package_dependencies", [])
+        if not isinstance(raw_dependencies, list):
+            continue
+        for dependency_index, dependency_value in enumerate(raw_dependencies):
+            if not isinstance(dependency_value, str):
+                continue
+            dependency_id = dependency_value.strip()
+            if not dependency_id:
+                continue
+            if dependency_id == package_id:
+                problems.append(
+                    ValidationProblem(
+                        package_path,
+                        f"Package dependency {dependency_id!r} cannot reference itself.",
+                        f"$.package_dependencies[{dependency_index}]",
+                    )
+                )
+                continue
+            if dependency_id not in package_ids:
+                problems.append(
+                    ValidationProblem(
+                        package_path,
+                        f"Unknown package dependency {dependency_id!r}.",
+                        f"$.package_dependencies[{dependency_index}]",
+                    )
+                )
+
+    validate_default_package_contract(package_entries, problems)
+
     return len(package_paths)
+
+
+def package_operation_rule_kinds(package_data: Dict[str, Any], field_name: str) -> List[str]:
+    values: List[str] = []
+    patch = package_data.get("patch", {})
+    if not isinstance(patch, dict):
+        return values
+    for operation in patch.get("operations", []):
+        if not isinstance(operation, dict):
+            continue
+        raw_values = operation.get(field_name, [])
+        if not isinstance(raw_values, list):
+            continue
+        for raw_value in raw_values:
+            if isinstance(raw_value, str) and raw_value not in values:
+                values.append(raw_value)
+    return values
+
+
+def validate_default_package_contract(
+    package_entries: List[Tuple[Path, Dict[str, Any]]],
+    problems: List[ValidationProblem],
+) -> None:
+    packages_by_id = {
+        package_data.get("package_id"): (package_path, package_data)
+        for package_path, package_data in package_entries
+        if isinstance(package_data.get("package_id"), str)
+    }
+    if DEFAULT_PACKAGE_ID not in packages_by_id and PEACEFUL_WORLD_ORDER_PACKAGE_ID not in packages_by_id:
+        return
+
+    default_entry = packages_by_id.get(DEFAULT_PACKAGE_ID)
+    peaceful_entry = packages_by_id.get(PEACEFUL_WORLD_ORDER_PACKAGE_ID)
+    if default_entry is None:
+        if peaceful_entry is not None:
+            problems.append(
+                ValidationProblem(
+                    peaceful_entry[0],
+                    f"{PEACEFUL_WORLD_ORDER_PACKAGE_ID} requires {DEFAULT_PACKAGE_ID} to be present as the default provider.",
+                )
+            )
+        return
+    if peaceful_entry is None:
+        problems.append(
+            ValidationProblem(
+                default_entry[0],
+                f"{DEFAULT_PACKAGE_ID} must be accompanied by {PEACEFUL_WORLD_ORDER_PACKAGE_ID} for the built-in split contract.",
+            )
+        )
+        return
+
+    default_path, default_package = default_entry
+    peaceful_path, peaceful_package = peaceful_entry
+    default_contract = default_package.get("runtime_contract", {})
+    if not isinstance(default_contract, dict):
+        problems.append(
+            ValidationProblem(default_path, "Default package runtime_contract must be an object.", "$.runtime_contract")
+        )
+        return
+
+    foundation_capabilities = default_contract.get("foundation_capabilities", [])
+    for capability in FOUNDATION_CAPABILITIES:
+        if not isinstance(foundation_capabilities, list) or capability not in foundation_capabilities:
+            problems.append(
+                ValidationProblem(
+                    default_path,
+                    f"Default package runtime_contract.foundation_capabilities must include {capability!r}.",
+                    "$.runtime_contract.foundation_capabilities",
+                )
+            )
+
+    provided_capabilities = default_contract.get("provides_capabilities", [])
+    required_world_capabilities = (WORLD_FOUNDATION_CAPABILITY, *WORLD_CAPABILITIES)
+    default_provided_rule_kinds = package_operation_rule_kinds(default_package, "provides_rule_kinds")
+    for capability in required_world_capabilities:
+        if not isinstance(provided_capabilities, list) or capability not in provided_capabilities:
+            problems.append(
+                ValidationProblem(
+                    default_path,
+                    f"Default package runtime_contract.provides_capabilities must include {capability!r}.",
+                    "$.runtime_contract.provides_capabilities",
+                )
+            )
+        if capability not in default_provided_rule_kinds:
+            problems.append(
+                ValidationProblem(
+                    default_path,
+                    f"Default package rules must provide capability kind {capability!r}.",
+                    "$.patch.operations",
+                )
+            )
+
+    lifecycle = default_contract.get("lifecycle", {})
+    if not isinstance(lifecycle, dict) or lifecycle.get("immutable_engine_invariant") is not False:
+        problems.append(
+            ValidationProblem(
+                default_path,
+                "Default package lifecycle must declare immutable_engine_invariant false.",
+                "$.runtime_contract.lifecycle.immutable_engine_invariant",
+            )
+        )
+    for field_name in ("removable", "disableable", "replaceable"):
+        if not isinstance(lifecycle, dict) or lifecycle.get(field_name) is not True:
+            problems.append(
+                ValidationProblem(
+                    default_path,
+                    f"Default package lifecycle must declare {field_name} true.",
+                    f"$.runtime_contract.lifecycle.{field_name}",
+                )
+            )
+
+    collapse_behavior = default_contract.get("collapse_behavior", {})
+    if not isinstance(collapse_behavior, dict) or collapse_behavior.get("runtime_must_prevent_removal") is not False:
+        problems.append(
+            ValidationProblem(
+                default_path,
+                "Default package collapse_behavior must declare runtime_must_prevent_removal false.",
+                "$.runtime_contract.collapse_behavior.runtime_must_prevent_removal",
+            )
+        )
+
+    peaceful_dependencies = peaceful_package.get("package_dependencies", [])
+    if not isinstance(peaceful_dependencies, list) or DEFAULT_PACKAGE_ID not in peaceful_dependencies:
+        problems.append(
+            ValidationProblem(
+                peaceful_path,
+                f"Peaceful world order package_dependencies must include {DEFAULT_PACKAGE_ID!r} as its initial provider.",
+                "$.package_dependencies",
+            )
+        )
+
+    peaceful_contract = peaceful_package.get("runtime_contract", {})
+    peaceful_requires = peaceful_contract.get("requires_capabilities", []) if isinstance(peaceful_contract, dict) else []
+    for capability in (
+        WORLD_FOUNDATION_CAPABILITY,
+        "world.existence",
+        "world.state",
+        "world.space",
+        "world.base-time",
+        "world.basic-action",
+    ):
+        if not isinstance(peaceful_requires, list) or capability not in peaceful_requires:
+            problems.append(
+                ValidationProblem(
+                    peaceful_path,
+                    f"Peaceful world order runtime_contract.requires_capabilities must include {capability!r}.",
+                    "$.runtime_contract.requires_capabilities",
+                )
+            )
+
+    peaceful_required_rule_kinds = package_operation_rule_kinds(peaceful_package, "requires_rule_kinds")
+    default_specific_rule_kinds = [
+        rule_kind for rule_kind in peaceful_required_rule_kinds if rule_kind.startswith("default-package.")
+    ]
+    if default_specific_rule_kinds:
+        problems.append(
+            ValidationProblem(
+                peaceful_path,
+                "Peaceful world order must require world capabilities, not default-package-specific rule kinds.",
+                "$.patch.operations[*].requires_rule_kinds",
+            )
+        )
 
 
 def validate_scene_ext_resources(

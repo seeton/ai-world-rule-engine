@@ -274,6 +274,9 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
     if String(operations_result.get("status", "")) == "error":
         return operations_result
     var operations: Array = operations_result.get("operations", [])
+    var dependency_resolution := _resolve_rule_package_dependencies(rule_package)
+    if String(dependency_resolution.get("status", "")) == "error":
+        return dependency_resolution
 
     var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
     if String(compilation.get("status", "")) != "compiled":
@@ -281,11 +284,14 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
         error_result["rule_package"] = rule_package.duplicate(true)
         return error_result
 
+    var has_install_targets := bool(compilation.get("has_install_targets", true))
     var warnings: Array = []
     if operations.is_empty():
         warnings.append("Rule package has no operations to install.")
     if not bool(compilation.get("safe_to_apply_directly", false)):
         warnings.append("Some operations are deferred until the runtime supports them.")
+    if not has_install_targets and not operations.is_empty():
+        warnings.append("Rule package operations produced no installable runtime targets.")
 
     var review_status := String(patch.get("review_status", "draft"))
     return {
@@ -294,9 +300,12 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
         "display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
         "review_status": review_status,
         "operation_count": operations.size(),
+        "package_dependencies": dependency_resolution.get("package_dependencies", []).duplicate(true),
         "safe_to_apply_directly": bool(compilation.get("safe_to_apply_directly", false)),
+        "has_install_targets": has_install_targets,
         "deferred_operations": compilation.get("deferred_operations", []).duplicate(true),
         "compiled_runtime_patch": compilation.get("runtime_patch", {}).duplicate(true),
+        "compiled_runtime_rules": _extract_compiled_runtime_rules(compilation),
         "forked_from": rule_package.get("forked_from", null),
         "suggested_pr_target": rule_package.get("suggested_pr_target", null),
         "warnings": warnings,
@@ -531,23 +540,77 @@ func _resolve_rule_package(rule_patch: Dictionary) -> Dictionary:
     return {}
 
 
-func _install_rule_package(rule_package: Dictionary) -> Dictionary:
+func _install_rule_package(rule_package: Dictionary, install_stack: Array = []) -> Dictionary:
+    var package_id := String(rule_package.get("package_id", "")).strip_edges()
+    if package_id.is_empty():
+        return {
+            "status": "error",
+            "message": "Rule package is missing package_id."
+        }
+    if install_stack.has(package_id):
+        var dependency_chain := install_stack.duplicate(true)
+        dependency_chain.append(package_id)
+        return {
+            "status": "error",
+            "message": "Rule package dependency cycle detected: %s" % " -> ".join(dependency_chain),
+            "package_id": package_id,
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var dependency_resolution := _resolve_rule_package_dependencies(rule_package)
+    if String(dependency_resolution.get("status", "")) == "error":
+        return dependency_resolution
+
     var compilation: Dictionary = _runtime_rule_patch_compiler.compile_package(rule_package)
     if String(compilation.get("status", "")) != "compiled":
         return compilation
 
-    var runtime_result: Dictionary = _runtime.create_rule_from_patch(compilation.get("runtime_patch", {}))
-    var install_result: Dictionary = runtime_result.duplicate(true)
-    install_result["install_source"] = "rule_package"
-    install_result["package_id"] = rule_package.get("package_id", "")
-    install_result["source_repo"] = rule_package.get("source_repo", "")
-    install_result["source_ref"] = rule_package.get("source_ref", "")
-    install_result["forked_from"] = rule_package.get("forked_from", null)
-    install_result["suggested_pr_target"] = rule_package.get("suggested_pr_target", null)
-    install_result["safe_to_apply_directly"] = bool(compilation.get("safe_to_apply_directly", false))
-    install_result["deferred_operations"] = compilation.get("deferred_operations", []).duplicate(true)
-    install_result["compiled_runtime_patch"] = compilation.get("runtime_patch", {}).duplicate(true)
-    return install_result
+    var compiled_runtime_rules := _extract_compiled_runtime_rules(compilation)
+    var runtime_targets := _runtime_targets_for_compilation(compilation, compiled_runtime_rules)
+    if runtime_targets.is_empty():
+        return {
+            "status": "error",
+            "message": "Rule package did not compile any runtime install targets.",
+            "package_id": package_id,
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var dependency_results: Array = []
+    var next_install_stack := install_stack.duplicate(true)
+    next_install_stack.append(package_id)
+    for dependency_package in dependency_resolution.get("dependency_packages", []):
+        if not (dependency_package is Dictionary):
+            continue
+        var dependency_result: Dictionary = _install_rule_package(dependency_package, next_install_stack)
+        if String(dependency_result.get("status", "")) != "installed":
+            return dependency_result
+        dependency_results.append(dependency_result)
+
+    if _runtime_targets_already_installed(runtime_targets):
+        return _build_rule_package_install_result(rule_package, compilation, dependency_resolution.get("package_dependencies", []), dependency_results, [], true)
+
+    var runtime_results: Array = []
+    for runtime_target_variant in runtime_targets:
+        if not (runtime_target_variant is Dictionary):
+            continue
+        var runtime_target: Dictionary = runtime_target_variant
+        var runtime_rule_id := String(runtime_target.get("id", "")).strip_edges()
+        if runtime_rule_id.is_empty() or _runtime_rule_is_installed(runtime_rule_id):
+            continue
+        var runtime_result: Dictionary = _runtime.create_rule_from_patch(runtime_target)
+        if String(runtime_result.get("status", "")) != "installed":
+            var error_result: Dictionary = runtime_result.duplicate(true)
+            error_result["install_source"] = "rule_package"
+            error_result["package_id"] = package_id
+            error_result["package_dependencies"] = dependency_resolution.get("package_dependencies", []).duplicate(true)
+            error_result["dependency_results"] = dependency_results.duplicate(true)
+            error_result["compiled_runtime_patch"] = compilation.get("runtime_patch", {}).duplicate(true)
+            error_result["compiled_runtime_rules"] = compiled_runtime_rules.duplicate(true)
+            error_result["deferred_operations"] = compilation.get("deferred_operations", []).duplicate(true)
+            return error_result
+        runtime_results.append(runtime_result)
+
+    return _build_rule_package_install_result(rule_package, compilation, dependency_resolution.get("package_dependencies", []), dependency_results, runtime_results)
 
 
 func _build_task_proposals(resolution: Dictionary) -> Array:
@@ -590,6 +653,7 @@ func _rule_package_to_proposal(rule_package: Dictionary, compilation: Dictionary
         "author": rule_package.get("author", ""),
         "source_repo": rule_package.get("source_repo", ""),
         "source_ref": rule_package.get("source_ref", ""),
+        "package_dependencies": rule_package.get("package_dependencies", []).duplicate(true),
         "forked_from": rule_package.get("forked_from", null),
         "suggested_pr_target": rule_package.get("suggested_pr_target", null),
         "tags": rule_package.get("tags", []).duplicate(true),
@@ -602,7 +666,9 @@ func _rule_package_to_proposal(rule_package: Dictionary, compilation: Dictionary
     if String(compilation.get("status", "")) == "compiled":
         proposal["rule_patch"] = compilation.get("runtime_patch", {}).duplicate(true)
         proposal["compiled_runtime_patch"] = compilation.get("runtime_patch", {}).duplicate(true)
+        proposal["compiled_runtime_rules"] = _extract_compiled_runtime_rules(compilation)
         proposal["safe_to_apply_directly"] = bool(compilation.get("safe_to_apply_directly", false))
+        proposal["has_install_targets"] = bool(compilation.get("has_install_targets", true))
         proposal["deferred_operations"] = compilation.get("deferred_operations", []).duplicate(true)
 
     return proposal
@@ -626,6 +692,7 @@ func _find_missing_rule_package_keys(rule_package: Dictionary) -> Array:
         "author",
         "source_repo",
         "source_ref",
+        "package_dependencies",
         "tags",
         "match_phrases",
         "community",
@@ -668,3 +735,141 @@ func _validate_rule_package_operations(operations_variant: Variant, rule_package
         "status": "ok",
         "operations": operations
     }
+
+
+func _validate_rule_package_dependencies(dependencies_variant: Variant, rule_package: Dictionary) -> Dictionary:
+    if not (dependencies_variant is Array):
+        return {
+            "status": "error",
+            "message": "Rule package package_dependencies must be an array.",
+            "rule_package": rule_package.duplicate(true)
+        }
+
+    var package_dependencies: Array = []
+    for dependency_index in range(dependencies_variant.size()):
+        var dependency_value = dependencies_variant[dependency_index]
+        if not (dependency_value is String):
+            return {
+                "status": "error",
+                "message": "Rule package package_dependencies[%d] must be a string." % dependency_index,
+                "rule_package": rule_package.duplicate(true)
+            }
+        var dependency_id := String(dependency_value).strip_edges()
+        if dependency_id.is_empty():
+            return {
+                "status": "error",
+                "message": "Rule package package_dependencies[%d] must not be empty." % dependency_index,
+                "rule_package": rule_package.duplicate(true)
+            }
+        if not package_dependencies.has(dependency_id):
+            package_dependencies.append(dependency_id)
+
+    return {
+        "status": "ok",
+        "package_dependencies": package_dependencies
+    }
+
+
+func _resolve_rule_package_dependencies(rule_package: Dictionary) -> Dictionary:
+    var dependencies_result := _validate_rule_package_dependencies(rule_package.get("package_dependencies", []), rule_package)
+    if String(dependencies_result.get("status", "")) == "error":
+        return dependencies_result
+
+    var dependency_packages: Array = []
+    for dependency_id_variant in dependencies_result.get("package_dependencies", []):
+        var dependency_id := String(dependency_id_variant)
+        var dependency_package: Dictionary = _rule_package_repository.get_rule_package(dependency_id)
+        if dependency_package.is_empty():
+            return {
+                "status": "error",
+                "message": "Rule package dependency '%s' could not be found." % dependency_id,
+                "package_id": rule_package.get("package_id", ""),
+                "rule_package": rule_package.duplicate(true)
+            }
+        dependency_packages.append(dependency_package)
+
+    return {
+        "status": "ok",
+        "package_dependencies": dependencies_result.get("package_dependencies", []).duplicate(true),
+        "dependency_packages": dependency_packages
+    }
+
+
+func _extract_compiled_runtime_rules(compilation: Dictionary) -> Array:
+    var compiled_runtime_rules: Array = []
+    for runtime_rule_variant in compilation.get("runtime_rules", []):
+        if runtime_rule_variant is Dictionary:
+            compiled_runtime_rules.append(runtime_rule_variant.duplicate(true))
+    return compiled_runtime_rules
+
+
+func _runtime_targets_for_compilation(compilation: Dictionary, compiled_runtime_rules: Array) -> Array:
+    if not compiled_runtime_rules.is_empty():
+        return compiled_runtime_rules.duplicate(true)
+    var runtime_patch: Dictionary = compilation.get("runtime_patch", {})
+    if runtime_patch.is_empty():
+        return []
+    return [runtime_patch.duplicate(true)]
+
+
+func _runtime_target_ids(runtime_targets: Array) -> Array:
+    var runtime_target_ids: Array = []
+    for runtime_target_variant in runtime_targets:
+        if not (runtime_target_variant is Dictionary):
+            continue
+        var runtime_target_id := String(runtime_target_variant.get("id", "")).strip_edges()
+        if not runtime_target_id.is_empty() and not runtime_target_ids.has(runtime_target_id):
+            runtime_target_ids.append(runtime_target_id)
+    return runtime_target_ids
+
+
+func _runtime_rule_is_installed(rule_id: String) -> bool:
+    if rule_id.is_empty():
+        return false
+    var installed_rules_by_id: Dictionary = _runtime.get_snapshot().get("installed_rules_by_id", {})
+    return installed_rules_by_id.has(rule_id)
+
+
+func _runtime_targets_already_installed(runtime_targets: Array) -> bool:
+    var runtime_target_ids := _runtime_target_ids(runtime_targets)
+    if runtime_target_ids.is_empty():
+        return false
+    for runtime_target_id in runtime_target_ids:
+        if not _runtime_rule_is_installed(String(runtime_target_id)):
+            return false
+    return true
+
+
+func _build_rule_package_install_result(rule_package: Dictionary, compilation: Dictionary, package_dependencies: Array, dependency_results: Array, runtime_results: Array, already_installed: bool = false) -> Dictionary:
+    var compiled_runtime_rules := _extract_compiled_runtime_rules(compilation)
+    var runtime_targets := _runtime_targets_for_compilation(compilation, compiled_runtime_rules)
+    var installed_rule_ids := _runtime_target_ids(runtime_targets)
+    for dependency_result_variant in dependency_results:
+        if not (dependency_result_variant is Dictionary):
+            continue
+        for dependency_rule_id_variant in dependency_result_variant.get("installed_rule_ids", []):
+            var dependency_rule_id := String(dependency_rule_id_variant).strip_edges()
+            if not dependency_rule_id.is_empty() and not installed_rule_ids.has(dependency_rule_id):
+                installed_rule_ids.append(dependency_rule_id)
+    var install_result := {
+        "status": "installed",
+        "installed": true,
+        "install_source": "rule_package",
+        "package_id": rule_package.get("package_id", ""),
+        "source_repo": rule_package.get("source_repo", ""),
+        "source_ref": rule_package.get("source_ref", ""),
+        "package_dependencies": package_dependencies.duplicate(true),
+        "dependency_results": dependency_results.duplicate(true),
+        "installed_rule_ids": installed_rule_ids,
+        "runtime_results": runtime_results.duplicate(true),
+        "forked_from": rule_package.get("forked_from", null),
+        "suggested_pr_target": rule_package.get("suggested_pr_target", null),
+        "safe_to_apply_directly": bool(compilation.get("safe_to_apply_directly", false)),
+        "has_install_targets": bool(compilation.get("has_install_targets", true)),
+        "deferred_operations": compilation.get("deferred_operations", []).duplicate(true),
+        "compiled_runtime_patch": compilation.get("runtime_patch", {}).duplicate(true),
+        "compiled_runtime_rules": compiled_runtime_rules
+    }
+    if already_installed:
+        install_result["already_installed"] = true
+    return install_result

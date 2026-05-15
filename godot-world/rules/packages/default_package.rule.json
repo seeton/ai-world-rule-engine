@@ -1,0 +1,426 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.default_package",
+  "display_name": "Default Package",
+  "description": "Defines the minimum mutable world assumptions shared by the 2D and 3D runtime: existence, representation, state, space, base time, movement, and basic actions.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "package_dependencies": [],
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.default_package"
+  },
+  "tags": [
+    "default-package",
+    "foundation",
+    "world",
+    "existence",
+    "space",
+    "time",
+    "movement",
+    "action",
+    "two_d",
+    "three_d"
+  ],
+  "match_phrases": [
+    "default package",
+    "world foundation",
+    "base world invariants",
+    "2d 3d shared foundation",
+    "existence representation state space time movement basic action"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "runtime_contract": {
+    "supports_world_modes": [
+      "two_d",
+      "three_d"
+    ],
+    "foundation_capabilities": [
+      "existence",
+      "representation",
+      "state",
+      "space",
+      "base-time",
+      "movement",
+      "basic-action"
+    ],
+    "world_state_paths": [
+      "world_contract.default_package",
+      "world_contract.default_package.capabilities",
+      "world_contract.default_package.lifecycle",
+      "elapsed_seconds",
+      "tick_index",
+      "preview_3d",
+      "entities.*.position",
+      "rule_tree.nodes_by_rule_id.*.missing_required_rule_kinds"
+    ],
+    "contract_id": "world.foundation.v1",
+    "provides_capabilities": [
+      "world.foundation",
+      "world.existence",
+      "world.representation",
+      "world.state",
+      "world.space",
+      "world.base-time",
+      "world.movement",
+      "world.basic-action"
+    ],
+    "lifecycle": {
+      "default_installed": true,
+      "immutable_engine_invariant": false,
+      "removable": true,
+      "disableable": true,
+      "replaceable": true
+    },
+    "collapse_behavior": {
+      "runtime_must_prevent_removal": false,
+      "removal_may_degrade_world": true,
+      "exposes_dependency_breakage_as": [
+        "missing_required_rule_kinds",
+        "unresolved_rule_ids",
+        "inactive_rules",
+        "blocked_rules"
+      ]
+    },
+    "replacement_contract": {
+      "alternative_packages_may_provide_capabilities": true,
+      "consumers_require_capabilities_not_package_ids": true
+    },
+    "engine_safety_shell": {
+      "separate_from_world_rules": true,
+      "responsibilities": [
+        "inspect",
+        "restore",
+        "report_dependency_breakage"
+      ]
+    }
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.foundation",
+        "rule_type": "runtime_rule",
+        "name": "Default Package Foundation",
+        "concept": "world_foundation",
+        "scope": "world",
+        "provides_rule_kinds": [
+          "world.foundation",
+          "default-package.base"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package",
+            "value": {
+              "package_id": "builtin.default_package",
+              "supports_world_modes": [
+                "two_d",
+                "three_d"
+              ],
+              "foundation_capabilities": [
+                "existence",
+                "representation",
+                "state",
+                "space",
+                "base-time",
+                "movement",
+                "basic-action"
+              ],
+              "description": "Worlds share identity, representation, state, spatial placement, ordered time, movement, and basic actions before higher-order life rules are added.",
+              "contract_id": "world.foundation.v1",
+              "provides_capabilities": [
+                "world.foundation",
+                "world.existence",
+                "world.representation",
+                "world.state",
+                "world.space",
+                "world.base-time",
+                "world.movement",
+                "world.basic-action"
+              ],
+              "lifecycle": {
+                "default_installed": true,
+                "immutable_engine_invariant": false,
+                "removable": true,
+                "disableable": true,
+                "replaceable": true
+              },
+              "collapse_behavior": {
+                "runtime_must_prevent_removal": false,
+                "removal_may_degrade_world": true,
+                "exposes_dependency_breakage_as": [
+                  "missing_required_rule_kinds",
+                  "unresolved_rule_ids",
+                  "inactive_rules",
+                  "blocked_rules"
+                ]
+              },
+              "replacement_contract": {
+                "alternative_packages_may_provide_capabilities": true,
+                "consumers_require_capabilities_not_package_ids": true
+              },
+              "engine_safety_shell": {
+                "separate_from_world_rules": true,
+                "responsibilities": [
+                  "inspect",
+                  "restore",
+                  "report_dependency_breakage"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.existence",
+        "rule_type": "runtime_rule",
+        "name": "Existence",
+        "concept": "existence",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world.existence",
+          "default-package.existence"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.existence",
+            "value": {
+              "entity_fields": [
+                "id",
+                "name",
+                "archetype"
+              ],
+              "snapshot_paths": [
+                "world_id",
+                "world_name",
+                "entities"
+              ],
+              "rule_tree_path": "installed_rules_by_id"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.representation",
+        "rule_type": "runtime_rule",
+        "name": "Representation",
+        "concept": "representation",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world.representation",
+          "default-package.representation"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.representation",
+            "value": {
+              "supports": [
+                "visible",
+                "internal"
+              ],
+              "entity_paths": [
+                "render_3d"
+              ],
+              "rule_paths": [
+                "rule_tree"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.state",
+        "rule_type": "runtime_rule",
+        "name": "State",
+        "concept": "state",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world.state",
+          "default-package.state"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.state",
+            "value": {
+              "entity_fields": [
+                "condition",
+                "status",
+                "enabled",
+                "inactive"
+              ],
+              "world_paths": [
+                "preview_3d.enabled",
+                "event_log"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.space",
+        "rule_type": "runtime_rule",
+        "name": "Space",
+        "concept": "space",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world.space",
+          "default-package.space"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.space",
+            "value": {
+              "position_fields": [
+                "x",
+                "y",
+                "z",
+                "location"
+              ],
+              "supports_world_modes": [
+                "two_d",
+                "three_d"
+              ],
+              "proximity_model": "shared_position_graph"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.base_time",
+        "rule_type": "runtime_rule",
+        "name": "Base Time",
+        "concept": "time",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world.base-time",
+          "default-package.base-time",
+          "world-clock"
+        ],
+        "effects": [
+          {
+            "component": "time",
+            "field": "elapsed_seconds",
+            "op": "add",
+            "default": 0.0,
+            "value_per_second": 0.0,
+            "min": 0.0
+          }
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.base_time",
+            "value": {
+              "world_clock_field": "elapsed_seconds",
+              "tick_field": "tick_index",
+              "ordering": "deterministic"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.movement",
+        "rule_type": "runtime_rule",
+        "name": "Movement",
+        "concept": "movement",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.space",
+          "world.base-time"
+        ],
+        "provides_rule_kinds": [
+          "world.movement",
+          "default-package.movement"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.movement",
+            "value": {
+              "runtime_entrypoint": "WorldState.set_entity_position",
+              "supported_axes": [
+                "x",
+                "y",
+                "z"
+              ],
+              "supports_world_modes": [
+                "two_d",
+                "three_d"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "default_package.basic_action",
+        "rule_type": "runtime_rule",
+        "name": "Basic Action",
+        "concept": "action",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.existence",
+          "world.state"
+        ],
+        "provides_rule_kinds": [
+          "world.basic-action",
+          "default-package.basic-action"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_contract.default_package.capabilities.basic_action",
+            "value": {
+              "unit_fields": [
+                "intent",
+                "action",
+                "result"
+              ],
+              "player_task_history_field": "player_task_history",
+              "event_log_field": "event_log"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

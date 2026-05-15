@@ -33,8 +33,13 @@
     "format": "rule_patch_v1",
     "review_status": "approved",
     "scope": "entity",
-    "target_tags": ["player"],
-    "provides_rule_kinds": ["world-clock", "player-time"],
+    "target_tags": [
+      "player"
+    ],
+    "provides_rule_kinds": [
+      "world-clock",
+      "player-time"
+    ],
     "operations": [
       {
         "op": "upsert_stat",
@@ -56,5 +61,6 @@
         "max": 3153600000.0
       }
     ]
-  }
+  },
+  "package_dependencies": []
 }

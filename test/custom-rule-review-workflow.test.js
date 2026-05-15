@@ -15,8 +15,21 @@ test("WorldState routes package installs through review before runtime install",
 
   assert.match(source, /func review_rule_package_proposal\(rule_package: Dictionary\) -> Dictionary:/);
   assert.match(source, /if String\(review_result.get\("status", ""\)\) != "ready_for_install":/);
-  assert.match(source, /install_result\["install_source"\] = "rule_package"/);
-  assert.match(source, /install_result\["compiled_runtime_patch"\] = compilation.get\("runtime_patch", \{\}\)\.duplicate\(true\)/);
+  assert.match(source, /"install_source": "rule_package"/);
+  assert.match(source, /"compiled_runtime_patch": compilation.get\("runtime_patch", \{\}\)\.duplicate\(true\)/);
+  assert.match(source, /var dependency_resolution := _resolve_rule_package_dependencies\(rule_package\)/);
+  assert.match(source, /var compiled_runtime_rules := _extract_compiled_runtime_rules\(compilation\)/);
+  assert.match(source, /for runtime_target_variant in runtime_targets:/);
+});
+
+test("runtime exposes collapsed dependency state without making defaults engine invariants", () => {
+  const source = fs.readFileSync(path.join(repoRoot, "godot-world", "scripts", "core", "SimulationRuntime.gd"), "utf8");
+
+  assert.match(source, /snapshot\["rule_dependency_status"\] = _build_rule_dependency_status\(installed_rules_by_id\)/);
+  assert.match(source, /"blocked_rule_ids": blocked_rule_ids/);
+  assert.match(source, /"inactive_rule_ids": inactive_rule_ids/);
+  assert.match(source, /"missing_required_rule_kinds_by_rule_id": missing_required_rule_kinds_by_rule_id/);
+  assert.match(source, /rule\["blocked"\] = not missing_required_rule_kinds\.is_empty\(\)/);
 });
 
 test("GM UI exposes proposal review metadata and approval gating", () => {
@@ -34,11 +47,32 @@ test("GM UI exposes proposal review metadata and approval gating", () => {
 test("runtime compiler preserves declarative install actions for traceable installs", () => {
   const source = fs.readFileSync(compilerPath, "utf8");
 
-  assert.match(source, /var install_actions_result := _validate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
-  assert.match(source, /"install_actions": install_actions_result.get\("install_actions", \[\]\)\.duplicate\(true\)/);
+  assert.match(source, /var patch_install_actions_result := _validate_install_actions\(patch.get\("install_actions", \[\]\)\)/);
+  assert.match(source, /"install_actions": patch_install_actions\.duplicate\(true\)/);
+  assert.match(source, /"runtime_rules": _duplicate_dictionary_array\(runtime_rules\)/);
   assert.match(source, /func _validate_install_actions\(raw_actions: Variant\) -> Dictionary:/);
   assert.match(source, /func _validate_operations\(raw_operations: Variant\) -> Dictionary:/);
   assert.match(source, /Rule package patch\.operations\[%d\] must be a dictionary\./);
+});
+
+test("runtime compiler separates safe_to_apply_directly from install target presence", () => {
+  const source = fs.readFileSync(compilerPath, "utf8");
+
+  assert.match(source, /"safe_to_apply_directly": deferred_operations\.is_empty\(\)/);
+  assert.match(source, /"has_install_targets": has_install_targets/);
+  assert.doesNotMatch(
+    source,
+    /"safe_to_apply_directly": deferred_operations\.is_empty\(\) and (installable_targets|has_install_targets)/,
+    "safe_to_apply_directly must not be gated by install target presence."
+  );
+});
+
+test("WorldState surfaces has_install_targets separately for downstream consumers", () => {
+  const source = fs.readFileSync(worldStatePath, "utf8");
+
+  assert.match(source, /"has_install_targets": has_install_targets,/);
+  assert.match(source, /"has_install_targets": bool\(compilation\.get\("has_install_targets", true\)\),/);
+  assert.match(source, /Rule package operations produced no installable runtime targets\./);
 });
 
 test("WorldState validates package operations and README documents package installs", () => {

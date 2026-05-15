@@ -4,7 +4,7 @@ signal closed
 
 const MAIN_DESKTOP_SCRIPT := preload("res://scripts/ui/main_desktop.gd")
 
-var _shell: Control
+var _admin_view: Control
 
 
 func _ready() -> void:
@@ -23,7 +23,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _build_ui() -> void:
 	var scrim := ColorRect.new()
-	scrim.color = Color(0.0, 0.0, 0.0, 0.46)
+	scrim.color = Color(0.07, 0.08, 0.11, 1.0)
 	scrim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	scrim.mouse_filter = MOUSE_FILTER_STOP
 	add_child(scrim)
@@ -48,54 +48,46 @@ func _build_ui() -> void:
 	var layout := VBoxContainer.new()
 	layout.size_flags_horizontal = SIZE_EXPAND_FILL
 	layout.size_flags_vertical = SIZE_EXPAND_FILL
-	layout.add_theme_constant_override("separation", 10)
+	layout.add_theme_constant_override("separation", 12)
 	margin.add_child(layout)
 
-	var header := VBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	layout.add_child(header)
-
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 16)
-	header.add_child(top_row)
+	top_row.add_theme_constant_override("separation", 12)
+	layout.add_child(top_row)
 
 	var title_wrap := VBoxContainer.new()
 	title_wrap.size_flags_horizontal = SIZE_EXPAND_FILL
 	title_wrap.add_theme_constant_override("separation", 4)
 	top_row.add_child(title_wrap)
 
+	var eyebrow := Label.new()
+	eyebrow.text = "GM Console"
+	eyebrow.modulate = Color(1.0, 1.0, 1.0, 0.68)
+	eyebrow.add_theme_font_size_override("font_size", 12)
+	title_wrap.add_child(eyebrow)
+
 	var title := Label.new()
-	title.text = "PoC3 / GMとの会話 / 世界管理"
-	title.add_theme_font_size_override("font_size", 24)
+	title.text = _get_world_title()
+	title.add_theme_font_size_override("font_size", 22)
 	title_wrap.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "ここはプレイ世界の中でGMに話しかけたときだけ開く補助画面です。ここで3D化や各種ルールを適用し、終わったら世界へ戻って続けられます。"
-	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_wrap.add_child(subtitle)
-
 	var back_button := Button.new()
-	back_button.text = "← 会話を終えて世界へ戻る"
+	back_button.text = "← 世界へ戻る (Esc)"
 	back_button.pressed.connect(_close)
 	top_row.add_child(back_button)
 	back_button.call_deferred("grab_focus")
 
-	var help_label := Label.new()
-	help_label.text = "Escキーでも閉じられます。メイン画面は背後のプレイ世界です。"
-	help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	header.add_child(help_label)
+	var content_host := Control.new()
+	content_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	content_host.size_flags_horizontal = SIZE_EXPAND_FILL
+	content_host.size_flags_vertical = SIZE_EXPAND_FILL
+	layout.add_child(content_host)
 
-	var shell_host := Control.new()
-	shell_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	shell_host.size_flags_horizontal = SIZE_EXPAND_FILL
-	shell_host.size_flags_vertical = SIZE_EXPAND_FILL
-	layout.add_child(shell_host)
-
-	_shell = MAIN_DESKTOP_SCRIPT.new()
-	_shell.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	if _shell.has_signal("close_requested"):
-		_shell.close_requested.connect(_close)
-	shell_host.add_child(_shell)
+	_admin_view = MAIN_DESKTOP_SCRIPT.new()
+	_admin_view.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	if _admin_view.has_signal("close_requested"):
+		_admin_view.close_requested.connect(_close)
+	content_host.add_child(_admin_view)
 
 
 func _fade_in() -> void:
@@ -110,3 +102,14 @@ func _close() -> void:
 		closed.emit()
 		queue_free()
 	)
+
+
+func _get_world_title() -> String:
+	var world_state := get_node_or_null("/root/WorldState")
+	if world_state != null and world_state.has_method("get_world_snapshot"):
+		var snapshot = world_state.call("get_world_snapshot")
+		if snapshot is Dictionary:
+			var world_name := String(snapshot.get("world_name", snapshot.get("name", "")))
+			if not world_name.is_empty():
+				return world_name
+	return "はじまりの広場"

@@ -3,6 +3,7 @@ extends Control
 signal close_requested
 
 const ThreeDPreviewRendererScript = preload("res://scripts/ui/three_d_preview_renderer.gd")
+const GMDialogScript = preload("res://scripts/ui/gm_dialog.gd")
 const FALLBACK_TEMPLATES: Array = [
     {
         "id": "starter-farming",
@@ -66,6 +67,11 @@ const CHARACTER_TAG_HINTS: Array = ["agent", "character", "human", "mortal", "np
 const OBJECT_ARCHETYPE_HINTS: Array = ["container", "item", "location", "object", "place", "prop", "resource", "structure", "tool"]
 const OBJECT_TAG_HINTS: Array = ["container", "item", "location", "object", "portable", "prop", "resource", "structure", "tool"]
 const PROPOSAL_REVIEW_DEBOUNCE_SECONDS := 0.35
+const TAB_HOME := "統合画面"
+const TAB_CHAT := "GM相談"
+const TAB_REVIEW := "提案レビュー"
+const TAB_RULES := "稼働ルール"
+const TAB_WORLD := "世界・履歴"
 
 var _world_state: Node = null
 var _task_input: TextEdit
@@ -87,8 +93,11 @@ var _installed_rule_details_view: TextEdit
 var _entity_tree: Tree
 var _world_state_view: TextEdit
 var _event_log_view: TextEdit
-var _status_label: Label
+var _poc4_state_view: TextEdit
 var _three_d_preview_renderer: Control
+var _tabs: TabContainer
+var _home_summary_label: Label
+var _chat_view: Control
 
 var _template_cache: Array = []
 var _latest_task_result: Dictionary = {}
@@ -102,6 +111,8 @@ var _current_proposal_review: Dictionary = {}
 var _is_updating_proposal_editor := false
 var _installed_rule_cache: Array = []
 var _snapshot_cache: Dictionary = {}
+var _poc4_state_cache: Dictionary = {}
+var _poc4_apply_result_cache: Dictionary = {}
 var _shell_log_lines: Array[String] = []
 var _fallback_snapshot: Dictionary = {
     "world_id": "fallback-world",
@@ -264,97 +275,126 @@ func _ready() -> void:
 func _build_ui() -> void:
     var root_margin := MarginContainer.new()
     root_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    root_margin.add_theme_constant_override("margin_left", 12)
-    root_margin.add_theme_constant_override("margin_top", 12)
-    root_margin.add_theme_constant_override("margin_right", 12)
-    root_margin.add_theme_constant_override("margin_bottom", 12)
+    root_margin.add_theme_constant_override("margin_left", 0)
+    root_margin.add_theme_constant_override("margin_top", 0)
+    root_margin.add_theme_constant_override("margin_right", 0)
+    root_margin.add_theme_constant_override("margin_bottom", 0)
     add_child(root_margin)
 
-    var main_column := VBoxContainer.new()
-    main_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    main_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    main_column.add_theme_constant_override("separation", 10)
-    root_margin.add_child(main_column)
+    _tabs = TabContainer.new()
+    _tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    _tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _tabs.drag_to_rearrange_enabled = false
+    root_margin.add_child(_tabs)
 
-    var header := VBoxContainer.new()
-    header.add_theme_constant_override("separation", 6)
-    main_column.add_child(header)
+    _tabs.add_child(_build_home_tab())
+    _tabs.add_child(_build_chat_tab())
+    _tabs.add_child(_build_review_tab())
+    _tabs.add_child(_build_rules_tab())
+    _tabs.add_child(_build_world_tab())
 
-    var top_row := HBoxContainer.new()
-    top_row.add_theme_constant_override("separation", 16)
-    header.add_child(top_row)
+func _build_home_tab() -> Control:
+    var tab := VBoxContainer.new()
+    tab.name = TAB_HOME
+    tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    tab.add_theme_constant_override("separation", 12)
 
-    var title_wrap := VBoxContainer.new()
-    title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    title_wrap.add_theme_constant_override("separation", 4)
-    top_row.add_child(title_wrap)
+    _home_summary_label = Label.new()
+    _home_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _home_summary_label.add_theme_font_size_override("font_size", 16)
+    tab.add_child(_home_summary_label)
 
-    var title := Label.new()
-    title.text = "PoC3: GM会話 / ルール確認と世界管理"
-    title.add_theme_font_size_override("font_size", 22)
-    title_wrap.add_child(title)
+    var cards := GridContainer.new()
+    cards.columns = 2
+    cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    cards.add_theme_constant_override("separation", 12)
+    tab.add_child(cards)
 
-    var subtitle := Label.new()
-    subtitle.text = "主画面はプレイ世界です。ここではGMに相談しながら、3D化・ルール・状態・俯瞰メモを確認します。"
-    subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    title_wrap.add_child(subtitle)
+    cards.add_child(_build_home_card("GM相談", "世界ルールの相談と PoC4 proposal の作成を行います。", TAB_CHAT))
+    cards.add_child(_build_home_card("提案レビュー", "生成された提案を確認・承認してからゲームへ適用します。", TAB_REVIEW))
+    cards.add_child(_build_home_card("稼働ルール", "現在のルール依存ツリーを現行UIのまま確認します。", TAB_RULES))
+    cards.add_child(_build_home_card("世界・履歴", "エンティティ関係ツリー、スナップショット、イベント履歴を確認します。", TAB_WORLD))
 
-    var close_button := Button.new()
-    close_button.text = "世界へ戻る"
-    close_button.pressed.connect(_emit_close_requested)
-    top_row.add_child(close_button)
+    var return_button := Button.new()
+    return_button.text = "世界へ戻って観察"
+    return_button.pressed.connect(_emit_close_requested)
+    tab.add_child(return_button)
+    return tab
 
-    var help_label := Label.new()
-    help_label.text = "Esc またはボタンで会話終了。変更を確認したらプレイ世界へ戻って続けてください。"
-    help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    header.add_child(help_label)
+func _build_home_card(title_text: String, description: String, target_tab_name: String) -> Control:
+    var panel := _make_panel_section(title_text, description)
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    var body := panel.get_meta("body") as VBoxContainer
+    var button := Button.new()
+    button.text = "開く"
+    button.pressed.connect(func() -> void:
+        _select_tab_by_name(target_tab_name)
+    )
+    body.add_child(button)
+    return panel
 
-    _status_label = Label.new()
-    _status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    header.add_child(_status_label)
+func _build_chat_tab() -> Control:
+    var host := Control.new()
+    host.name = TAB_CHAT
+    host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _chat_view = GMDialogScript.new()
+    _chat_view.set("compact_mode", true)
+    _chat_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    if _chat_view.has_signal("closed"):
+        _chat_view.closed.connect(_emit_close_requested)
+    host.add_child(_chat_view)
+    return host
 
-    var split := HSplitContainer.new()
-    split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.split_offset = 450
-    main_column.add_child(split)
+func _build_review_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_REVIEW)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_task_panel())
+    body.add_child(_build_proposal_panel())
+    body.add_child(_build_poc4_admin_panel())
+    return scroll
 
-    var left_scroll := ScrollContainer.new()
-    left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.add_child(left_scroll)
+func _build_rules_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_RULES)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_installed_rules_panel())
+    body.add_child(_build_template_panel())
+    body.add_child(_build_tick_panel())
+    body.add_child(_build_three_d_preview_panel())
+    return scroll
 
-    var left_column := VBoxContainer.new()
-    left_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    left_column.custom_minimum_size = Vector2(420, 0)
-    left_column.add_theme_constant_override("separation", 10)
-    left_scroll.add_child(left_column)
+func _build_world_tab() -> Control:
+    var scroll := _make_tab_scroll(TAB_WORLD)
+    var body := scroll.get_child(0) as VBoxContainer
+    body.add_child(_build_world_state_panel())
+    body.add_child(_build_text_panel("会話ログと世界イベント", "GM会話中の操作履歴と最近の世界イベントを表示します。", "event_log", 180))
+    return scroll
 
-    left_column.add_child(_build_task_panel())
-    left_column.add_child(_build_proposal_panel())
-    left_column.add_child(_build_template_panel())
-    left_column.add_child(_build_tick_panel())
+func _make_tab_scroll(tab_name: String) -> ScrollContainer:
+    var scroll := ScrollContainer.new()
+    scroll.name = tab_name
+    scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    var body := VBoxContainer.new()
+    body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    body.add_theme_constant_override("separation", 10)
+    scroll.add_child(body)
+    return scroll
 
-    var right_scroll := ScrollContainer.new()
-    right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    split.add_child(right_scroll)
-
-    var right_column := VBoxContainer.new()
-    right_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    right_column.custom_minimum_size = Vector2(420, 0)
-    right_column.add_theme_constant_override("separation", 10)
-    right_scroll.add_child(right_column)
-
-    right_column.add_child(_build_installed_rules_panel())
-    right_column.add_child(_build_world_state_panel())
-    right_column.add_child(_build_three_d_preview_panel())
-    right_column.add_child(_build_text_panel("会話ログと世界イベント", "GM会話中の操作履歴と最近の世界イベントを表示します。", "event_log", 132))
-
-    main_column.add_child(_build_footer_bar())
+func _select_tab_by_name(tab_name: String) -> void:
+    if _tabs == null:
+        return
+    for index in range(_tabs.get_child_count()):
+        var child := _tabs.get_child(index)
+        if child.name == tab_name:
+            _tabs.current_tab = index
+            return
 
 func _build_task_panel() -> Control:
-    var panel := _make_panel_section("GMへの相談", "やりたいことを日本語で伝えると、GM視点で対応するルール候補や方針を確認できます。")
+    var panel := _make_panel_section("GMへの相談", "ここでは既存テンプレート候補や即時に試せる方針を確認します。PoC4 の Codex proposal 生成は、プレイヤー向けの GM 会話画面から行ってください。")
     var body := panel.get_meta("body") as VBoxContainer
 
     _task_input = TextEdit.new()
@@ -376,6 +416,18 @@ func _build_task_panel() -> Control:
     refresh_button.text = "情報を更新"
     refresh_button.pressed.connect(_refresh_all)
     button_row.add_child(refresh_button)
+
+    return panel
+
+func _build_poc4_admin_panel() -> Control:
+    var panel := _make_panel_section("PoC4 proposal / apply 状態", "pending proposal、review 状態、apply 結果、backend error を read-only で確認します。")
+    var body := panel.get_meta("body") as VBoxContainer
+
+    _poc4_state_view = TextEdit.new()
+    _poc4_state_view.editable = false
+    _poc4_state_view.custom_minimum_size = Vector2(0, 170)
+    _poc4_state_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    body.add_child(_poc4_state_view)
 
     return panel
 
@@ -632,23 +684,6 @@ func _build_text_panel(title_text: String, description: String, panel_key: Strin
 
     return panel
 
-func _build_footer_bar() -> Control:
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 12)
-
-    var help_label := Label.new()
-    help_label.text = "会話を終えるとプレイヤー視点のプレイ世界へ戻ります。"
-    help_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    row.add_child(help_label)
-
-    var close_button := Button.new()
-    close_button.text = "会話を終えて世界へ戻る"
-    close_button.pressed.connect(_emit_close_requested)
-    row.add_child(close_button)
-
-    return row
-
 func _make_panel_section(title_text: String, description: String) -> PanelContainer:
     var panel := PanelContainer.new()
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -686,11 +721,13 @@ func _refresh_all() -> void:
     _refresh_snapshot()
     _latest_task_result = _extract_latest_task_result(_snapshot_cache)
     _proposal_cache = _extract_task_proposals(_latest_task_result)
+    _refresh_poc4_state()
     _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _update_template_list()
     _update_proposal_panel()
     _update_installed_rules_panel()
     _update_three_d_preview()
+    _update_poc4_state_view()
     _update_world_state_view()
     _update_event_log_view()
     _update_status_label()
@@ -711,6 +748,23 @@ func _refresh_snapshot() -> void:
         _snapshot_cache = snapshot if snapshot is Dictionary else {}
     else:
         _snapshot_cache = _fallback_snapshot.duplicate(true)
+
+func _refresh_poc4_state() -> void:
+    var merged_state := _merge_poc4_state(_snapshot_cache.get("poc4", {}))
+    if _world_state != null and _world_state.has_method("get_pending_rule_proposal"):
+        var pending_state = _world_state.call("get_pending_rule_proposal")
+        if pending_state is Dictionary:
+            merged_state = _merge_poc4_state(pending_state)
+
+    var apply_result: Dictionary = merged_state.get("apply_result", {}).duplicate(true)
+    if _world_state != null and _world_state.has_method("get_last_rule_apply_result"):
+        var last_apply = _world_state.call("get_last_rule_apply_result")
+        if last_apply is Dictionary and not last_apply.is_empty():
+            apply_result = last_apply.duplicate(true)
+
+    _poc4_state_cache = merged_state
+    _poc4_apply_result_cache = apply_result
+    _poc4_state_cache["apply_result"] = _poc4_apply_result_cache.duplicate(true)
 
 func _update_template_list() -> void:
     _template_list.clear()
@@ -1199,9 +1253,107 @@ func _update_event_log_view() -> void:
     _event_log_view.text = "\n".join(lines) if not lines.is_empty() else "まだイベントはありません。"
     _event_log_view.scroll_vertical = _event_log_view.get_line_count()
 
+func _update_poc4_state_view() -> void:
+    if _poc4_state_view == null:
+        return
+
+    var proposal: Dictionary = _poc4_state_cache.get("proposal", {})
+    var summary: Dictionary = _poc4_state_cache.get("summary", {})
+    var review: Dictionary = _poc4_state_cache.get("review", {})
+    var issue_preview: Dictionary = _poc4_state_cache.get("issue_preview", {})
+    var apply_result: Dictionary = _poc4_apply_result_cache if not _poc4_apply_result_cache.is_empty() else _poc4_state_cache.get("apply_result", {})
+    var last_error: Dictionary = _poc4_state_cache.get("last_error", {})
+    var execution: Dictionary = _poc4_state_cache.get("execution", {})
+    var codex: Dictionary = _poc4_state_cache.get("codex", {})
+    var lines: Array[String] = []
+
+    lines.append("Execution:")
+    lines.append("- status: %s" % str(execution.get("status", "idle")))
+    if execution.has("phase"):
+        lines.append("- phase: %s" % str(execution.get("phase", "")))
+    if execution.has("message") and not String(execution.get("message", "")).is_empty():
+        lines.append("- message: %s" % str(execution.get("message", "")))
+    lines.append("")
+
+    lines.append("PoC4 pending proposal:")
+    if proposal.is_empty():
+        lines.append("- なし")
+    else:
+        lines.append("- proposal_title: %s" % str(summary.get("title", issue_preview.get("title", proposal.get("proposal_title", "n/a")))))
+        lines.append("- proposal 要約: %s" % str(summary.get("player_request_summary", proposal.get("player_request_summary", "n/a"))))
+        lines.append("- package_id: %s" % str(summary.get("package_id", proposal.get("package_id", "n/a"))))
+        lines.append("- operation_count: %d" % int(summary.get("operation_count", 0)))
+        var operation_types := Array(summary.get("operation_types", []))
+        lines.append("- operation_types: %s" % (_join_values(operation_types) if not operation_types.is_empty() else "-"))
+        lines.append("- stats: %s" % _bool_text(bool(summary.get("has_stat_changes", false))))
+        lines.append("- rules: %s" % _bool_text(bool(summary.get("has_rule_changes", false))))
+        lines.append("- event_bindings: %s" % _bool_text(bool(summary.get("has_event_binding_changes", false))))
+        lines.append("- relations: %s" % _bool_text(bool(summary.get("has_relation_changes", false))))
+        lines.append("- review_status: %s" % str(summary.get("review_status", proposal.get("review_status", "n/a"))))
+        lines.append("- validation_status: %s" % str(summary.get("validation_status", proposal.get("validation", {}).get("status", "n/a"))))
+        lines.append("- suggested_pr_target: %s" % _format_poc4_submission_target(summary.get("suggested_pr_target", null), apply_result))
+
+    lines.append("")
+    lines.append("Review:")
+    lines.append("- required: %s" % _bool_text(bool(review.get("required", false))))
+    lines.append("- acknowledged: %s" % _bool_text(bool(review.get("acknowledged", review.get("granted", false)))))
+    lines.append("- status: %s" % str(review.get("status", "not_requested")))
+
+    var last_request_text := String(_poc4_state_cache.get("last_request_text", "")).strip_edges()
+    if not last_request_text.is_empty():
+        lines.append("- request: %s" % last_request_text)
+
+    lines.append("")
+    lines.append("Apply result:")
+    if apply_result.is_empty():
+        lines.append("- まだありません")
+    else:
+        lines.append("- status: %s" % str(apply_result.get("status", "unknown")))
+        if apply_result.has("message"):
+            lines.append("- message: %s" % str(apply_result.get("message", "")))
+        if apply_result.has("package_id"):
+            lines.append("- package_id: %s" % str(apply_result.get("package_id", "")))
+        if apply_result.has("proposal_title"):
+            lines.append("- proposal_title: %s" % str(apply_result.get("proposal_title", "")))
+        if apply_result.has("runtime_rule_id"):
+            lines.append("- runtime_rule_id: %s" % str(apply_result.get("runtime_rule_id", "")))
+        if apply_result.has("applied_operation_count"):
+            lines.append("- applied_operation_count: %s" % str(apply_result.get("applied_operation_count", "")))
+        if apply_result.has("deferred_operation_count"):
+            lines.append("- deferred_operation_count: %s" % str(apply_result.get("deferred_operation_count", "")))
+
+    if not last_error.is_empty():
+        lines.append("")
+        lines.append("Last error:")
+        lines.append("- error_code: %s" % str(last_error.get("error_code", "unknown")))
+        lines.append("- message: %s" % str(last_error.get("message", "")))
+        var details: Dictionary = last_error.get("details", {})
+        if not details.is_empty():
+            lines.append("- details: %s" % _format_variant_inline(details))
+
+    _append_poc4_codex_lines(lines, codex)
+
+    var history: Array = _poc4_state_cache.get("history", [])
+    if not history.is_empty():
+        lines.append("")
+        lines.append("Recent history:")
+        for entry in _take_last_entries(history, 5):
+            lines.append("- %s" % _format_variant_inline(entry))
+
+    _poc4_state_view.text = "\n".join(lines)
+
 func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
-    _status_label.text = "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size()]
+    var poc4_status := _describe_poc4_status()
+    var summary := "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
+    if _home_summary_label != null:
+        _home_summary_label.text = summary
+    if _tabs != null and _tabs.get_tab_count() >= 5:
+        _tabs.set_tab_title(0, "◐ 統合画面")
+        _tabs.set_tab_title(1, "✎ GM相談")
+        _tabs.set_tab_title(2, "▤ 提案レビュー (%d)" % _proposal_cache.size())
+        _tabs.set_tab_title(3, "⌥ 稼働ルール (%d)" % _installed_rule_cache.size())
+        _tabs.set_tab_title(4, "▦ 世界・履歴")
 
 func _emit_close_requested() -> void:
     close_requested.emit()
@@ -1217,6 +1369,9 @@ func _on_submit_pressed() -> void:
         result = _world_state.call("submit_player_task", task_text)
     else:
         result = _simulate_task_submission(task_text)
+
+    if String(result.get("status", "")) == "needs_rule_patch":
+        result["message"] = "既存テンプレートでは解決できません。PoC4 proposal を作る場合は、プレイヤー向け GM 会話画面から依頼してください。"
 
     _task_input.clear()
     _refresh_all()
@@ -2057,6 +2212,92 @@ func _join_values(values: Array) -> String:
             joined += ", "
         joined += pieces[index]
     return joined
+
+func _merge_poc4_state(source: Variant) -> Dictionary:
+    if not (source is Dictionary):
+        return {
+            "proposal": {},
+            "summary": {},
+            "issue_preview": {},
+            "review": {},
+            "apply_result": {},
+            "last_error": {},
+            "execution": {},
+            "codex": {},
+            "last_request_text": "",
+            "history": []
+        }
+
+    var state: Dictionary = source
+    return {
+        "proposal": state.get("proposal", state.get("pending_proposal", {})).duplicate(true) if state.get("proposal", state.get("pending_proposal", {})) is Dictionary else {},
+        "summary": state.get("summary", state.get("proposal_summary", {})).duplicate(true) if state.get("summary", state.get("proposal_summary", {})) is Dictionary else {},
+        "issue_preview": state.get("issue_preview", {}).duplicate(true) if state.get("issue_preview", {}) is Dictionary else {},
+        "review": state.get("review", {}).duplicate(true) if state.get("review", {}) is Dictionary else {},
+        "apply_result": state.get("apply_result", {}).duplicate(true) if state.get("apply_result", {}) is Dictionary else {},
+        "last_error": state.get("last_error", {}).duplicate(true) if state.get("last_error", {}) is Dictionary else {},
+        "execution": state.get("execution", {}).duplicate(true) if state.get("execution", {}) is Dictionary else {},
+        "codex": state.get("codex", {}).duplicate(true) if state.get("codex", {}) is Dictionary else {},
+        "last_request_text": String(state.get("last_request_text", "")),
+        "history": Array(state.get("history", [])).duplicate(true)
+    }
+
+
+func _describe_poc4_status() -> String:
+    var proposal: Dictionary = _poc4_state_cache.get("proposal", {})
+    var review: Dictionary = _poc4_state_cache.get("review", {})
+    var apply_result: Dictionary = _poc4_apply_result_cache if not _poc4_apply_result_cache.is_empty() else _poc4_state_cache.get("apply_result", {})
+    var last_error: Dictionary = _poc4_state_cache.get("last_error", {})
+    var execution: Dictionary = _poc4_state_cache.get("execution", {})
+    if not last_error.is_empty():
+        return "error:%s" % str(last_error.get("error_code", "unknown"))
+    if String(execution.get("status", "idle")) == "running":
+        return "running"
+    if String(apply_result.get("status", "")) in ["applied", "applied_with_warnings"]:
+        return String(apply_result.get("status", "applied"))
+    if proposal.is_empty():
+        return "idle"
+    if bool(review.get("acknowledged", review.get("granted", false))):
+        return "reviewed"
+    return "pending_review"
+
+func _format_poc4_submission_target(suggested_target: Variant, apply_result: Dictionary) -> String:
+    if suggested_target is Dictionary:
+        return "%s @ %s (%s)" % [
+            str(suggested_target.get("repo", "")),
+            str(suggested_target.get("base_ref", "")),
+            str(suggested_target.get("package_id", ""))
+        ]
+    if not String(apply_result.get("runtime_rule_id", "")).is_empty():
+        return "runtime:%s" % str(apply_result.get("runtime_rule_id", ""))
+    return "runtime install"
+
+func _append_poc4_codex_lines(lines: Array, codex: Dictionary) -> void:
+    if codex.is_empty():
+        return
+
+    lines.append("")
+    lines.append("Codex detail:")
+    lines.append("- session id: %s" % _format_poc4_codex_value(codex.get("session_id", "")))
+    lines.append("- model: %s" % _format_poc4_codex_value(codex.get("model", "")))
+    lines.append("- workdir: %s" % _format_poc4_codex_value(codex.get("workdir", "")))
+    lines.append("- approval: %s" % _format_poc4_codex_value(codex.get("approval", "")))
+    lines.append("- sandbox: %s" % _format_poc4_codex_value(codex.get("sandbox", "")))
+
+    var excerpt := String(codex.get("cli_output_excerpt", "")).strip_edges()
+    if excerpt.is_empty():
+        excerpt = String(codex.get("cli_output", "")).strip_edges()
+    if excerpt.length() > 280:
+        excerpt = excerpt.substr(0, 280).strip_edges() + "…"
+    if not excerpt.is_empty():
+        lines.append("- cli 抜粋: %s" % excerpt.replace("\n", " / "))
+
+func _format_poc4_codex_value(value: Variant) -> String:
+    var text := str(value).strip_edges()
+    return text if not text.is_empty() else "-"
+
+func _bool_text(value: bool) -> String:
+    return "あり" if value else "なし"
 
 func _extract_latest_task_result(snapshot: Dictionary) -> Dictionary:
     var task_history = snapshot.get("player_task_history", [])

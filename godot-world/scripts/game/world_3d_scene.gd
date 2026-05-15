@@ -2,6 +2,9 @@ extends Node3D
 
 signal gm_interaction_requested
 signal rule_tree_toggle_requested
+signal cli_overlay_toggle_requested
+
+const VisualEffectBurstScript := preload("res://scripts/game/visual_effect_burst_2d.gd")
 
 const PLAYER_ENTITY_ID := "origin_entity"
 const GM_ENTITY_ID := "gm_entity"
@@ -21,7 +24,7 @@ const UI_TEXT := {
 		"tick_prefix": "Tick ",
 		"goal": "3D化された世界です。矢印キーで歩き、GMに近づいてください。",
 		"subgoal": "光ルールや重力ルールを追加したら、世界の見え方の変化を確認できます。",
-		"tree_hint": "Tキーでルールツリー表示",
+		"tree_hint": "Tキー: ルールツリー / Cキー: CLI",
 		"world_fallback": "3D広場",
 		"player_status": "プレイヤーは3D世界の中を移動できます。",
 		"gm_status": "GMは3D世界の中に存在し、会話できます。"
@@ -45,11 +48,13 @@ var _tree_hint_label: Label = null
 var _goal_hint: Label = null
 var _status_hint: Label = null
 var _interaction_hint: Label = null
+var _effects_overlay: Node2D = null
 var _is_hovering_gm: bool = false
 var _entity_nodes: Dictionary = {}
+var _effect_nodes: Dictionary = {}
 var _player_position_initialized: bool = false
 var _last_synced_player_position: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
-var _interaction_paused: bool = false
+var _overlay_active: bool = false
 
 
 func _ready() -> void:
@@ -67,7 +72,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not _interaction_paused and _world_state != null and _world_state.has_method("advance_tick"):
+	if not _overlay_active and _world_state != null and _world_state.has_method("advance_tick"):
 		_world_state.call("advance_tick", delta)
 
 	_sync_player_to_world_state()
@@ -80,7 +85,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _interaction_paused:
+	if _overlay_active:
 		return
 
 	if event.is_action_pressed("ui_accept") and _is_player_in_range():
@@ -93,13 +98,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			rule_tree_toggle_requested.emit()
 			get_viewport().set_input_as_handled()
 			return
+		if key_event.pressed and not key_event.echo and (key_event.keycode == KEY_C or key_event.physical_keycode == KEY_C):
+			cli_overlay_toggle_requested.emit()
+			get_viewport().set_input_as_handled()
+			return
 		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E and _is_player_in_range():
 			gm_interaction_requested.emit()
+		_dispatch_runtime_input_event(key_event)
 
 
-func set_interaction_paused(paused: bool) -> void:
-	_interaction_paused = paused
-	player.set_physics_process(not paused)
+func set_overlay_active(active: bool) -> void:
+	_overlay_active = active
+	player.set_physics_process(not active)
+	if _hud_layer != null:
+		_hud_layer.visible = not active
 
 
 func _setup_hud() -> void:
@@ -171,6 +183,10 @@ func _setup_hud() -> void:
 	_interaction_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(_interaction_hint)
 
+	_effects_overlay = Node2D.new()
+	_effects_overlay.name = "VisualEffectsOverlay"
+	_hud_layer.add_child(_effects_overlay)
+
 
 func _get_world_snapshot() -> Dictionary:
 	if _world_state != null and _world_state.has_method("get_world_snapshot"):
@@ -199,6 +215,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	_apply_player_renderable(renderable_by_id.get(PLAYER_ENTITY_ID, {}))
 	_apply_gm_renderable(renderable_by_id.get(GM_ENTITY_ID, {}))
 	_sync_world_entities(renderables)
+	_sync_visual_effects(snapshot.get("visual_effects", []))
 
 
 func _apply_player_renderable(renderable: Dictionary) -> void:
@@ -326,7 +343,7 @@ func _desired_camera_position() -> Vector3:
 
 
 func _sync_player_to_world_state() -> void:
-	if not _player_position_initialized or _interaction_paused:
+	if not _player_position_initialized or _overlay_active:
 		return
 	if _world_state == null or not _world_state.has_method("set_entity_position"):
 		return
@@ -345,7 +362,7 @@ func _sync_player_to_world_state() -> void:
 
 
 func _update_interaction_hint(delta: float) -> void:
-	var should_show := (_is_player_in_range() or _is_hovering_gm) and not _interaction_paused
+	var should_show := (_is_player_in_range() or _is_hovering_gm) and not _overlay_active
 	if should_show:
 		_interaction_hint.visible = true
 		_interaction_hint.text = _text("hint_near") if _is_player_in_range() else _text("hint_far")
@@ -373,8 +390,61 @@ func _update_clock(snapshot: Dictionary) -> void:
 	]
 
 
+func _dispatch_runtime_input_event(key_event: InputEventKey) -> void:
+	if _world_state == null or not _world_state.has_method("dispatch_input_event"):
+		return
+	if not key_event.pressed or key_event.echo:
+		return
+	var key_name := OS.get_keycode_string(key_event.keycode).strip_edges().to_lower()
+	if key_name.is_empty():
+		return
+	_world_state.call("dispatch_input_event", "input.key.%s.pressed" % key_name, {
+		"entity_id": PLAYER_ENTITY_ID,
+		"world_mode": "three_d"
+	})
+
+
+func _sync_visual_effects(effects_variant: Variant) -> void:
+	if _effects_overlay == null:
+		return
+	var active_effect_ids: Dictionary = {}
+	if effects_variant is Array:
+		for effect_variant in effects_variant:
+			if not (effect_variant is Dictionary):
+				continue
+			var effect: Dictionary = effect_variant
+			var effect_id := String(effect.get("id", "")).strip_edges()
+			if effect_id.is_empty():
+				continue
+			var screen_position := _effect_screen_position(effect)
+			if screen_position == Vector2.INF:
+				continue
+			active_effect_ids[effect_id] = true
+			var effect_node: Node2D = _effect_nodes.get(effect_id, null)
+			if effect_node == null:
+				effect_node = VisualEffectBurstScript.new()
+				effect_node.name = "Effect_%s" % effect_id
+				_effects_overlay.add_child(effect_node)
+				_effect_nodes[effect_id] = effect_node
+			effect_node.call("apply_effect", effect, screen_position)
+
+	for effect_id in _effect_nodes.keys():
+		if active_effect_ids.has(effect_id):
+			continue
+		var stale_node: Node = _effect_nodes[effect_id]
+		stale_node.queue_free()
+		_effect_nodes.erase(effect_id)
+
+
+func _effect_screen_position(effect: Dictionary) -> Vector2:
+	var world_position := _vector3_from_variant(effect.get("position", {}), Vector3.ZERO)
+	if camera != null and camera.has_method("is_position_behind") and camera.call("is_position_behind", world_position):
+		return Vector2.INF
+	return camera.unproject_position(world_position)
+
+
 func _on_gm_interaction() -> void:
-	if _interaction_paused or not _is_player_in_range():
+	if _overlay_active or not _is_player_in_range():
 		return
 	gm_interaction_requested.emit()
 

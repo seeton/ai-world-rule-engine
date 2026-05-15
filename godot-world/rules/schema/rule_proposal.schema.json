@@ -18,6 +18,7 @@
   ],
   "properties": {
     "schema_version": {
+      "type": "string",
       "const": "codex_rule_proposal_v1"
     },
     "proposal_title": {
@@ -33,6 +34,7 @@
       "pattern": "^[a-z0-9._-]+$"
     },
     "package_schema_version": {
+      "type": "string",
       "const": "rule_package_v1"
     },
     "suggested_pr_target": {
@@ -59,6 +61,7 @@
       "required": ["format", "operations"],
       "properties": {
         "format": {
+          "type": "string",
           "const": "rule_patch_v1"
         },
         "operations": {
@@ -69,19 +72,62 @@
             "required": ["op"],
             "properties": {
               "op": {
+                "type": "string",
                 "enum": [
                   "upsert_stat",
                   "upsert_rule",
                   "add_event_binding",
                   "add_relation"
                 ]
+              },
+              "stat_id": { "type": ["string", "null"] },
+              "value_type": { "type": ["string", "null"] },
+              "default": { "type": ["number", "null"] },
+              "min": { "type": ["number", "null"] },
+              "max": { "type": ["number", "null"] },
+              "ui_group": { "type": ["string", "null"] },
+              "rule_id": { "type": ["string", "null"] },
+              "rule_type": { "type": ["string", "null"] },
+              "event": { "type": ["string", "null"] },
+              "target_rule": { "type": ["string", "null"] },
+              "target_stat": { "type": ["string", "null"] },
+              "watch_stat": { "type": ["string", "null"] },
+              "delta": { "type": ["number", "null"] },
+              "delta_source_field": { "type": ["string", "null"] },
+              "delta_per_point": { "type": ["number", "null"] },
+              "interval_seconds": { "type": ["number", "null"] },
+              "environment_key": { "type": ["string", "null"] },
+              "clamp_to_stat_bounds": { "type": ["boolean", "null"] },
+              "binding_id": { "type": ["string", "null"] },
+              "relation_id": { "type": ["string", "null"] },
+              "source": { "type": ["string", "null"] },
+              "target": { "type": ["string", "null"] },
+              "design_prompt": { "type": ["string", "null"] },
+              "comparator": { "type": ["string", "null"] },
+              "value": { "type": ["number", "string", "boolean", "null"] },
+              "effects": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "object",
+                  "required": ["effect_type", "tag", "value"],
+                  "properties": {
+                    "effect_type": { "type": "string" },
+                    "tag": { "type": ["string", "null"] },
+                    "value": { "type": ["number", "string", "boolean", "null"] }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "safety_notes": {
+                "type": ["array", "null"],
+                "items": { "type": "string" }
               }
             },
-            "additionalProperties": true
+            "additionalProperties": false
           }
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "touched_surfaces": {
       "type": "object",
@@ -117,6 +163,7 @@
       "required": ["status", "findings"],
       "properties": {
         "status": {
+          "type": "string",
           "enum": ["valid", "repairable", "needs_human_review", "rejected"]
         },
         "findings": {
@@ -126,9 +173,11 @@
             "required": ["category", "severity", "message"],
             "properties": {
               "category": {
+                "type": "string",
                 "enum": ["schema", "semantic", "safety"]
               },
               "severity": {
+                "type": "string",
                 "enum": ["info", "warning", "error"]
               },
               "message": {
@@ -143,6 +192,7 @@
       "additionalProperties": false
     },
     "review_status": {
+      "type": "string",
       "enum": ["needs_design_review", "repair_required", "rejected"]
     },
     "issue": {

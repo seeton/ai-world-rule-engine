@@ -10,7 +10,7 @@ This folder contains a data-driven rule package workflow for a Godot 4 simulatio
 
 ## Main folders
 
-- `rules/schema/` — JSON schema-style contract for safe rule packages.
+- `rules/schema/` — JSON schema-style contracts for safe rule packages and PoC4 rule proposals.
 - `rules/packages/` — built-in reusable mechanics.
 - `scripts/integration/` — repository and compiler helpers for Godot-side integration.
 - `docs/` — workflow notes for clone/fork/PR behavior.
@@ -32,6 +32,14 @@ The validator checks:
 - static `res://...` paths plus `.tscn` `ExtResource(...)` wiring in `project.godot`, `scenes/`, and `scripts/`
 
 If you also changed repository-side tests or rule package contracts, follow it with `node --test` from the repository root before opening a PR.
+
+## World Operation API
+
+Per #106, every surface that mutates the world (CLI, GUI, GM, Codex, automation) goes through the same World Operation API in `scripts/world_ops/`. CLI string syntax / GUI buttons / GM proposals are all just adapters that build a `{ operation_type, request }` and dispatch through `scripts/world_ops/dispatcher.gd`. See [`docs/world_operations.md`](docs/world_operations.md) for the operation catalog, result schema, and validate / dry_run / execute contract.
+
+## Collapse-safe CLI
+
+If the in-game UI or GM dialog becomes unresponsive (for example after a world rule collapse or `builtin.space` disable), use the CLI surfaces as a last-line-of-defense control surface. See [`docs/cli.md`](docs/cli.md). The headless path is `bash scripts/world_cli.sh <issue-number> -- <subcommand>`, and the playable scene also exposes the same dispatcher-backed commands from the in-game `World CLI` overlay on the `C` key.
 
 ## Safety model
 
@@ -82,9 +90,11 @@ Launch Godot from the issue-specific worktree instead of validating against the 
 
 - move the in-world player directly inside a simple 2D plaza first
 - approach the in-world GM and interact with `E` or left click
+- the in-world GM now opens the player-facing PoC4 conversation first; use the overlay toggle when you also need the admin/debug shell
 - GM画面で相談を送ると、提案されたルールパッチを JSON とメタデータ付きで確認し、承認してから導入できます
 - add `時間ルール` from the GM screen when you want the playable 2D/3D world HUD to expose the shared `elapsed_seconds` clock
 - press `T` in either the 2D or 3D world to toggle the live rule tree overlay
+- press `C` in either the 2D or 3D world to open the dispatcher-backed `World CLI` overlay (`inspect`, `rule`, `package`, `snapshot`, `help`, `clear`)
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
 - view rules, world state, and admin-heavy inspectors only after entering the GM screen
 - continue play in the quarter-view third-person 3D world after the conversion
@@ -112,6 +122,12 @@ If a requested mechanic does not already map to a built-in package, it should st
 ### WorldState API
 
 - `submit_player_task(task_text: String) -> Dictionary`
+- `talk_to_game_master(message: String) -> Dictionary`
+- `request_rule_proposal(task_text: String) -> Dictionary`
+- `get_pending_rule_proposal() -> Dictionary`
+- `update_pending_rule_review(reviewed: bool, metadata: Dictionary = {}) -> Dictionary`
+- `apply_pending_rule_proposal() -> Dictionary`
+- `get_last_rule_apply_result() -> Dictionary`
 - `review_rule_package_proposal(rule_package: Dictionary) -> Dictionary`
 - `clone_rule(rule_id: String) -> Dictionary`
 - `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary` — accepts either a runtime rule patch or a reviewed rule package proposal
@@ -125,6 +141,7 @@ If a requested mechanic does not already map to a built-in package, it should st
 - `advance_tick(delta_seconds: float) -> void`
 - `set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary`
 
+PoC4 backend/UI handoff validates proposal payloads against `rules/schema/rule_proposal.schema.json`, stores the pending proposal/review/apply state under `snapshot["poc4"]`, and uses an apply-only flow: generate a proposal, review it in the GM UI, then apply the compiled runtime patch directly to the live game.
 `get_world_snapshot()` keeps returning the live inspector/playable payload. Use `create_world_snapshot()` when you need the deterministic save format for persistence, and `restore_world_snapshot()` / `load_world_snapshot()` when you want to rebuild the runtime from that saved payload.
 
 ## Snapshot save format

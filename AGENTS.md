@@ -22,6 +22,13 @@
 - 状態確認には `bash scripts/agent_guard.sh status` または `bash scripts/worktree.sh root-status` を使うこと。
 - repo root を fast-forward 同期するときは `bash scripts/worktree.sh sync-root` を使うこと。
 
+## 実装前の worktree 最新確認
+
+実装に入る前、とくに既存 worktree を再利用するときは、作業対象が最新 base branch から遅れていないかを明示的に確認すること。
+
+1. repo root の基準 checkout で `bash scripts/worktree.sh root-status` を確認し、default branch checkout が clean で behind しているなら `bash scripts/worktree.sh sync-root` で `origin/main` を更新する。
+2. issue worktree へ移動し、`git rev-list --left-right --count HEAD...origin/<base-branch>` を実行する。通常の base branch は `origin/main` で、右側の count が 0 でなければ最新 base branch を merge / rebase してから編集を始める。
+3. `bash scripts/worktree.sh status --stale-days 14` は更新日の古さを見る補助チェックであり、branch が最新かどうかの確認には使わない。
 ## Issue / PR の所有権
 
 - すべての実装セッションは、必ず 1 つの GitHub issue に対応していなければならない。

@@ -5,10 +5,11 @@
 This repository uses **issue-driven development**:
 
 1. Open or refine a GitHub issue before writing code.
-2. Create a branch for that issue.
-3. Implement the scoped change.
-4. Open a PR linked to the issue.
-5. Merge through PR review; do not merge direct-to-main changes by default.
+2. Create or reuse the issue worktree and branch.
+3. Refresh the repo-root baseline checkout and confirm the issue worktree is not behind the latest target branch.
+4. Implement the scoped change.
+5. Open a PR linked to the issue.
+6. Merge through PR review; do not merge direct-to-main changes by default.
 
 If a PR depends on Copilot automatic review in this repository, do not merge it until that review has completed. If no automatic review is configured or available for the PR, call that out explicitly in the PR notes before merging.
 
@@ -27,8 +28,16 @@ Helper commands:
 
 - `bash scripts/agent_guard.sh status` — includes repo-root tracked/untracked state
 - `bash scripts/worktree.sh root-status` — prints only the repo-root checkout state
-- `bash scripts/worktree.sh status --stale-days 14` — lists issue worktrees with issue state, dirty state, claim state, and stale status
+- `bash scripts/worktree.sh status --stale-days 14` — lists issue worktrees with issue state, dirty state, claim state, and age-based stale status
 - `bash scripts/worktree.sh sync-root` — fast-forwards the repo-root default branch when tracked files are clean
+
+## Pre-implementation worktree freshness check
+
+Before starting implementation, especially when reusing an existing issue worktree, confirm that the worktree is current relative to the branch you plan to target.
+
+1. At the repo root baseline checkout, run `bash scripts/worktree.sh root-status`. If the default-branch checkout is clean and behind origin, run `bash scripts/worktree.sh sync-root` to refresh `origin/main`.
+2. In the issue worktree, compare the branch against the latest target branch with `git rev-list --left-right --count HEAD...origin/<base-branch>` (usually `origin/main`). If the right-hand count is non-zero, merge or rebase the latest target branch before editing.
+3. Treat `bash scripts/worktree.sh status --stale-days 14` as an inactivity check only. It helps find neglected worktrees, but it does not replace the branch-divergence check above.
 
 ## Issue decomposition for multi-agent work
 

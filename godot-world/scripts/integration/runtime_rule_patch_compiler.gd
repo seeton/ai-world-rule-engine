@@ -94,13 +94,14 @@ func compile_package(rule_package: Dictionary) -> Dictionary:
     if aggregate_effects.is_empty() and runtime_rules.size() == 1:
         primary_runtime_patch = runtime_rules[0].duplicate(true)
 
-    var installable_targets := not runtime_rules.is_empty() or not aggregate_effects.is_empty() or not patch_install_actions.is_empty()
+    var has_install_targets := not runtime_rules.is_empty() or not aggregate_effects.is_empty() or not patch_install_actions.is_empty()
     return {
         "status": "compiled",
         "runtime_patch": primary_runtime_patch,
         "runtime_rules": _duplicate_dictionary_array(runtime_rules),
         "deferred_operations": deferred_operations,
-        "safe_to_apply_directly": deferred_operations.is_empty() and installable_targets
+        "safe_to_apply_directly": deferred_operations.is_empty(),
+        "has_install_targets": has_install_targets
     }
 
 func _build_baseline_runtime_rule(rule_package: Dictionary, patch: Dictionary, package_metadata: Dictionary, effects: Array, install_actions: Array) -> Dictionary:

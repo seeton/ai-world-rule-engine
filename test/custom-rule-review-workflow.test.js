@@ -55,6 +55,26 @@ test("runtime compiler preserves declarative install actions for traceable insta
   assert.match(source, /Rule package patch\.operations\[%d\] must be a dictionary\./);
 });
 
+test("runtime compiler separates safe_to_apply_directly from install target presence", () => {
+  const source = fs.readFileSync(compilerPath, "utf8");
+
+  assert.match(source, /"safe_to_apply_directly": deferred_operations\.is_empty\(\)/);
+  assert.match(source, /"has_install_targets": has_install_targets/);
+  assert.doesNotMatch(
+    source,
+    /"safe_to_apply_directly": deferred_operations\.is_empty\(\) and (installable_targets|has_install_targets)/,
+    "safe_to_apply_directly must not be gated by install target presence."
+  );
+});
+
+test("WorldState surfaces has_install_targets separately for downstream consumers", () => {
+  const source = fs.readFileSync(worldStatePath, "utf8");
+
+  assert.match(source, /"has_install_targets": has_install_targets,/);
+  assert.match(source, /"has_install_targets": bool\(compilation\.get\("has_install_targets", true\)\),/);
+  assert.match(source, /Rule package operations produced no installable runtime targets\./);
+});
+
 test("WorldState validates package operations and README documents package installs", () => {
   const source = fs.readFileSync(worldStatePath, "utf8");
   const readme = fs.readFileSync(readmePath, "utf8");

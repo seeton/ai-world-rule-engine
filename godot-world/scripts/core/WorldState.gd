@@ -117,11 +117,14 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
         error_result["rule_package"] = rule_package.duplicate(true)
         return error_result
 
+    var has_install_targets := bool(compilation.get("has_install_targets", true))
     var warnings: Array = []
     if operations.is_empty():
         warnings.append("Rule package has no operations to install.")
     if not bool(compilation.get("safe_to_apply_directly", false)):
         warnings.append("Some operations are deferred until the runtime supports them.")
+    if not has_install_targets and not operations.is_empty():
+        warnings.append("Rule package operations produced no installable runtime targets.")
 
     var review_status := String(patch.get("review_status", "draft"))
     return {
@@ -132,6 +135,7 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
         "operation_count": operations.size(),
         "package_dependencies": dependency_resolution.get("package_dependencies", []).duplicate(true),
         "safe_to_apply_directly": bool(compilation.get("safe_to_apply_directly", false)),
+        "has_install_targets": has_install_targets,
         "deferred_operations": compilation.get("deferred_operations", []).duplicate(true),
         "compiled_runtime_patch": compilation.get("runtime_patch", {}).duplicate(true),
         "compiled_runtime_rules": _extract_compiled_runtime_rules(compilation),
@@ -367,6 +371,7 @@ func _rule_package_to_proposal(rule_package: Dictionary, compilation: Dictionary
         proposal["compiled_runtime_patch"] = compilation.get("runtime_patch", {}).duplicate(true)
         proposal["compiled_runtime_rules"] = _extract_compiled_runtime_rules(compilation)
         proposal["safe_to_apply_directly"] = bool(compilation.get("safe_to_apply_directly", false))
+        proposal["has_install_targets"] = bool(compilation.get("has_install_targets", true))
         proposal["deferred_operations"] = compilation.get("deferred_operations", []).duplicate(true)
 
     return proposal
@@ -563,6 +568,7 @@ func _build_rule_package_install_result(rule_package: Dictionary, compilation: D
         "forked_from": rule_package.get("forked_from", null),
         "suggested_pr_target": rule_package.get("suggested_pr_target", null),
         "safe_to_apply_directly": bool(compilation.get("safe_to_apply_directly", false)),
+        "has_install_targets": bool(compilation.get("has_install_targets", true)),
         "deferred_operations": compilation.get("deferred_operations", []).duplicate(true),
         "compiled_runtime_patch": compilation.get("runtime_patch", {}).duplicate(true),
         "compiled_runtime_rules": compiled_runtime_rules

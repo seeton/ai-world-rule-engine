@@ -1,0 +1,66 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.time",
+  "display_name": "Time",
+  "description": "Adds a deterministic elapsed time counter that updates each tick.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.time"
+  },
+  "tags": [
+    "time",
+    "clock",
+    "progression"
+  ],
+  "match_phrases": [
+    "time",
+    "clock",
+    "timer",
+    "elapsed"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "scope": "entity",
+    "target_tags": [
+      "player"
+    ],
+    "provides_rule_kinds": [
+      "world-clock",
+      "player-time"
+    ],
+    "operations": [
+      {
+        "op": "upsert_stat",
+        "stat_id": "elapsed_seconds",
+        "value_type": "float",
+        "default": 0.0,
+        "min": 0.0,
+        "max": 3153600000.0,
+        "ui_group": "time"
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "time.elapsed_counter",
+        "rule_type": "tick_delta",
+        "target_stat": "elapsed_seconds",
+        "delta": 1.0,
+        "interval_seconds": 1.0,
+        "min": 0.0,
+        "max": 3153600000.0
+      }
+    ]
+  },
+  "package_dependencies": []
+}

@@ -1,0 +1,492 @@
+{
+  "schema_version": "rule_package_v1",
+  "package_id": "builtin.peaceful_world_order",
+  "display_name": "Peaceful World Order",
+  "description": "Adds peaceful life-order structures above the shared default package: time-of-day, objects, ownership, money, meals, hunger, body, and health.",
+  "version": "1.0.0",
+  "author": "Godot World Team",
+  "source_repo": "github.com/godot-world/rule-library",
+  "source_ref": "refs/heads/main",
+  "package_dependencies": [
+    "builtin.default_package"
+  ],
+  "forked_from": null,
+  "suggested_pr_target": {
+    "repo": "github.com/godot-world/rule-library",
+    "base_ref": "main",
+    "package_id": "builtin.peaceful_world_order"
+  },
+  "tags": [
+    "peaceful",
+    "world-order",
+    "time",
+    "objects",
+    "ownership",
+    "money",
+    "meal",
+    "hunger",
+    "body",
+    "health"
+  ],
+  "match_phrases": [
+    "peaceful world order",
+    "world order",
+    "morning noon night",
+    "ownership and money",
+    "meal and hunger",
+    "body health"
+  ],
+  "community": {
+    "likes": 0,
+    "dislikes": 0,
+    "alternative_package_ids": []
+  },
+  "runtime_contract": {
+    "supports_world_modes": [
+      "two_d",
+      "three_d"
+    ],
+    "depends_on_package_ids": [
+      "builtin.default_package"
+    ],
+    "life_order_capabilities": [
+      "peaceful-time-of-day",
+      "objects",
+      "ownership",
+      "money",
+      "meal",
+      "hunger",
+      "body",
+      "health"
+    ],
+    "contract_id": "world-order.peaceful.v1",
+    "dependency_mode": "initial_default_provider",
+    "requires_capabilities": [
+      "world.foundation",
+      "world.existence",
+      "world.state",
+      "world.space",
+      "world.base-time",
+      "world.basic-action"
+    ],
+    "lifecycle": {
+      "default_installed": false,
+      "immutable_engine_invariant": false,
+      "removable": true,
+      "disableable": true,
+      "replaceable": true
+    },
+    "replacement_contract": {
+      "requires_default_package_ids": false,
+      "requires_capabilities_not_rule_ids": true
+    }
+  },
+  "patch": {
+    "format": "rule_patch_v1",
+    "review_status": "approved",
+    "operations": [
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.peaceful_foundation",
+        "rule_type": "runtime_rule",
+        "name": "Peaceful World Order",
+        "concept": "world_order",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world.foundation"
+        ],
+        "provides_rule_kinds": [
+          "world-order.base"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order",
+            "value": {
+              "package_id": "builtin.peaceful_world_order",
+              "theme": "peaceful",
+              "supports_world_modes": [
+                "two_d",
+                "three_d"
+              ],
+              "foundation_package_id": "builtin.default_package",
+              "base_rule_groups": [
+                "time",
+                "objects",
+                "body"
+              ],
+              "foundation_contract_id": "world.foundation.v1",
+              "required_capabilities": [
+                "world.foundation",
+                "world.existence",
+                "world.state",
+                "world.space",
+                "world.base-time",
+                "world.basic-action"
+              ],
+              "depends_on_package_ids": [
+                "builtin.default_package"
+              ],
+              "dependency_mode": "initial_default_provider"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.time",
+        "rule_type": "runtime_rule",
+        "name": "Time Rules",
+        "concept": "time",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.base",
+          "world.base-time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.time"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.time",
+            "value": {
+              "children": [
+                "morning",
+                "noon",
+                "night",
+                "age"
+              ],
+              "day_phases": [
+                "morning",
+                "noon",
+                "night"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.time.morning",
+        "rule_type": "runtime_rule",
+        "name": "Morning",
+        "concept": "time",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.time.morning"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.time.phases.morning",
+            "value": {
+              "display_name": "Morning",
+              "hours": [
+                5,
+                11
+              ],
+              "mood": "gentle_start"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.time.noon",
+        "rule_type": "runtime_rule",
+        "name": "Noon",
+        "concept": "time",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.time.noon"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.time.phases.noon",
+            "value": {
+              "display_name": "Noon",
+              "hours": [
+                11,
+                16
+              ],
+              "mood": "shared_activity"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.time.night",
+        "rule_type": "runtime_rule",
+        "name": "Night",
+        "concept": "time",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.time.night"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.time.phases.night",
+            "value": {
+              "display_name": "Night",
+              "hours": [
+                16,
+                24
+              ],
+              "mood": "quiet_rest"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.time.age",
+        "rule_type": "runtime_rule",
+        "name": "Age",
+        "concept": "time",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world-order.time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.time.age"
+        ],
+        "effects": [
+          {
+            "component": "stats",
+            "field": "age",
+            "op": "add",
+            "default": 18.0,
+            "value_per_second": 0.0,
+            "min": 0.0,
+            "max": 130.0
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.objects",
+        "rule_type": "runtime_rule",
+        "name": "Object Rules",
+        "concept": "objects",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.base",
+          "world.existence",
+          "world.space"
+        ],
+        "provides_rule_kinds": [
+          "world-order.objects"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.objects",
+            "value": {
+              "children": [
+                "ownership",
+                "money"
+              ],
+              "goal": "peaceful_exchange"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.objects.ownership",
+        "rule_type": "runtime_rule",
+        "name": "Ownership",
+        "concept": "ownership",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.objects",
+          "world.state"
+        ],
+        "provides_rule_kinds": [
+          "world-order.objects.ownership"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.objects.ownership",
+            "value": {
+              "default_fields": [
+                "owner_id",
+                "holder_id",
+                "location_id"
+              ],
+              "conflict_model": "peaceful_stewardship"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.objects.money",
+        "rule_type": "runtime_rule",
+        "name": "Money",
+        "concept": "money",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world-order.objects"
+        ],
+        "provides_rule_kinds": [
+          "world-order.objects.money"
+        ],
+        "effects": [
+          {
+            "component": "stats",
+            "field": "money",
+            "op": "add",
+            "default": 20.0,
+            "value_per_second": 0.0,
+            "min": 0.0,
+            "max": 100000.0
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.objects.money.meal",
+        "rule_type": "runtime_rule",
+        "name": "Meal",
+        "concept": "meal",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world-order.objects.money",
+          "world.basic-action"
+        ],
+        "provides_rule_kinds": [
+          "world-order.objects.money.meal"
+        ],
+        "effects": [
+          {
+            "component": "stats",
+            "field": "meal_budget",
+            "op": "add",
+            "default": 1.0,
+            "value_per_second": 0.0,
+            "min": 0.0,
+            "max": 10.0
+          }
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.objects.money.meal",
+            "value": {
+              "default_meal_interval_hours": 6,
+              "distribution": "shared_kitchen"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.objects.money.meal.hunger",
+        "rule_type": "runtime_rule",
+        "name": "Hunger",
+        "concept": "hunger",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world-order.objects.money.meal",
+          "world.base-time"
+        ],
+        "provides_rule_kinds": [
+          "world-order.objects.money.meal.hunger"
+        ],
+        "effects": [
+          {
+            "component": "needs",
+            "field": "hunger",
+            "op": "add",
+            "default": 0.0,
+            "value_per_second": 0.15,
+            "min": 0.0,
+            "max": 100.0
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.body",
+        "rule_type": "runtime_rule",
+        "name": "Body Rules",
+        "concept": "body",
+        "scope": "world",
+        "requires_rule_kinds": [
+          "world-order.base",
+          "world.state"
+        ],
+        "provides_rule_kinds": [
+          "world-order.body"
+        ],
+        "install_actions": [
+          {
+            "op": "merge_world_state",
+            "path": "world_order.body",
+            "value": {
+              "children": [
+                "health"
+              ],
+              "baseline_state": "stable"
+            }
+          }
+        ]
+      },
+      {
+        "op": "upsert_rule",
+        "rule_id": "world_order.body.health",
+        "rule_type": "runtime_rule",
+        "name": "Health",
+        "concept": "health",
+        "scope": "entity",
+        "target_tags": [
+          "mortal"
+        ],
+        "requires_rule_kinds": [
+          "world-order.body"
+        ],
+        "provides_rule_kinds": [
+          "world-order.body.health"
+        ],
+        "effects": [
+          {
+            "component": "stats",
+            "field": "health",
+            "op": "add",
+            "default": 100.0,
+            "value_per_second": 0.0,
+            "min": 0.0,
+            "max": 100.0
+          }
+        ]
+      }
+    ]
+  }
+}

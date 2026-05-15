@@ -20,7 +20,7 @@ body:
         - rule package data
         - rule compiler or integration
         - docs or workflow
-        - legacy Node PoC
+        - repo docs or workflow
     validations:
       required: true
   - type: textarea
@@ -65,7 +65,7 @@ body:
       description: Suggest safe ways to split investigation and verification.
       placeholder: |
         Example:
-        - Agent A: isolate reproduction in Godot or Node
+        - Agent A: isolate reproduction in Godot runtime or workflow
         - Agent B: inspect package/schema or runtime logic
         - Agent C: confirm fix validation and docs impact
   - type: textarea

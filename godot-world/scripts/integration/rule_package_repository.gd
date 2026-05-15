@@ -69,7 +69,7 @@ func _read_json(path: String) -> Dictionary:
 		return {}
 
 	var raw_text := FileAccess.get_file_as_string(path)
-	var parsed := JSON.parse_string(raw_text)
+	var parsed: Variant = JSON.parse_string(raw_text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	return parsed
@@ -86,6 +86,7 @@ func _is_valid_package(package_data: Dictionary) -> bool:
 		"author",
 		"source_repo",
 		"source_ref",
+		"package_dependencies",
 		"patch"
 	]
 	for key in required_keys:
@@ -93,7 +94,13 @@ func _is_valid_package(package_data: Dictionary) -> bool:
 			return false
 	if package_data.get("schema_version", "") != RULE_SCHEMA_VERSION:
 		return false
-	return typeof(package_data.get("patch", {})) == TYPE_DICTIONARY
+	if typeof(package_data.get("patch", {})) != TYPE_DICTIONARY:
+		return false
+	if typeof(package_data.get("package_dependencies", [])) != TYPE_ARRAY:
+		return false
+	if package_data.has("runtime_contract") and typeof(package_data.get("runtime_contract")) != TYPE_DICTIONARY:
+		return false
+	return true
 
 func _summarize_package(package_data: Dictionary) -> Dictionary:
 	return {
@@ -104,11 +111,13 @@ func _summarize_package(package_data: Dictionary) -> Dictionary:
 		"author": package_data.get("author", ""),
 		"source_repo": package_data.get("source_repo", ""),
 		"source_ref": package_data.get("source_ref", ""),
+		"package_dependencies": package_data.get("package_dependencies", []).duplicate(true),
 		"forked_from": package_data.get("forked_from", null),
 		"suggested_pr_target": package_data.get("suggested_pr_target", null),
 		"tags": package_data.get("tags", []),
 		"match_phrases": package_data.get("match_phrases", []),
-		"community": package_data.get("community", {})
+		"community": package_data.get("community", {}),
+		"runtime_contract": package_data.get("runtime_contract", {}).duplicate(true) if package_data.get("runtime_contract", {}) is Dictionary else {}
 	}
 
 func _score_package_match(package_data: Dictionary, normalized_request: String) -> float:

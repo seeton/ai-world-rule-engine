@@ -18,6 +18,8 @@ test("runtime exposes installed package summaries and a package toggle API", () 
   assert.match(source, /func set_package_enabled\(package_id: String, enabled: bool\) -> Dictionary:/);
   assert.match(source, /func set_rule_enabled\(rule_id: String, enabled: bool\) -> Dictionary:[\s\S]*?_refresh_rule_relationships\(\)/);
   assert.match(source, /func set_package_enabled\(package_id: String, enabled: bool\) -> Dictionary:[\s\S]*?_refresh_rule_relationships\(\)/);
+  assert.match(source, /func set_package_enabled\(package_id: String, enabled: bool\) -> Dictionary:[\s\S]*?_set_proposal_runtime_package_enabled\(normalized_package_id, enabled\)/);
+  assert.match(source, /if not bool\(package_runtime.get\("enabled", true\)\):[\s\S]*?continue/);
   assert.match(source, /func _build_installed_rule_packages\(installed_rules_by_id: Dictionary\) -> Dictionary:/);
 });
 

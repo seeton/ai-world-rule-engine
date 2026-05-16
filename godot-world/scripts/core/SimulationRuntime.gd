@@ -581,6 +581,7 @@ func set_package_enabled(package_id: String, enabled: bool) -> Dictionary:
 		installed_rules[rule_id] = rule
 	_world_state["installed_rules"] = installed_rules
 	_refresh_rule_relationships()
+	_set_proposal_runtime_package_enabled(normalized_package_id, enabled)
 
 	var refreshed_rules: Dictionary = _world_state.get("installed_rules", {})
 	var summary := _build_package_summary(normalized_package_id, matched_rule_ids, refreshed_rules)
@@ -662,6 +663,8 @@ func dispatch_input_event(event_name: String, context: Dictionary = {}) -> Dicti
 		if not (package_runtime_variant is Dictionary):
 			continue
 		var package_runtime: Dictionary = package_runtime_variant
+		if not bool(package_runtime.get("enabled", true)):
+			continue
 		var rule_operations := _build_rule_operation_index(Array(package_runtime.get("rule_operations", [])))
 		var relations: Array = Array(package_runtime.get("relations", []))
 
@@ -1462,6 +1465,7 @@ func _build_proposal_install_actions(proposal: Dictionary) -> Array:
 		"path": "proposal_runtime",
 		"value": {
 			String(proposal.get("package_id", "draft.poc4.proposal")).replace("/", "_"): {
+				"enabled": true,
 				"proposal_title": String(proposal.get("proposal_title", "")),
 				"event_bindings": event_bindings,
 				"relations": relations,
@@ -1493,6 +1497,33 @@ func _append_poc4_history(poc4_state: Dictionary, entry: Dictionary) -> void:
 
 func _duplicate_dictionary(value) -> Dictionary:
 	return value.duplicate(true) if value is Dictionary else {}
+
+
+func _set_proposal_runtime_package_enabled(package_id: String, enabled: bool) -> void:
+	var normalized_package_id := _proposal_runtime_package_key(package_id)
+	if normalized_package_id.is_empty():
+		return
+
+	var proposal_runtime_variant: Variant = _world_state.get("proposal_runtime", {})
+	if not (proposal_runtime_variant is Dictionary):
+		return
+
+	var proposal_runtime: Dictionary = proposal_runtime_variant.duplicate(true)
+	if not proposal_runtime.has(normalized_package_id):
+		return
+
+	var package_runtime_variant: Variant = proposal_runtime.get(normalized_package_id, {})
+	if not (package_runtime_variant is Dictionary):
+		return
+
+	var package_runtime: Dictionary = package_runtime_variant.duplicate(true)
+	package_runtime["enabled"] = enabled
+	proposal_runtime[normalized_package_id] = package_runtime
+	_world_state["proposal_runtime"] = proposal_runtime
+
+
+func _proposal_runtime_package_key(package_id: String) -> String:
+	return String(package_id).strip_edges().replace("/", "_")
 
 
 func _build_world_clock_summary(installed_rules_by_id: Dictionary, snapshot: Dictionary) -> Dictionary:

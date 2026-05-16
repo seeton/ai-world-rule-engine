@@ -380,11 +380,14 @@ func get_snapshot() -> Dictionary:
 
 	var template_ids: Array = _template_index.keys()
 	template_ids.sort()
+	var installed_package_summary := _build_installed_rule_packages(installed_rules_by_id)
 
 	snapshot["accumulator_seconds"] = _accumulator_seconds
 	snapshot["available_template_ids"] = template_ids
 	snapshot["installed_rules_by_id"] = installed_rules_by_id
 	snapshot["installed_rules"] = installed_rules
+	snapshot["installed_rule_packages_by_id"] = installed_package_summary.get("packages_by_id", {}).duplicate(true)
+	snapshot["installed_rule_packages"] = installed_package_summary.get("packages", []).duplicate(true)
 	snapshot["world_mode"] = "three_d" if bool(_world_state.get("preview_3d", {}).get("enabled", false)) else "two_d"
 	snapshot["tick"] = snapshot.get("tick_index", 0)
 	snapshot["world_name"] = snapshot.get("world_name", "はじまりの広場")
@@ -533,6 +536,7 @@ func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
 	rule["enabled"] = enabled
 	installed_rules[normalized_id] = rule
 	_world_state["installed_rules"] = installed_rules
+	_refresh_rule_relationships()
 
 	if previous_enabled != enabled:
 		var event_type := "rule_enabled" if enabled else "rule_disabled"
@@ -544,6 +548,60 @@ func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
 		"rule_id": normalized_id,
 		"previous_enabled": previous_enabled,
 		"enabled": enabled
+	}
+
+
+func set_package_enabled(package_id: String, enabled: bool) -> Dictionary:
+	var normalized_package_id := String(package_id).strip_edges()
+	if normalized_package_id.is_empty():
+		return {
+			"status": "error",
+			"message": "パッケージ ID が空です。"
+		}
+
+	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
+	var matched_rule_ids := _find_package_rule_ids(installed_rules, normalized_package_id)
+	if matched_rule_ids.is_empty():
+		return {
+			"status": "error",
+			"message": "パッケージ '%s' 由来のルールは導入されていません。" % normalized_package_id,
+			"package_id": normalized_package_id
+		}
+
+	var changed_rule_ids: Array = []
+	var previous_enabled_rule_ids: Array = []
+	for rule_id in matched_rule_ids:
+		var rule: Dictionary = installed_rules.get(rule_id, {}).duplicate(true)
+		var previous_enabled := bool(rule.get("enabled", true))
+		if previous_enabled:
+			previous_enabled_rule_ids.append(rule_id)
+		if previous_enabled != enabled:
+			changed_rule_ids.append(rule_id)
+		rule["enabled"] = enabled
+		installed_rules[rule_id] = rule
+	_world_state["installed_rules"] = installed_rules
+	_refresh_rule_relationships()
+	_set_proposal_runtime_package_enabled(normalized_package_id, enabled)
+
+	var refreshed_rules: Dictionary = _world_state.get("installed_rules", {})
+	var summary := _build_package_summary(normalized_package_id, matched_rule_ids, refreshed_rules)
+	if not changed_rule_ids.is_empty():
+		var event_type := "rule_package_enabled" if enabled else "rule_package_disabled"
+		var message := "パッケージ '%s' を有効化しました。" % normalized_package_id if enabled else "パッケージ '%s' を無効化しました。" % normalized_package_id
+		_append_event(event_type, message, {
+			"package_id": normalized_package_id,
+			"rule_ids": matched_rule_ids.duplicate(true),
+			"changed_rule_ids": changed_rule_ids.duplicate(true)
+		})
+
+	return {
+		"status": "enabled" if enabled else "disabled",
+		"package_id": normalized_package_id,
+		"enabled": enabled,
+		"rule_ids": matched_rule_ids.duplicate(true),
+		"changed_rule_ids": changed_rule_ids.duplicate(true),
+		"previous_enabled_rule_ids": previous_enabled_rule_ids.duplicate(true),
+		"package": summary
 	}
 
 
@@ -605,6 +663,8 @@ func dispatch_input_event(event_name: String, context: Dictionary = {}) -> Dicti
 		if not (package_runtime_variant is Dictionary):
 			continue
 		var package_runtime: Dictionary = package_runtime_variant
+		if not bool(package_runtime.get("enabled", true)):
+			continue
 		var rule_operations := _build_rule_operation_index(Array(package_runtime.get("rule_operations", [])))
 		var relations: Array = Array(package_runtime.get("relations", []))
 
@@ -1405,6 +1465,7 @@ func _build_proposal_install_actions(proposal: Dictionary) -> Array:
 		"path": "proposal_runtime",
 		"value": {
 			String(proposal.get("package_id", "draft.poc4.proposal")).replace("/", "_"): {
+				"enabled": true,
 				"proposal_title": String(proposal.get("proposal_title", "")),
 				"event_bindings": event_bindings,
 				"relations": relations,
@@ -1438,6 +1499,33 @@ func _duplicate_dictionary(value) -> Dictionary:
 	return value.duplicate(true) if value is Dictionary else {}
 
 
+func _set_proposal_runtime_package_enabled(package_id: String, enabled: bool) -> void:
+	var normalized_package_id := _proposal_runtime_package_key(package_id)
+	if normalized_package_id.is_empty():
+		return
+
+	var proposal_runtime_variant: Variant = _world_state.get("proposal_runtime", {})
+	if not (proposal_runtime_variant is Dictionary):
+		return
+
+	var proposal_runtime: Dictionary = proposal_runtime_variant.duplicate(true)
+	if not proposal_runtime.has(normalized_package_id):
+		return
+
+	var package_runtime_variant: Variant = proposal_runtime.get(normalized_package_id, {})
+	if not (package_runtime_variant is Dictionary):
+		return
+
+	var package_runtime: Dictionary = package_runtime_variant.duplicate(true)
+	package_runtime["enabled"] = enabled
+	proposal_runtime[normalized_package_id] = package_runtime
+	_world_state["proposal_runtime"] = proposal_runtime
+
+
+func _proposal_runtime_package_key(package_id: String) -> String:
+	return String(package_id).strip_edges().replace("/", "_")
+
+
 func _build_world_clock_summary(installed_rules_by_id: Dictionary, snapshot: Dictionary) -> Dictionary:
 	var provider := _find_world_clock_provider(installed_rules_by_id)
 	if provider.is_empty():
@@ -1458,6 +1546,8 @@ func _find_world_clock_provider(installed_rules_by_id: Dictionary) -> Dictionary
 		if not (rule is Dictionary):
 			continue
 		var rule_data: Dictionary = rule
+		if not bool(rule_data.get("enabled", true)):
+			continue
 		var metadata: Dictionary = rule_data.get("metadata", {})
 		var package_id := String(metadata.get("package_id", ""))
 		var rule_id := String(rule_data.get("id", ""))
@@ -1499,6 +1589,120 @@ func _find_world_clock_provider(installed_rules_by_id: Dictionary) -> Dictionary
 				"description": "%s は WorldState.%s をプレイヤー向けの時計として見える化します。" % [provider_id if not provider_id.is_empty() else "このルール", source_field]
 			}
 	return {}
+
+
+func _build_installed_rule_packages(installed_rules_by_id: Dictionary) -> Dictionary:
+	var package_rule_ids: Dictionary = {}
+	var package_ids: Array = []
+	var rule_ids: Array = installed_rules_by_id.keys()
+	rule_ids.sort()
+
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules_by_id.get(rule_id, {})
+		var package_id := _extract_rule_package_id(rule)
+		if package_id.is_empty():
+			continue
+		if not package_rule_ids.has(package_id):
+			package_rule_ids[package_id] = []
+			package_ids.append(package_id)
+		var grouped_rule_ids: Array = package_rule_ids[package_id]
+		grouped_rule_ids.append(rule_id)
+		grouped_rule_ids.sort()
+		package_rule_ids[package_id] = grouped_rule_ids
+
+	package_ids.sort()
+	var packages: Array = []
+	var packages_by_id: Dictionary = {}
+	for package_id in package_ids:
+		var grouped_rule_ids: Array = package_rule_ids.get(package_id, [])
+		var summary := _build_package_summary(package_id, grouped_rule_ids, installed_rules_by_id)
+		packages.append(summary.duplicate(true))
+		packages_by_id[package_id] = summary
+
+	return {
+		"packages": packages,
+		"packages_by_id": packages_by_id
+	}
+
+
+func _build_package_summary(package_id: String, rule_ids: Array, installed_rules_by_id: Dictionary) -> Dictionary:
+	var enabled_rule_count := 0
+	var display_name := package_id
+	var package_version := ""
+	var source_repo := ""
+	var source_ref := ""
+	var forked_from: Variant = null
+	var suggested_pr_target: Variant = null
+
+	for rule_id_variant in rule_ids:
+		var rule_id := String(rule_id_variant)
+		var rule: Dictionary = installed_rules_by_id.get(rule_id, {})
+		if rule.is_empty():
+			continue
+		if bool(rule.get("enabled", true)):
+			enabled_rule_count += 1
+		var metadata: Dictionary = rule.get("metadata", {})
+		if display_name == package_id:
+			var metadata_display_name := String(metadata.get("package_display_name", "")).strip_edges()
+			if not metadata_display_name.is_empty():
+				display_name = metadata_display_name
+			else:
+				display_name = String(rule.get("name", package_id))
+		if package_version.is_empty():
+			package_version = String(metadata.get("package_version", "")).strip_edges()
+		if source_repo.is_empty():
+			source_repo = String(metadata.get("source_repo", "")).strip_edges()
+		if source_ref.is_empty():
+			source_ref = String(metadata.get("source_ref", "")).strip_edges()
+		if forked_from == null and metadata.has("forked_from"):
+			forked_from = metadata.get("forked_from")
+		if suggested_pr_target == null and metadata.has("suggested_pr_target"):
+			suggested_pr_target = metadata.get("suggested_pr_target")
+
+	var total_rule_count := rule_ids.size()
+	var state := "disabled"
+	if enabled_rule_count == total_rule_count and total_rule_count > 0:
+		state = "enabled"
+	elif enabled_rule_count > 0:
+		state = "mixed"
+
+	return {
+		"package_id": package_id,
+		"display_name": display_name,
+		"version": package_version,
+		"state": state,
+		"enabled": enabled_rule_count > 0,
+		"all_rules_enabled": enabled_rule_count == total_rule_count and total_rule_count > 0,
+		"enabled_rule_count": enabled_rule_count,
+		"disabled_rule_count": max(0, total_rule_count - enabled_rule_count),
+		"rule_count": total_rule_count,
+		"rule_ids": rule_ids.duplicate(true),
+		"source_repo": source_repo,
+		"source_ref": source_ref,
+		"forked_from": forked_from,
+		"suggested_pr_target": suggested_pr_target
+	}
+
+
+func _find_package_rule_ids(installed_rules_by_id: Dictionary, package_id: String) -> Array:
+	var normalized_package_id := String(package_id).strip_edges()
+	if normalized_package_id.is_empty():
+		return []
+
+	var matched_rule_ids: Array = []
+	var rule_ids: Array = installed_rules_by_id.keys()
+	rule_ids.sort()
+	for rule_id in rule_ids:
+		var rule: Dictionary = installed_rules_by_id.get(rule_id, {})
+		if _extract_rule_package_id(rule) != normalized_package_id:
+			continue
+		matched_rule_ids.append(rule_id)
+	return matched_rule_ids
+
+
+func _extract_rule_package_id(rule: Dictionary) -> String:
+	var metadata: Dictionary = rule.get("metadata", {})
+	return String(metadata.get("package_id", "")).strip_edges()
 func _build_default_three_d_preview_state() -> Dictionary:
 	return {
 		"enabled": false,

@@ -328,6 +328,15 @@ func get_available_rule_packages() -> Array:
     return packages
 
 
+func get_installed_rule_packages() -> Array:
+    _ensure_runtime()
+    var snapshot: Dictionary = _runtime.get_snapshot()
+    var packages = snapshot.get("installed_rule_packages", [])
+    if packages is Array:
+        return packages.duplicate(true)
+    return []
+
+
 func create_world_snapshot() -> Dictionary:
     _ensure_runtime()
     return _runtime.create_snapshot()
@@ -364,6 +373,11 @@ func advance_tick(delta_seconds: float) -> void:
 func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
     _ensure_runtime()
     return _runtime.set_rule_enabled(rule_id, enabled)
+
+
+func set_package_enabled(package_id: String, enabled: bool) -> Dictionary:
+    _ensure_runtime()
+    return _runtime.set_package_enabled(package_id, enabled)
 
 
 func set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary:

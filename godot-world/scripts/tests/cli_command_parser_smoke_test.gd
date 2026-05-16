@@ -92,6 +92,18 @@ func _initialize() -> void:
 			failure_message = "duplicate package install did not produce validation_error/2: %s" % JSON.stringify(duplicate_package_install)
 
 	if exit_code == 0:
+		var package_enable_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "enable", "parser.smoke"]), {})
+		if String(package_enable_result.get("status", "")) != "ok":
+			exit_code = 1
+			failure_message = "package enable did not succeed: %s" % JSON.stringify(package_enable_result)
+
+	if exit_code == 0:
+		var package_disable_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "disable", "parser.smoke"]), {})
+		if String(package_disable_result.get("status", "")) != "ok":
+			exit_code = 1
+			failure_message = "package disable did not succeed: %s" % JSON.stringify(package_disable_result)
+
+	if exit_code == 0:
 		var save_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["snapshot", "dump", snapshot_path]), {})
 		if String(save_result.get("status", "")) != "ok":
 			exit_code = 1
@@ -107,9 +119,17 @@ func _initialize() -> void:
 		else:
 			var verify_result: Dictionary = CliCommandParserScript.dispatch_string(fresh_world, PackedStringArray(["inspect"]), {})
 			var disabled_rules: Array = verify_result.get("payload", {}).get("disabled_rule_ids", [])
-			if not disabled_rules.has("parser_smoke_rule"):
+			var package_snapshot: Dictionary = fresh_world.get_world_snapshot()
+			var package_data: Dictionary = package_snapshot.get("installed_rule_packages_by_id", {}).get("parser.smoke", {})
+			if package_data.is_empty():
+				exit_code = 1
+				failure_message = "snapshot did not preserve installed package summary."
+			elif not disabled_rules.has("parser_smoke_rule"):
 				exit_code = 1
 				failure_message = "snapshot did not preserve disabled flag through parser path."
+			elif String(package_data.get("state", "")) != "disabled":
+				exit_code = 1
+				failure_message = "snapshot did not preserve package disabled state through parser path."
 
 	for n in nodes_to_release:
 		if is_instance_valid(n):

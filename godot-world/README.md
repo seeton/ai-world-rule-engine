@@ -134,16 +134,20 @@ If a requested mechanic does not already map to a built-in package, it should st
 - `create_rule_from_patch(rule_patch: Dictionary) -> Dictionary` — accepts either a runtime rule patch or a reviewed rule package proposal
 - `get_world_snapshot() -> Dictionary`
 - `get_available_rule_packages() -> Array`
+- `get_installed_rule_packages() -> Array`
 - `create_world_snapshot() -> Dictionary`
 - `restore_world_snapshot(snapshot_data: Dictionary) -> Dictionary`
 - `save_world_snapshot(file_path: String) -> Dictionary`
 - `load_world_snapshot(file_path: String) -> Dictionary`
 - `get_available_rule_templates() -> Array`
 - `advance_tick(delta_seconds: float) -> void`
+- `set_package_enabled(package_id: String, enabled: bool) -> Dictionary`
+- `set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary`
 - `set_entity_position(entity_id: String, position_patch: Dictionary) -> Dictionary`
 
 PoC4 backend/UI handoff validates proposal payloads against `rules/schema/rule_proposal.schema.json`, stores the pending proposal/review/apply state under `snapshot["poc4"]`, and uses an apply-only flow: generate a proposal, review it in the GM UI, then apply the compiled runtime patch directly to the live game.
 `get_world_snapshot()` keeps returning the live inspector/playable payload. Use `create_world_snapshot()` when you need the deterministic save format for persistence, and `restore_world_snapshot()` / `load_world_snapshot()` when you want to rebuild the runtime from that saved payload.
+The live snapshot now also includes `installed_rule_packages` and `installed_rule_packages_by_id`, so GUI / CLI / automation surfaces can inspect package-level enablement without reconstructing it themselves.
 
 ## Snapshot save format
 

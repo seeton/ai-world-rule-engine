@@ -23,6 +23,18 @@ static func set_rule_enabled(world: Object, rule_id: String, enabled: bool) -> D
 	}
 
 
+static func set_package_enabled(world: Object, package_id: String, enabled: bool) -> Dictionary:
+	if world == null or not world.has_method("set_package_enabled"):
+		return _world_unavailable_result()
+	var result_variant: Variant = world.call("set_package_enabled", package_id, enabled)
+	if result_variant is Dictionary:
+		return result_variant
+	return {
+		"status": "error",
+		"message": "WorldState.set_package_enabled returned an unexpected value."
+	}
+
+
 static func save_snapshot(world: Object, file_path: String) -> Dictionary:
 	if world == null or not world.has_method("save_world_snapshot"):
 		return _world_unavailable_result()

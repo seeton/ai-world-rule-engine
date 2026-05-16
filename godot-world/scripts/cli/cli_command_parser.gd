@@ -87,13 +87,34 @@ static func translate(command: String, args: PackedStringArray) -> Dictionary:
 				_:
 					return _usage_error("rule のサブコマンドは 'enable' か 'disable' です。")
 		"package":
-			if args.is_empty() or String(args[0]) != "list":
-				return _usage_error("package で対応しているのは 'list' のみです (Phase 1)。")
-			return {
-				"status": "ok",
-				"operation_type": "ListPackages",
-				"request": {}
-			}
+			if args.size() < 1:
+				return _usage_error("package コマンドは <list|enable|disable> を要求します。")
+			var action := String(args[0])
+			match action:
+				"list":
+					return {
+						"status": "ok",
+						"operation_type": "ListPackages",
+						"request": {}
+					}
+				"enable":
+					if args.size() < 2:
+						return _usage_error("package enable は <package_id> を要求します。")
+					return {
+						"status": "ok",
+						"operation_type": "EnablePackage",
+						"request": {"package_id": String(args[1])}
+					}
+				"disable":
+					if args.size() < 2:
+						return _usage_error("package disable は <package_id> を要求します。")
+					return {
+						"status": "ok",
+						"operation_type": "DisablePackage",
+						"request": {"package_id": String(args[1])}
+					}
+				_:
+					return _usage_error("package のサブコマンドは 'list' / 'enable' / 'disable' です。")
 		"snapshot":
 			if args.size() < 2:
 				return _usage_error("snapshot コマンドは <dump|load> <path> を要求します。")
@@ -129,6 +150,10 @@ static func help_lines() -> PackedStringArray:
 	lines.append("    -> DisableRule: 指定ルールを無効化。")
 	lines.append("  package list")
 	lines.append("    -> ListPackages: インストール候補を列挙。")
+	lines.append("  package enable <package_id>")
+	lines.append("    -> EnablePackage: 指定パッケージ配下の導入済みルールを一括有効化。")
+	lines.append("  package disable <package_id>")
+	lines.append("    -> DisablePackage: 指定パッケージ配下の導入済みルールを一括無効化。")
 	lines.append("  snapshot dump <path>")
 	lines.append("    -> DumpSnapshot: 決定的スナップショットを書き出し。")
 	lines.append("  snapshot load <path>")

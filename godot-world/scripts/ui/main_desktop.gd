@@ -4,6 +4,7 @@ signal close_requested
 
 const ThreeDPreviewRendererScript = preload("res://scripts/ui/three_d_preview_renderer.gd")
 const GMDialogScript = preload("res://scripts/ui/gm_dialog.gd")
+const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
 const FALLBACK_TEMPLATES: Array = [
     {
         "id": "starter-farming",
@@ -87,6 +88,10 @@ var _template_list: ItemList
 var _install_template_button: Button
 var _tick_amount: SpinBox
 var _installed_rule_tree: Tree
+var _installed_package_list: ItemList
+var _package_enable_button: Button
+var _package_disable_button: Button
+var _installed_package_details_view: TextEdit
 var _installed_rule_list: ItemList
 var _clone_rule_button: Button
 var _installed_rule_details_view: TextEdit
@@ -109,6 +114,7 @@ var _selected_proposal_original_text := ""
 var _approved_proposal_text := ""
 var _current_proposal_review: Dictionary = {}
 var _is_updating_proposal_editor := false
+var _installed_package_cache: Array = []
 var _installed_rule_cache: Array = []
 var _snapshot_cache: Dictionary = {}
 var _poc4_state_cache: Dictionary = {}
@@ -531,6 +537,38 @@ func _build_installed_rules_panel() -> Control:
     var panel := _make_panel_section("稼働中のルール", "現在動いているルールを確認し、依存関係や詳細をGM視点で点検します。")
     var body := panel.get_meta("body") as VBoxContainer
 
+    var package_label := Label.new()
+    package_label.text = "導入済みパッケージ"
+    body.add_child(package_label)
+
+    _installed_package_list = ItemList.new()
+    _installed_package_list.custom_minimum_size = Vector2(0, 76)
+    _installed_package_list.select_mode = ItemList.SELECT_SINGLE
+    _installed_package_list.item_selected.connect(_on_installed_package_selected)
+    body.add_child(_installed_package_list)
+
+    var package_action_row := HBoxContainer.new()
+    package_action_row.add_theme_constant_override("separation", 8)
+    body.add_child(package_action_row)
+
+    _package_enable_button = Button.new()
+    _package_enable_button.text = "選択パッケージを有効化"
+    _package_enable_button.disabled = true
+    _package_enable_button.pressed.connect(_on_package_enable_pressed)
+    package_action_row.add_child(_package_enable_button)
+
+    _package_disable_button = Button.new()
+    _package_disable_button.text = "選択パッケージを無効化"
+    _package_disable_button.disabled = true
+    _package_disable_button.pressed.connect(_on_package_disable_pressed)
+    package_action_row.add_child(_package_disable_button)
+
+    _installed_package_details_view = TextEdit.new()
+    _installed_package_details_view.editable = false
+    _installed_package_details_view.custom_minimum_size = Vector2(0, 88)
+    _installed_package_details_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    body.add_child(_installed_package_details_view)
+
     var tree_label := Label.new()
     tree_label.text = "依存ツリー"
     body.add_child(tree_label)
@@ -722,6 +760,7 @@ func _refresh_all() -> void:
     _latest_task_result = _extract_latest_task_result(_snapshot_cache)
     _proposal_cache = _extract_task_proposals(_latest_task_result)
     _refresh_poc4_state()
+    _installed_package_cache = _extract_installed_packages(_snapshot_cache)
     _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _update_template_list()
     _update_proposal_panel()
@@ -1077,6 +1116,19 @@ func _update_proposal_views() -> void:
     )
 
 func _update_installed_rules_panel() -> void:
+    _installed_package_list.clear()
+    for package_data in _installed_package_cache:
+        _installed_package_list.add_item(_format_package_list_label(package_data))
+
+    var has_packages := not _installed_package_cache.is_empty()
+    _package_enable_button.disabled = true
+    _package_disable_button.disabled = true
+    if not has_packages:
+        _installed_package_details_view.text = "まだパッケージ由来の導入ルールはありません。package_id 付きのルールを導入すると、ここから一括ON/OFFできます。"
+    else:
+        _installed_package_list.select(0)
+        _update_installed_package_details(0)
+
     _installed_rule_list.clear()
     for rule_data in _installed_rule_cache:
         _installed_rule_list.add_item(_format_rule_list_label(rule_data))
@@ -1088,8 +1140,11 @@ func _update_installed_rules_panel() -> void:
         _installed_rule_details_view.text = "まだルールはありません。テンプレートを追加すると、親ルールや未解決の依存を確認できます。"
         return
 
-    _installed_rule_list.select(0)
-    _update_installed_rule_details(0)
+    if has_packages:
+        _select_first_rule_for_package(_extract_identifier(_installed_package_cache[0]))
+    if _installed_rule_list.get_selected_items().is_empty():
+        _installed_rule_list.select(0)
+        _update_installed_rule_details(0)
 
 func _update_installed_rule_details(index: int) -> void:
     if index < 0 or index >= _installed_rule_cache.size():
@@ -1142,6 +1197,45 @@ func _update_installed_rule_details(index: int) -> void:
     summary_lines.append(JSON.stringify(rule_data, "	"))
     _installed_rule_details_view.text = "\n".join(summary_lines)
 
+func _update_installed_package_details(index: int) -> void:
+    if index < 0 or index >= _installed_package_cache.size():
+        _installed_package_details_view.text = ""
+        _package_enable_button.disabled = true
+        _package_disable_button.disabled = true
+        return
+
+    var package_data = _installed_package_cache[index]
+    var package_id := _extract_identifier(package_data)
+    var package_state := str(package_data.get("state", "disabled"))
+    var lines: Array[String] = []
+    lines.append("パッケージ: %s" % _format_package_list_label(package_data))
+    lines.append("状態: %s" % _format_package_state_label(package_state))
+    lines.append("ルール数: %d (有効 %d / 無効 %d)" % [
+        int(package_data.get("rule_count", 0)),
+        int(package_data.get("enabled_rule_count", 0)),
+        int(package_data.get("disabled_rule_count", 0))
+    ])
+    var version := str(package_data.get("version", ""))
+    if not version.is_empty():
+        lines.append("バージョン: %s" % version)
+    var source_repo := str(package_data.get("source_repo", ""))
+    if not source_repo.is_empty():
+        lines.append("ソース: %s" % source_repo)
+    var source_ref := str(package_data.get("source_ref", ""))
+    if not source_ref.is_empty():
+        lines.append("参照: %s" % source_ref)
+    var rule_ids: Array = package_data.get("rule_ids", [])
+    if not rule_ids.is_empty():
+        lines.append("対象ルール: %s" % _join_values(rule_ids))
+    lines.append("")
+    lines.append("生JSON:")
+    lines.append(JSON.stringify(package_data, "	"))
+    _installed_package_details_view.text = "\n".join(lines)
+
+    _package_enable_button.disabled = package_state == "enabled"
+    _package_disable_button.disabled = package_state == "disabled"
+    _select_first_rule_for_package(package_id)
+
 func _update_world_state_view() -> void:
     if _snapshot_cache.is_empty():
         _update_entity_tree([], {})
@@ -1188,6 +1282,11 @@ func _update_world_state_view() -> void:
         lines.append("現在の世界モード: %s" % [str(_snapshot_cache.get("world_mode", "two_d"))])
     if _snapshot_cache.has("concepts"):
         lines.append("概念: %s" % [_join_values(Array(_snapshot_cache.get("concepts", [])))])
+    var installed_packages := _extract_installed_packages(_snapshot_cache)
+    if not installed_packages.is_empty():
+        lines.append("導入済みパッケージ:")
+        for package_data in installed_packages:
+            lines.append("- %s" % _format_package_list_label(package_data))
 
     lines.append("")
     lines.append("所有・内包:")
@@ -1345,7 +1444,7 @@ func _update_poc4_state_view() -> void:
 func _update_status_label() -> void:
     var source := "WorldState 自動読み込み" if _world_state != null else "会話用フォールバック表示"
     var poc4_status := _describe_poc4_status()
-    var summary := "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_rule_cache.size(), poc4_status]
+    var summary := "GM会話データ元: %s | 候補テンプレート: %d | レビュー提案: %d | 導入済みパッケージ: %d | 稼働ルール: %d | PoC4: %s" % [source, _template_cache.size(), _proposal_cache.size(), _installed_package_cache.size(), _installed_rule_cache.size(), poc4_status]
     if _home_summary_label != null:
         _home_summary_label.text = summary
     if _tabs != null and _tabs.get_tab_count() >= 5:
@@ -1531,6 +1630,15 @@ func _on_template_selected(_index: int) -> void:
 func _on_installed_rule_selected(index: int) -> void:
     _update_installed_rule_details(index)
 
+func _on_installed_package_selected(index: int) -> void:
+    _update_installed_package_details(index)
+
+func _on_package_enable_pressed() -> void:
+    _set_selected_package_enabled(true)
+
+func _on_package_disable_pressed() -> void:
+    _set_selected_package_enabled(false)
+
 func _on_rule_tree_selected() -> void:
     var selected_item := _installed_rule_tree.get_selected()
     if selected_item == null:
@@ -1562,6 +1670,20 @@ func _extract_installed_rules(snapshot: Dictionary) -> Array:
         return rules
     return []
 
+func _extract_installed_packages(snapshot: Dictionary) -> Array:
+    var raw_packages = snapshot.get("installed_rule_packages", [])
+    if raw_packages is Array and not raw_packages.is_empty():
+        return raw_packages.duplicate(true)
+    if raw_packages is Dictionary:
+        var packages: Array = []
+        var package_ids: Array = raw_packages.keys()
+        package_ids.sort()
+        for package_id in package_ids:
+            packages.append(raw_packages[package_id])
+        if not packages.is_empty():
+            return packages
+    return _derive_installed_packages_from_rules(_extract_installed_rules(snapshot))
+
 func _extract_entities(snapshot: Dictionary) -> Array:
     var raw_entities = snapshot.get("entities", [])
     if raw_entities is Array:
@@ -1592,11 +1714,50 @@ func _format_template_label(template_data: Variant) -> String:
 
 func _format_rule_list_label(rule_data: Variant) -> String:
     if rule_data is Dictionary:
-        return "%s (%s)" % [
+        var label := "%s (%s)" % [
             str(rule_data.get("name", _extract_identifier(rule_data))),
             _extract_identifier(rule_data)
         ]
+        var package_id := _extract_rule_package_id(rule_data)
+        if not package_id.is_empty():
+            label += " [%s]" % package_id
+        return label
     return str(rule_data)
+
+func _format_package_list_label(package_data: Variant) -> String:
+    if package_data is Dictionary:
+        return "%s (%s) [%s]" % [
+            str(package_data.get("display_name", _extract_identifier(package_data))),
+            _extract_identifier(package_data),
+            _format_package_state_label(str(package_data.get("state", "disabled")))
+        ]
+    return str(package_data)
+
+func _format_package_state_label(state: String) -> String:
+    match state:
+        "enabled":
+            return "有効"
+        "mixed":
+            return "一部有効"
+        _:
+            return "無効"
+
+func _find_package_index_by_id(package_id: String) -> int:
+    for index in range(_installed_package_cache.size()):
+        if _extract_identifier(_installed_package_cache[index]) == package_id:
+            return index
+    return -1
+
+func _select_first_rule_for_package(package_id: String) -> void:
+    if package_id.is_empty() or _installed_rule_list == null:
+        return
+    for index in range(_installed_rule_cache.size()):
+        if _extract_rule_package_id(_installed_rule_cache[index]) != package_id:
+            continue
+        _installed_rule_list.deselect_all()
+        _installed_rule_list.select(index)
+        _update_installed_rule_details(index)
+        return
 
 func _find_rule_index_by_id(rule_id: String) -> int:
     for index in range(_installed_rule_cache.size()):
@@ -2521,8 +2682,14 @@ func _simulate_package_install(package_data: Variant) -> Dictionary:
     var package_id := _extract_identifier(package_data)
     var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})
     var package_name := package_id
+    var package_version := ""
+    var source_repo := ""
+    var source_ref := ""
     if package_data is Dictionary:
         package_name = str(package_data.get("display_name", package_data.get("name", package_id)))
+        package_version = str(package_data.get("version", ""))
+        source_repo = str(package_data.get("source_repo", ""))
+        source_ref = str(package_data.get("source_ref", ""))
 
     var rule_patch := {
         "id": "compiled_%s" % package_id.replace(".", "_"),
@@ -2530,7 +2697,11 @@ func _simulate_package_install(package_data: Variant) -> Dictionary:
         "concept": package_id,
         "enabled": true,
         "metadata": {
-            "package_id": package_id
+            "package_id": package_id,
+            "package_display_name": package_name,
+            "package_version": package_version,
+            "source_repo": source_repo,
+            "source_ref": source_ref
         },
         "effects": [
             {
@@ -2555,6 +2726,63 @@ func _simulate_package_install(package_data: Variant) -> Dictionary:
 
     _append_fallback_event("rule_installed", "フォールバック提案 '%s' を導入しました。" % package_id, {"rule_id": rule_patch["id"]})
     return {"status": "installed", "rule": rule_patch}
+
+func _set_selected_package_enabled(enabled: bool) -> void:
+    var selected_items := _installed_package_list.get_selected_items()
+    if selected_items.is_empty():
+        _append_log("導入済みパッケージ未選択のまま状態変更しようとしました。")
+        return
+
+    var package_data = _installed_package_cache[selected_items[0]]
+    var package_id := _extract_identifier(package_data)
+    var result: Dictionary = {}
+    if _world_state != null:
+        var operation_type := "EnablePackage" if enabled else "DisablePackage"
+        result = WorldOpDispatcherScript.dispatch(_world_state, operation_type, {"package_id": package_id}, {})
+    else:
+        result = _simulate_package_enabled(package_id, enabled)
+
+    _refresh_all()
+    _append_log("パッケージ状態を更新しました: %s" % package_id, result)
+    var package_index := _find_package_index_by_id(package_id)
+    if package_index != -1:
+        _installed_package_list.deselect_all()
+        _installed_package_list.select(package_index)
+        _update_installed_package_details(package_index)
+        _select_first_rule_for_package(package_id)
+
+func _simulate_package_enabled(package_id: String, enabled: bool) -> Dictionary:
+    var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})
+    var changed_rule_ids: Array = []
+    var matched_rule_ids: Array = []
+    var rule_ids: Array = installed_rules.keys()
+    rule_ids.sort()
+    for rule_id in rule_ids:
+        var rule_data: Dictionary = installed_rules.get(rule_id, {})
+        if _extract_rule_package_id(rule_data) != package_id:
+            continue
+        matched_rule_ids.append(rule_id)
+        var was_enabled := bool(rule_data.get("enabled", true))
+        if was_enabled != enabled:
+            changed_rule_ids.append(rule_id)
+        rule_data["enabled"] = enabled
+        installed_rules[rule_id] = rule_data
+
+    if matched_rule_ids.is_empty():
+        return {"status": "error", "message": "package not installed", "package_id": package_id}
+
+    _fallback_snapshot["installed_rules"] = _refresh_fallback_rule_dependencies(installed_rules)
+    _append_fallback_event(
+        "rule_package_enabled" if enabled else "rule_package_disabled",
+        "フォールバックパッケージ '%s' を%sしました。" % [package_id, "有効化" if enabled else "無効化"],
+        {"package_id": package_id, "rule_ids": matched_rule_ids.duplicate(true), "changed_rule_ids": changed_rule_ids.duplicate(true)}
+    )
+    return {
+        "status": "enabled" if enabled else "disabled",
+        "package_id": package_id,
+        "rule_ids": matched_rule_ids.duplicate(true),
+        "changed_rule_ids": changed_rule_ids.duplicate(true)
+    }
 
 func _simulate_rule_clone(rule_data: Variant) -> Dictionary:
     var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})
@@ -2628,6 +2856,61 @@ func _refresh_fallback_rule_dependencies(installed_rules: Dictionary) -> Diction
 
     return normalized_rules
 
+func _derive_installed_packages_from_rules(rules: Array) -> Array:
+    var packages_by_id: Dictionary = {}
+    for rule_data in rules:
+        if not (rule_data is Dictionary):
+            continue
+        var package_id := _extract_rule_package_id(rule_data)
+        if package_id.is_empty():
+            continue
+        if not packages_by_id.has(package_id):
+            packages_by_id[package_id] = {
+                "package_id": package_id,
+                "display_name": str(rule_data.get("metadata", {}).get("package_display_name", package_id)),
+                "version": str(rule_data.get("metadata", {}).get("package_version", "")),
+                "source_repo": str(rule_data.get("metadata", {}).get("source_repo", "")),
+                "source_ref": str(rule_data.get("metadata", {}).get("source_ref", "")),
+                "rule_ids": [],
+                "enabled_rule_count": 0,
+                "disabled_rule_count": 0,
+                "rule_count": 0
+            }
+        var package_data: Dictionary = packages_by_id[package_id]
+        var rule_ids: Array = package_data.get("rule_ids", [])
+        rule_ids.append(_extract_identifier(rule_data))
+        rule_ids.sort()
+        package_data["rule_ids"] = rule_ids
+        package_data["rule_count"] = int(package_data.get("rule_count", 0)) + 1
+        if bool(rule_data.get("enabled", true)):
+            package_data["enabled_rule_count"] = int(package_data.get("enabled_rule_count", 0)) + 1
+        else:
+            package_data["disabled_rule_count"] = int(package_data.get("disabled_rule_count", 0)) + 1
+        packages_by_id[package_id] = package_data
+
+    var package_ids: Array = packages_by_id.keys()
+    package_ids.sort()
+    var packages: Array = []
+    for package_id in package_ids:
+        var package_data: Dictionary = packages_by_id[package_id]
+        var enabled_rule_count := int(package_data.get("enabled_rule_count", 0))
+        var rule_count := int(package_data.get("rule_count", 0))
+        var state := "disabled"
+        if rule_count > 0 and enabled_rule_count == rule_count:
+            state = "enabled"
+        elif enabled_rule_count > 0:
+            state = "mixed"
+        package_data["state"] = state
+        package_data["enabled"] = enabled_rule_count > 0
+        package_data["all_rules_enabled"] = rule_count > 0 and enabled_rule_count == rule_count
+        packages.append(package_data)
+    return packages
+
+func _extract_rule_package_id(rule_data: Variant) -> String:
+    if rule_data is Dictionary:
+        return str(rule_data.get("metadata", {}).get("package_id", ""))
+    return ""
+
 func _simulate_tick(delta_seconds: float) -> Dictionary:
     _fallback_snapshot["tick_index"] = int(_fallback_snapshot.get("tick_index", 0)) + 1
     _fallback_snapshot["elapsed_seconds"] = float(_fallback_snapshot.get("elapsed_seconds", 0.0)) + delta_seconds
@@ -2648,6 +2931,8 @@ func _simulate_tick(delta_seconds: float) -> Dictionary:
         stats["morale"] = max(min(float(stats.get("morale", 0.0)) + 0.1, 100.0), 0.0)
         for rule_data in _extract_installed_rules(_fallback_snapshot):
             if not (rule_data is Dictionary):
+                continue
+            if not bool(rule_data.get("enabled", true)):
                 continue
             for effect in rule_data.get("effects", []):
                 if effect is Dictionary and String(effect.get("component", "")) == "stats":

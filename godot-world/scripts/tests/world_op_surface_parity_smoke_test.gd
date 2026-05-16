@@ -107,6 +107,42 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "package list dry-run parity mismatch: %s" % diff_message
 
+	# 7. package disable dry-run parity.
+	if exit_code == 0:
+		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(
+			world,
+			PackedStringArray(["package", "disable", "parity.smoke"]),
+			{"dry_run": true}
+		)
+		var via_direct: Dictionary = WorldOpDispatcherScript.dispatch(
+			world,
+			"DisablePackage",
+			{"package_id": "parity.smoke"},
+			{"dry_run": true}
+		)
+		var diff_message := _compare_results(via_cli, via_direct)
+		if not diff_message.is_empty():
+			exit_code = 1
+			failure_message = "package disable dry-run parity mismatch: %s" % diff_message
+
+	# 8. package enable dry-run parity.
+	if exit_code == 0:
+		var via_cli: Dictionary = CliCommandParserScript.dispatch_string(
+			world,
+			PackedStringArray(["package", "enable", "parity.smoke"]),
+			{"dry_run": true}
+		)
+		var via_direct: Dictionary = WorldOpDispatcherScript.dispatch(
+			world,
+			"EnablePackage",
+			{"package_id": "parity.smoke"},
+			{"dry_run": true}
+		)
+		var diff_message := _compare_results(via_cli, via_direct)
+		if not diff_message.is_empty():
+			exit_code = 1
+			failure_message = "package enable dry-run parity mismatch: %s" % diff_message
+
 	for n in nodes_to_release:
 		if is_instance_valid(n):
 			n.free()

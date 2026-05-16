@@ -3,7 +3,7 @@ extends SceneTree
 # Smoke test for the collapse-safe CLI surface.
 # Exercises the pieces the CLI dispatcher relies on directly against
 # WorldState / SimulationRuntime, without spawning a child Godot process:
-# - rule disable/enable round-trip via set_rule_enabled
+# - package disable/enable round-trip via set_package_enabled
 # - tick respects the disabled flag (no effect application)
 # - snapshot dump+load preserves the disabled flag
 
@@ -35,15 +35,18 @@ func _initialize() -> void:
 		var baseline_snapshot: Dictionary = world.get_world_snapshot()
 		var baseline_hunger := _extract_hunger(baseline_snapshot)
 
-		var disable_result: Dictionary = world.set_rule_enabled("cli_smoke_rule", false)
+		var disable_result: Dictionary = world.set_package_enabled("cli.smoke", false)
 		if String(disable_result.get("status", "")) != "disabled":
 			exit_code = 1
-			failure_message = "Disable did not return 'disabled': %s" % JSON.stringify(disable_result)
+			failure_message = "Package disable did not return 'disabled': %s" % JSON.stringify(disable_result)
 		else:
 			var snapshot_after_disable: Dictionary = world.get_world_snapshot()
 			if not _rule_has_enabled(snapshot_after_disable, "cli_smoke_rule", false):
 				exit_code = 1
 				failure_message = "Snapshot did not reflect disabled flag after disable."
+			elif not _package_has_state(snapshot_after_disable, "cli.smoke", "disabled"):
+				exit_code = 1
+				failure_message = "Snapshot did not reflect disabled package state after disable."
 			else:
 				world.advance_tick(2.0)
 				var hunger_after_disable := _extract_hunger(world.get_world_snapshot())
@@ -65,14 +68,20 @@ func _initialize() -> void:
 						elif not _rule_has_enabled(loaded_world.get_world_snapshot(), "cli_smoke_rule", false):
 							exit_code = 1
 							failure_message = "Disabled flag did not survive snapshot round-trip."
+						elif not _package_has_state(loaded_world.get_world_snapshot(), "cli.smoke", "disabled"):
+							exit_code = 1
+							failure_message = "Package state did not survive snapshot round-trip."
 						else:
-							var enable_result: Dictionary = loaded_world.set_rule_enabled("cli_smoke_rule", true)
+							var enable_result: Dictionary = loaded_world.set_package_enabled("cli.smoke", true)
 							if String(enable_result.get("status", "")) != "enabled":
 								exit_code = 1
-								failure_message = "Enable did not return 'enabled': %s" % JSON.stringify(enable_result)
+								failure_message = "Package enable did not return 'enabled': %s" % JSON.stringify(enable_result)
 							elif not _rule_has_enabled(loaded_world.get_world_snapshot(), "cli_smoke_rule", true):
 								exit_code = 1
 								failure_message = "Snapshot did not reflect enabled flag after re-enable."
+							elif not _package_has_state(loaded_world.get_world_snapshot(), "cli.smoke", "enabled"):
+								exit_code = 1
+								failure_message = "Snapshot did not reflect enabled package state after re-enable."
 
 	for w in worlds_to_release:
 		if is_instance_valid(w):
@@ -99,6 +108,14 @@ func _rule_has_enabled(snapshot: Dictionary, rule_id: String, expected_enabled: 
 	if rule.is_empty():
 		return false
 	return bool(rule.get("enabled", true)) == expected_enabled
+
+
+func _package_has_state(snapshot: Dictionary, package_id: String, expected_state: String) -> bool:
+	var by_id: Dictionary = snapshot.get("installed_rule_packages_by_id", {})
+	var package_data: Dictionary = by_id.get(package_id, {})
+	if package_data.is_empty():
+		return false
+	return String(package_data.get("state", "")) == expected_state
 
 
 func _cleanup_snapshot_file() -> void:

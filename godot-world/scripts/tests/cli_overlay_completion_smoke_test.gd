@@ -112,6 +112,14 @@ func _initialize() -> void:
 		if not found_package_candidate:
 			exit_code = 1
 			failure_message = "Expected package install candidate missing: %s" % JSON.stringify(overlay._completion_candidates)
+		elif overlay._completion_list == null or overlay._completion_list.item_count == 0:
+			exit_code = 1
+			failure_message = "Package completion list did not render rows."
+		else:
+			var rendered_text: String = overlay._completion_list.get_item_text(0)
+			if rendered_text.find(" — ") != rendered_text.rfind(" — "):
+				exit_code = 1
+				failure_message = "Package completion row rendered duplicate separators: %s" % rendered_text
 
 	if exit_code == 0:
 		overlay._on_input_submitted("package install builtin.time")

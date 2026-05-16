@@ -505,7 +505,7 @@ func _build_package_completion_candidates(partial_package_id: String) -> Array:
 			continue
 		var summary := display_name
 		if not description.is_empty():
-			summary = "%s — %s" % [display_name, description]
+			summary = "%s: %s" % [display_name, description]
 		candidates.append({
 			"value": "package install %s" % package_id,
 			"summary": summary

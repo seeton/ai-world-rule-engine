@@ -24,6 +24,7 @@ test("World CLI overlay exposes tab completion and keyboard-first input flow", (
   assert.match(source, /_input\.caret_column = _input\.text\.length\(\)/);
   assert.match(source, /func _build_rule_completion_candidates\(action: String, partial_rule_id: String\) -> Array:/);
   assert.match(source, /func _build_package_completion_candidates\(partial_package_id: String\) -> Array:/);
+  assert.match(source, /summary = "%s: %s" % \[display_name, description\]/);
   assert.match(source, /trimmed_query == "package install"/);
   assert.match(source, /入力に一致する package が見つかりません/);
   assert.match(source, /trimmed_query == "rule %s" % String\(tokens\[1\]\)/);

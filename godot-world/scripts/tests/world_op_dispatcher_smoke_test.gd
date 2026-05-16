@@ -209,6 +209,12 @@ func _initialize() -> void:
 				exit_code = 1
 				failure_message = "InstallPackage payload did not preserve package_id: %s" % JSON.stringify(install_execute)
 
+	if exit_code == 0:
+		var duplicate_install: Dictionary = WorldOpDispatcherScript.dispatch(world, "InstallPackage", {"package_id": "builtin.time"}, {})
+		if String(duplicate_install.get("status", "")) != "validation_error" or int(duplicate_install.get("exit_code", 0)) != 2:
+			exit_code = 1
+			failure_message = "InstallPackage duplicate install did not validation_error/2: %s" % JSON.stringify(duplicate_install)
+
 	# 12. EnableRule/DisableRule must reject unexpected terminal statuses.
 	if exit_code == 0:
 		var fake_enable_world := FakeRuleToggleWorld.new(false, "disabled", "disabled")

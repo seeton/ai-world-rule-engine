@@ -13,7 +13,6 @@ static func operation_type() -> String:
 
 static func validate(world: Object, request: Dictionary) -> Dictionary:
 	var errors := PackedStringArray()
-	var warnings := PackedStringArray()
 	var package_id := String(request.get("package_id", "")).strip_edges()
 	if package_id.is_empty():
 		errors.append("InstallPackage.package_id must be a non-empty string.")
@@ -24,8 +23,8 @@ static func validate(world: Object, request: Dictionary) -> Dictionary:
 		if package_summary.is_empty():
 			errors.append("package '%s' is not available." % package_id)
 		elif _has_installed_package(world, package_id):
-			warnings.append("package '%s' already has installed rules in this world." % package_id)
-	return {"errors": errors, "warnings": warnings}
+			errors.append("package '%s' is already installed in this world." % package_id)
+	return {"errors": errors, "warnings": PackedStringArray()}
 
 
 static func dry_run(world: Object, request: Dictionary) -> Dictionary:

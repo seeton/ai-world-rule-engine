@@ -44,6 +44,7 @@ CLI 文法 → operation request の対応表。actuation の中身は [`world_o
 | `rule enable <rule_id>` | `EnableRule` | 指定ルールの `enabled` を true に。rule 不在は validation_error。 |
 | `rule disable <rule_id>` | `DisableRule` | 指定ルールの `enabled` を false に。 |
 | `package list` | `ListPackages` | `res://rules/packages` 配下から発見された package を列挙する。 |
+| `package install <package_id>` | `InstallPackage` | 指定 package を現在の world に導入する。初期 world が空でも CLI 単体で rule を入れられる。 |
 | `snapshot dump <path>` | `DumpSnapshot` | `WorldState.save_world_snapshot` で deterministic snapshot を書き出す。 |
 | `snapshot load <path>` | `LoadSnapshot` | `WorldState.load_world_snapshot` で現在世界を置換する。 |
 
@@ -130,7 +131,7 @@ UI が立ち上がらない状態で何が起きているかを判断するた�
    `bash scripts/world_cli.sh <issue> --snapshot user://last_known.json -- snapshot dump user://recovered.json`
 4. 修復済みスナップショットを GUI 側のロード導線に渡して再起動する。
 
-`restore` / `package install|remove` / `propose` といった、上流契約に依存するサブコマンドは Phase 2 として別 issue で扱う (#93 の非スコープ参照)。
+`restore` / `package remove` / `propose` といった、上流契約に依存するサブコマンドは引き続き Phase 2 として別 issue で扱う。
 
 ## smoke test
 
@@ -149,14 +150,14 @@ bash scripts/launch_godot.sh 93 -- --headless --script res://scripts/tests/cli_s
 ## 既知の制約 / Phase 2 への TODO
 
 - 稼働中世界への live attach は提供しない。常に `--snapshot` 経由でやりとりする。
-- `restore` / `package install|remove` / `propose` は本フェーズでは未実装。それぞれ #92 / #90 / #85・#87・#63 の契約確定後に follow-up で追加する。
+- `restore` / `package remove` / `propose` は本フェーズでは未実装。それぞれ #92 / #90 / #85・#87・#63 の契約確定後に follow-up で追加する。
 - `scripts/cli/main.gd` が依存する WorldState API が今後変わる場合、`cli_smoke_test.gd` を一緒に更新する。
 
 ## in-game World CLI overlay (#104)
 
 `scenes/Main.tscn` の playable world では、2D / 3D のどちらでも `C` キーで `World CLI` overlay を開ける。入力された文字列は `scripts/game/cli_inspect_overlay.gd` で token 化され、**必ず** `CliCommandParser.dispatch_string()` → `WorldOpDispatcher.dispatch()` の順に流れる。overlay 自身は `WorldState.set_rule_enabled` / `save_world_snapshot` / `load_world_snapshot` / `InspectReport.build` を直接呼ばない。
 
-- `inspect`, `rule enable|disable`, `package list`, `snapshot dump|load`, `help`, `clear` を実行できる
+- `inspect`, `rule enable|disable`, `package list|install`, `snapshot dump|load`, `help`, `clear` を実行できる
 - headless CLI と同じ help / validation / diff / rollback / exit-code 契約を共有する
 - `collapse_watcher.gd` も `InspectWorld` operation を dispatcher 経由で監視し、新しい collapse signal が現れたときだけ overlay を自動オープンする
 - GM 画面が開いている間は自動オープンを待機し、overlay を閉じた直後は同じ signal で即 reopen しないよう cooldown を入れる

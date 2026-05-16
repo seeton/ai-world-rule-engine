@@ -22,6 +22,7 @@ const OPERATION_SCRIPTS: Array = [
 	preload("res://scripts/world_ops/ops/enable_rule.gd"),
 	preload("res://scripts/world_ops/ops/disable_rule.gd"),
 	preload("res://scripts/world_ops/ops/list_packages.gd"),
+	preload("res://scripts/world_ops/ops/install_package.gd"),
 	preload("res://scripts/world_ops/ops/dump_snapshot.gd"),
 	preload("res://scripts/world_ops/ops/load_snapshot.gd"),
 ]

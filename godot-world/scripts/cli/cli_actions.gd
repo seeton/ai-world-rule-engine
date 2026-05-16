@@ -59,6 +59,18 @@ static func load_snapshot(world: Object, file_path: String) -> Dictionary:
 	}
 
 
+static func install_package(world: Object, package_id: String) -> Dictionary:
+	if world == null or not world.has_method("create_rule_from_patch"):
+		return _world_unavailable_result()
+	var result_variant: Variant = world.call("create_rule_from_patch", {"package_id": package_id})
+	if result_variant is Dictionary:
+		return result_variant
+	return {
+		"status": "error",
+		"message": "WorldState.create_rule_from_patch returned an unexpected value."
+	}
+
+
 static func _world_unavailable_result() -> Dictionary:
 	return {
 		"status": "error",

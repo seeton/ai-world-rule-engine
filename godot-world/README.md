@@ -95,6 +95,7 @@ Launch Godot from the issue-specific worktree instead of validating against the 
 - add `時間ルール` from the GM screen when you want the playable 2D/3D world HUD to expose the shared `elapsed_seconds` clock
 - press `T` in either the 2D or 3D world to toggle the live rule tree overlay
 - press `C` in either the 2D or 3D world to open the dispatcher-backed `World CLI` overlay (`inspect`, `rule`, `package`, `snapshot`, `help`, `clear`)
+- inside the `World CLI` overlay, `Enter` keeps focus on the command line, `↑↓` navigates history, and `Tab` shows/applies command completions including `package install <package_id>` suggestions
 - apply `3D化` from the GM screen when you want to convert the live world to 3D
 - view rules, world state, and admin-heavy inspectors only after entering the GM screen
 - continue play in the quarter-view third-person 3D world after the conversion

@@ -87,18 +87,20 @@ static func translate(command: String, args: PackedStringArray) -> Dictionary:
 				_:
 					return _usage_error("rule のサブコマンドは 'enable' か 'disable' です。")
 		"package":
-			if args.size() < 1:
-				return _usage_error("package コマンドは <list|enable|disable> を要求します。")
+			if args.is_empty():
+				return _usage_error("package コマンドは <list|install|enable|disable> を要求します。")
 			var action := String(args[0])
 			match action:
 				"list":
+					if args.size() != 1:
+						return _usage_error("package list は追加の引数を取りません。")
 					return {
 						"status": "ok",
 						"operation_type": "ListPackages",
 						"request": {}
 					}
 				"enable":
-					if args.size() < 2:
+					if args.size() != 2:
 						return _usage_error("package enable は <package_id> を要求します。")
 					return {
 						"status": "ok",
@@ -106,15 +108,23 @@ static func translate(command: String, args: PackedStringArray) -> Dictionary:
 						"request": {"package_id": String(args[1])}
 					}
 				"disable":
-					if args.size() < 2:
+					if args.size() != 2:
 						return _usage_error("package disable は <package_id> を要求します。")
 					return {
 						"status": "ok",
 						"operation_type": "DisablePackage",
 						"request": {"package_id": String(args[1])}
 					}
+				"install":
+					if args.size() != 2:
+						return _usage_error("package install コマンドは <package_id> を要求します。")
+					return {
+						"status": "ok",
+						"operation_type": "InstallPackage",
+						"request": {"package_id": String(args[1])}
+					}
 				_:
-					return _usage_error("package のサブコマンドは 'list' / 'enable' / 'disable' です。")
+					return _usage_error("package のサブコマンドは 'list' / 'install' / 'enable' / 'disable' です。")
 		"snapshot":
 			if args.size() < 2:
 				return _usage_error("snapshot コマンドは <dump|load> <path> を要求します。")
@@ -150,6 +160,8 @@ static func help_lines() -> PackedStringArray:
 	lines.append("    -> DisableRule: 指定ルールを無効化。")
 	lines.append("  package list")
 	lines.append("    -> ListPackages: インストール候補を列挙。")
+	lines.append("  package install <package_id>")
+	lines.append("    -> InstallPackage: 指定 package を現在 world に導入。")
 	lines.append("  package enable <package_id>")
 	lines.append("    -> EnablePackage: 指定パッケージ配下の導入済みルールを一括有効化。")
 	lines.append("  package disable <package_id>")

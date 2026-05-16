@@ -8,6 +8,7 @@ const WorldStateScript = preload("res://scripts/core/WorldState.gd")
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
 const WorldOpInspectWorldScript = preload("res://scripts/world_ops/ops/inspect_world.gd")
 const WorldOpListPackagesScript = preload("res://scripts/world_ops/ops/list_packages.gd")
+const WorldOpInstallPackageScript = preload("res://scripts/world_ops/ops/install_package.gd")
 const WorldOpEnableRuleScript = preload("res://scripts/world_ops/ops/enable_rule.gd")
 const WorldOpDisableRuleScript = preload("res://scripts/world_ops/ops/disable_rule.gd")
 const WorldOpEnablePackageScript = preload("res://scripts/world_ops/ops/enable_package.gd")
@@ -260,7 +261,31 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "ListPackages dry_run did not return dry_run with packages: %s" % JSON.stringify(packages_dry_run)
 
-	# 13. EnableRule/DisableRule must reject unexpected terminal statuses.
+	# 13. InstallPackage dry_run / execute should route through the dispatcher.
+	if exit_code == 0:
+		var install_dry_run: Dictionary = WorldOpDispatcherScript.dispatch(world, "InstallPackage", {"package_id": "builtin.time"}, {"dry_run": true})
+		if String(install_dry_run.get("status", "")) != "dry_run":
+			exit_code = 1
+			failure_message = "InstallPackage dry_run did not return dry_run: %s" % JSON.stringify(install_dry_run)
+
+	if exit_code == 0:
+		var install_execute: Dictionary = WorldOpDispatcherScript.dispatch(world, "InstallPackage", {"package_id": "builtin.time"}, {})
+		if String(install_execute.get("status", "")) != "ok":
+			exit_code = 1
+			failure_message = "InstallPackage execute failed: %s" % JSON.stringify(install_execute)
+		else:
+			var install_payload: Dictionary = install_execute.get("payload", {})
+			if String(install_payload.get("package_id", "")) != "builtin.time":
+				exit_code = 1
+				failure_message = "InstallPackage payload did not preserve package_id: %s" % JSON.stringify(install_execute)
+
+	if exit_code == 0:
+		var duplicate_install: Dictionary = WorldOpDispatcherScript.dispatch(world, "InstallPackage", {"package_id": "builtin.time"}, {})
+		if String(duplicate_install.get("status", "")) != "validation_error" or int(duplicate_install.get("exit_code", 0)) != 2:
+			exit_code = 1
+			failure_message = "InstallPackage duplicate install did not validation_error/2: %s" % JSON.stringify(duplicate_install)
+
+	# 14. EnableRule/DisableRule must reject unexpected terminal statuses.
 	if exit_code == 0:
 		var fake_enable_world := FakeRuleToggleWorld.new(false, "disabled", "disabled")
 		var enable_result: Dictionary = WorldOpEnableRuleScript.execute(fake_enable_world, {"rule_id": "fake_rule"})
@@ -275,7 +300,7 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "DisableRule accepted unexpected enabled status: %s" % JSON.stringify(disable_result)
 
-	# 14. EnablePackage/DisablePackage must reject unexpected terminal statuses.
+	# 15. EnablePackage/DisablePackage must reject unexpected terminal statuses.
 	if exit_code == 0:
 		var fake_enable_package_world := FakePackageToggleWorld.new("disabled", "disabled", "disabled")
 		var enable_package_result: Dictionary = WorldOpEnablePackageScript.execute(fake_enable_package_world, {"package_id": "fake.package"})
@@ -309,12 +334,16 @@ func _initialize() -> void:
 	if exit_code == 0:
 		var inspect_direct_dry: Dictionary = WorldOpInspectWorldScript.dry_run(world, {})
 		var packages_direct_dry: Dictionary = WorldOpListPackagesScript.dry_run(world, {})
+		var install_direct_dry: Dictionary = WorldOpInstallPackageScript.dry_run(world, {"package_id": "builtin.time"})
 		if String(inspect_direct_dry.get("status", "")) != "dry_run":
 			exit_code = 1
 			failure_message = "InspectWorld.dry_run did not return dry_run."
 		elif String(packages_direct_dry.get("status", "")) != "dry_run":
 			exit_code = 1
 			failure_message = "ListPackages.dry_run did not return dry_run."
+		elif String(install_direct_dry.get("status", "")) != "dry_run":
+			exit_code = 1
+			failure_message = "InstallPackage.dry_run did not return dry_run."
 
 	# 17. audit_id override is honored (so callers can correlate operations).
 	if exit_code == 0:

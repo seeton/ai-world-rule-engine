@@ -75,6 +75,23 @@ func _initialize() -> void:
 			failure_message = "package list returned no packages: %s" % JSON.stringify(package_result)
 
 	if exit_code == 0:
+		var install_package_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "install", "builtin.time"]), {})
+		if String(install_package_result.get("status", "")) != "ok":
+			exit_code = 1
+			failure_message = "package install failed: %s" % JSON.stringify(install_package_result)
+		else:
+			var install_payload: Dictionary = install_package_result.get("payload", {})
+			if String(install_payload.get("package_id", "")) != "builtin.time":
+				exit_code = 1
+				failure_message = "package install did not preserve package_id: %s" % JSON.stringify(install_package_result)
+
+	if exit_code == 0:
+		var duplicate_package_install: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "install", "builtin.time"]), {})
+		if String(duplicate_package_install.get("status", "")) != "validation_error" or int(duplicate_package_install.get("exit_code", 0)) != 2:
+			exit_code = 1
+			failure_message = "duplicate package install did not produce validation_error/2: %s" % JSON.stringify(duplicate_package_install)
+
+	if exit_code == 0:
 		var package_enable_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "enable", "parser.smoke"]), {})
 		if String(package_enable_result.get("status", "")) != "ok":
 			exit_code = 1

@@ -290,7 +290,22 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "DisablePackage accepted unexpected enabled status: %s" % JSON.stringify(disable_package_result)
 
-	# 15. Direct dry_run helpers should return dry_run on read-only operations.
+	# 15. Mixed package states must not claim automatic rollback safety.
+	if exit_code == 0:
+		var mixed_enable_world := FakePackageToggleWorld.new("mixed", "enabled", "disabled")
+		var mixed_enable_dry_run: Dictionary = WorldOpEnablePackageScript.dry_run(mixed_enable_world, {"package_id": "fake.package"})
+		if bool(mixed_enable_dry_run.get("rollback", {}).get("supported", true)):
+			exit_code = 1
+			failure_message = "EnablePackage incorrectly advertised automatic rollback for mixed state."
+
+	if exit_code == 0:
+		var mixed_disable_world := FakePackageToggleWorld.new("mixed", "enabled", "disabled")
+		var mixed_disable_dry_run: Dictionary = WorldOpDisablePackageScript.dry_run(mixed_disable_world, {"package_id": "fake.package"})
+		if bool(mixed_disable_dry_run.get("rollback", {}).get("supported", true)):
+			exit_code = 1
+			failure_message = "DisablePackage incorrectly advertised automatic rollback for mixed state."
+
+	# 16. Direct dry_run helpers should return dry_run on read-only operations.
 	if exit_code == 0:
 		var inspect_direct_dry: Dictionary = WorldOpInspectWorldScript.dry_run(world, {})
 		var packages_direct_dry: Dictionary = WorldOpListPackagesScript.dry_run(world, {})
@@ -301,7 +316,7 @@ func _initialize() -> void:
 			exit_code = 1
 			failure_message = "ListPackages.dry_run did not return dry_run."
 
-	# 16. audit_id override is honored (so callers can correlate operations).
+	# 17. audit_id override is honored (so callers can correlate operations).
 	if exit_code == 0:
 		var inspect_with_id: Dictionary = WorldOpDispatcherScript.dispatch(world, "InspectWorld", {}, {"audit_id": "test-id-123"})
 		if String(inspect_with_id.get("audit", {}).get("operation_id", "")) != "test-id-123":

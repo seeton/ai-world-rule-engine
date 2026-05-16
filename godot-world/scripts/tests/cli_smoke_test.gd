@@ -82,6 +82,13 @@ func _initialize() -> void:
 							elif not _package_has_state(loaded_world.get_world_snapshot(), "cli.smoke", "enabled"):
 								exit_code = 1
 								failure_message = "Snapshot did not reflect enabled package state after re-enable."
+							else:
+								var hunger_before_reenable_tick := _extract_hunger(loaded_world.get_world_snapshot())
+								loaded_world.advance_tick(1.0)
+								var hunger_after_reenable_tick := _extract_hunger(loaded_world.get_world_snapshot())
+								if hunger_after_reenable_tick <= hunger_before_reenable_tick:
+									exit_code = 1
+									failure_message = "Hunger did not resume after package re-enable (%s -> %s)." % [hunger_before_reenable_tick, hunger_after_reenable_tick]
 
 	for w in worlds_to_release:
 		if is_instance_valid(w):

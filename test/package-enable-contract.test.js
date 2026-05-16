@@ -16,6 +16,8 @@ test("runtime exposes installed package summaries and a package toggle API", () 
   assert.match(source, /snapshot\["installed_rule_packages_by_id"\] = installed_package_summary\.get\("packages_by_id", \{\}\)\.duplicate\(true\)/);
   assert.match(source, /snapshot\["installed_rule_packages"\] = installed_package_summary\.get\("packages", \[\]\)\.duplicate\(true\)/);
   assert.match(source, /func set_package_enabled\(package_id: String, enabled: bool\) -> Dictionary:/);
+  assert.match(source, /func set_rule_enabled\(rule_id: String, enabled: bool\) -> Dictionary:[\s\S]*?_refresh_rule_relationships\(\)/);
+  assert.match(source, /func set_package_enabled\(package_id: String, enabled: bool\) -> Dictionary:[\s\S]*?_refresh_rule_relationships\(\)/);
   assert.match(source, /func _build_installed_rule_packages\(installed_rules_by_id: Dictionary\) -> Dictionary:/);
 });
 

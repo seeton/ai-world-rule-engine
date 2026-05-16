@@ -536,6 +536,7 @@ func set_rule_enabled(rule_id: String, enabled: bool) -> Dictionary:
 	rule["enabled"] = enabled
 	installed_rules[normalized_id] = rule
 	_world_state["installed_rules"] = installed_rules
+	_refresh_rule_relationships()
 
 	if previous_enabled != enabled:
 		var event_type := "rule_enabled" if enabled else "rule_disabled"
@@ -579,8 +580,10 @@ func set_package_enabled(package_id: String, enabled: bool) -> Dictionary:
 		rule["enabled"] = enabled
 		installed_rules[rule_id] = rule
 	_world_state["installed_rules"] = installed_rules
+	_refresh_rule_relationships()
 
-	var summary := _build_package_summary(normalized_package_id, matched_rule_ids, installed_rules)
+	var refreshed_rules: Dictionary = _world_state.get("installed_rules", {})
+	var summary := _build_package_summary(normalized_package_id, matched_rule_ids, refreshed_rules)
 	if not changed_rule_ids.is_empty():
 		var event_type := "rule_package_enabled" if enabled else "rule_package_disabled"
 		var message := "パッケージ '%s' を有効化しました。" % normalized_package_id if enabled else "パッケージ '%s' を無効化しました。" % normalized_package_id

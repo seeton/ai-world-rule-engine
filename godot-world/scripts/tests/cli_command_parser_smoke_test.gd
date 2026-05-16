@@ -75,6 +75,17 @@ func _initialize() -> void:
 			failure_message = "package list returned no packages: %s" % JSON.stringify(package_result)
 
 	if exit_code == 0:
+		var install_package_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["package", "install", "builtin.time"]), {})
+		if String(install_package_result.get("status", "")) != "ok":
+			exit_code = 1
+			failure_message = "package install failed: %s" % JSON.stringify(install_package_result)
+		else:
+			var install_payload: Dictionary = install_package_result.get("payload", {})
+			if String(install_payload.get("package_id", "")) != "builtin.time":
+				exit_code = 1
+				failure_message = "package install did not preserve package_id: %s" % JSON.stringify(install_package_result)
+
+	if exit_code == 0:
 		var save_result: Dictionary = CliCommandParserScript.dispatch_string(world, PackedStringArray(["snapshot", "dump", snapshot_path]), {})
 		if String(save_result.get("status", "")) != "ok":
 			exit_code = 1

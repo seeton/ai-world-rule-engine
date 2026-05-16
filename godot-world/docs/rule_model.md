@@ -52,3 +52,7 @@ When a new rule is added or an existing rule is changed, document:
 3. whether its `Representation` is visible, internal-only, or conditionally visible
 
 This keeps runtime behavior, tools, and future UI work aligned around the same rule invariants.
+
+## See also
+
+- [`rule_composition_invariants.md`](rule_composition_invariants.md) — world-order composition contract (DAG, cycle rejection, topological application order, conflict detection on stat / relation / event binding / capability, snapshot `rule_tree` view, 2D / 3D parity, and the 18-rule base taxonomy). New world-order rules must follow that contract on top of the rule model defined here.

@@ -20,7 +20,7 @@ The current state of the repository is:
 | --- | --- |
 | [`godot-world/`](./godot-world/) | Active Godot 4 project, scenes, runtime scripts, rule packages, and project-specific docs |
 | [`godot-world/docs/`](./godot-world/docs/) | Deeper documentation for rule packages, workflows, and integration details |
-| [`scripts/`](./scripts/) | Repository workflow helpers for worktrees, coordination guards, and Godot launch scripts |
+| [`scripts/`](./scripts/) | Repository workflow helpers for worktrees, coordination guards, and Copilot/Godot launch scripts |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch naming, PR expectations, and multi-agent coordination rules |
 | [`test/`](./test/) | Repository-level automated checks for contract and workflow behavior |
 
@@ -50,6 +50,16 @@ This repository uses **issue -> branch -> PR** as the default development flow.
 - If a PR relies on Copilot automatic review, wait for that review to complete before merging; otherwise note explicitly that no automatic review was available.
 - Keep gameplay, runtime, and rule package work under `godot-world/`.
 - See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed branch naming, PR expectations, multi-agent coordination, and rule-package upstream contribution rules.
+
+## Copilot CLI defaults
+
+Use `bash scripts/launch_copilot.sh` from the issue worktree you are actively editing when you want the repository defaults for Copilot CLI:
+
+- `--model gpt-5.4`
+- `--effort high`
+- `--allow-all`
+
+The launcher prepends those defaults and then forwards any extra Copilot arguments, so later arguments can still override them when needed.
 
 ## Repo-root main checkout
 

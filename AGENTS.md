@@ -66,6 +66,11 @@
 - 既存 surface (`scripts/cli/main.gd` / 将来の GUI overlay / GM apply / Codex 等) を変更する PR では、operation API 経由になっているか PR 本文で明示すること。直接 mutate を残す場合は理由 (例: engine bootstrap、test fixture) を PR コメントに記載すること。
 - 詳細な契約 (status taxonomy / exit code mapping / rollback hint / surface parity test) は `godot-world/docs/world_operations.md` を参照。
 
+## Rule metadata policy
+
+- 新しい `upsert_rule` を追加するときは、JSON ルール定義を正本として `player_description` を必ず記載すること。
+- `player_description` はプレイヤー向けの「これは何？」が分かる文言にし、内部実装語だけで済ませないこと。
+
 ## Godot の起動とクローズ
 
 - Godot 作業では repo root から直接 `godot --path godot-world` を実行しない。

@@ -745,6 +745,15 @@ func _validate_rule_package_operations(operations_variant: Variant, rule_package
                 "rule_package": rule_package.duplicate(true)
             }
 
+        if String(operation.get("op", "")).strip_edges() == "upsert_rule":
+            var player_description := String(operation.get("player_description", "")).strip_edges()
+            if player_description.is_empty():
+                return {
+                    "status": "error",
+                    "message": "Rule package patch.operations[%d] with op 'upsert_rule' must include a non-empty player_description." % operation_index,
+                    "rule_package": rule_package.duplicate(true)
+                }
+
     return {
         "status": "ok",
         "operations": operations

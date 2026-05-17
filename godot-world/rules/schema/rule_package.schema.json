@@ -160,6 +160,9 @@
                   "add_event_binding",
                   "add_relation"
                 ]
+              },
+              "player_description": {
+                "type": "string"
               }
             },
             "additionalProperties": true

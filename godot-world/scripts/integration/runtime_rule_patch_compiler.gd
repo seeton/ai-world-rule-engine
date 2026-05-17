@@ -119,7 +119,9 @@ func _build_baseline_runtime_rule(rule_package: Dictionary, patch: Dictionary, p
     return {
         "id": "compiled_%s_baseline" % package_id.replace(".", "_"),
         "name": "%s (Baseline)" % String(rule_package.get("display_name", package_id)),
+        "description": String(rule_package.get("description", "")).strip_edges(),
         "concept": concept,
+        "rule_type": "runtime_rule",
         "scope": String(patch.get("scope", "entity")),
         "target_tags": _normalize_string_array(patch.get("target_tags", ["mortal"])),
         "requires_rule_kinds": requires_rule_kinds,
@@ -133,6 +135,7 @@ func _build_package_metadata(rule_package: Dictionary) -> Dictionary:
     var metadata := {
         "package_id": rule_package.get("package_id", ""),
         "package_display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
+        "package_description": rule_package.get("description", ""),
         "package_version": rule_package.get("version", ""),
         "source_repo": rule_package.get("source_repo", ""),
         "source_ref": rule_package.get("source_ref", ""),
@@ -198,6 +201,8 @@ func _compile_runtime_rule(operation: Dictionary, stat_definitions: Dictionary, 
         if not compiled_tick.is_empty():
             compiled_effects.append(compiled_tick)
 
+    var rule_description := String(operation.get("description", operation.get("summary", ""))).strip_edges()
+
     for raw_effect in operation.get("effects", []):
         var normalized_effect := _normalize_runtime_effect(raw_effect, stat_definitions)
         if not normalized_effect.is_empty():
@@ -210,7 +215,10 @@ func _compile_runtime_rule(operation: Dictionary, stat_definitions: Dictionary, 
     return {
         "id": rule_id,
         "name": String(operation.get("name", rule_id)),
+        "player_description": String(operation.get("player_description", "")).strip_edges(),
+        "description": rule_description,
         "concept": String(operation.get("concept", _infer_rule_concept(rule_id))),
+        "rule_type": rule_type,
         "enabled": bool(operation.get("enabled", true)),
         "scope": String(operation.get("scope", "entity")),
         "target_tags": _normalize_string_array(operation.get("target_tags", default_target_tags)),
@@ -387,6 +395,14 @@ func _validate_operations(raw_operations: Variant) -> Dictionary:
                 "status": "error",
                 "message": "Rule package patch.operations[%d] must include a non-empty op." % operation_index
             }
+
+        if String(operation.get("op", "")).strip_edges() == "upsert_rule":
+            var player_description := String(operation.get("player_description", "")).strip_edges()
+            if player_description.is_empty():
+                return {
+                    "status": "error",
+                    "message": "Rule package patch.operations[%d] with op 'upsert_rule' must include a non-empty player_description." % operation_index
+                }
 
     return {
         "status": "ok",

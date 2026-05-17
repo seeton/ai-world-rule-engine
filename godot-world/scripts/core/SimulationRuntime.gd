@@ -2181,9 +2181,17 @@ func _build_rule_tree(installed_rules_by_id: Dictionary) -> Dictionary:
 
 	for rule_id in rule_ids:
 		var rule: Dictionary = installed_rules_by_id[rule_id]
+		var metadata := _duplicate_dictionary(rule.get("metadata", {}))
 		nodes_by_rule_id[rule_id] = {
 			"rule_id": rule_id,
 			"name": rule.get("name", rule_id),
+			"player_description": String(rule.get("player_description", "")),
+			"concept": String(rule.get("concept", "")),
+			"rule_type": String(rule.get("rule_type", "")),
+			"description": String(rule.get("description", rule.get("summary", ""))),
+			"package_id": String(metadata.get("package_id", "")),
+			"package_display_name": String(metadata.get("package_display_name", metadata.get("package_id", ""))),
+			"package_description": String(metadata.get("package_description", "")),
 			"requires_rule_kinds": rule.get("requires_rule_kinds", []).duplicate(true),
 			"provides_rule_kinds": rule.get("provides_rule_kinds", []).duplicate(true),
 			"resolved_parent_rule_ids": rule.get("resolved_parent_rule_ids", []).duplicate(true),

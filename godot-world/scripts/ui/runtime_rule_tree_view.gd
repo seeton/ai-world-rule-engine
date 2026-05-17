@@ -1,6 +1,8 @@
 class_name RuntimeRuleTreeView
 extends RefCounted
 
+const RuleDescriptionFormatterScript = preload("res://scripts/ui/rule_description_formatter.gd")
+
 
 static func populate(tree: Tree, rule_tree: Dictionary) -> int:
 	if tree == null:
@@ -65,6 +67,12 @@ static func _add_rule_tree_item(
 	rule_item.set_text(0, _format_rule_label(merged_node))
 	rule_item.set_text(1, _summarize_rule_status(merged_node, nodes_by_rule_id))
 	rule_item.set_metadata(0, rule_id)
+	var tooltip := RuleDescriptionFormatterScript.build_tooltip(
+		_build_tooltip_rule_data(merged_node, nodes_by_rule_id),
+		nodes_by_rule_id
+	)
+	rule_item.set_tooltip_text(0, tooltip)
+	rule_item.set_tooltip_text(1, tooltip)
 	displayed_rule_ids[rule_id] = true
 
 	var resolved_parent_ids := _normalize_string_array(merged_node.get("resolved_parent_rule_ids", []))
@@ -171,6 +179,29 @@ static func _format_rule_label(rule_node: Dictionary) -> String:
 	var rule_id := str(rule_node.get("rule_id", rule_node.get("id", rule_node.get("name", "rule"))))
 	var rule_name := str(rule_node.get("name", rule_id))
 	return "%s (%s)" % [rule_name, rule_id]
+
+
+static func _build_tooltip_rule_data(rule_node: Dictionary, nodes_by_rule_id: Dictionary) -> Dictionary:
+	var resolved_parent_ids := _normalize_string_array(rule_node.get("resolved_parent_rule_ids", []))
+	return {
+		"rule_id": String(rule_node.get("rule_id", rule_node.get("id", ""))),
+		"name": String(rule_node.get("name", rule_node.get("rule_id", "rule"))),
+		"player_description": String(rule_node.get("player_description", "")),
+		"concept": String(rule_node.get("concept", "")),
+		"rule_type": String(rule_node.get("rule_type", "")),
+		"description": String(rule_node.get("description", rule_node.get("summary", ""))),
+		"package_id": String(rule_node.get("package_id", "")),
+		"package_display_name": String(rule_node.get("package_display_name", rule_node.get("package_id", ""))),
+		"package_description": String(rule_node.get("package_description", "")),
+		"resolved_parent_rule_ids": resolved_parent_ids,
+		"child_rule_ids": _normalize_string_array(rule_node.get("child_rule_ids", [])),
+		"provides_rule_kinds": _normalize_string_array(rule_node.get("provides_rule_kinds", [])),
+		"requires_rule_kinds": _normalize_string_array(rule_node.get("requires_rule_kinds", [])),
+		"unresolved_required_rule_kinds": _get_unresolved_required_kinds(rule_node, nodes_by_rule_id),
+		"blocked": bool(rule_node.get("blocked", false)),
+		"inactive": bool(rule_node.get("inactive", false)),
+		"dependency_status": String(rule_node.get("dependency_status", "active"))
+	}
 
 
 static func _normalize_node_array(value: Variant) -> Array:

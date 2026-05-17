@@ -54,6 +54,7 @@
         "op": "upsert_rule",
         "rule_id": "time.elapsed_counter",
         "rule_type": "tick_delta",
+        "player_description": "1秒ごとに経過時間を進めるルールです。",
         "target_stat": "elapsed_seconds",
         "delta": 1.0,
         "interval_seconds": 1.0,

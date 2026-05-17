@@ -5,6 +5,9 @@ signal close_requested
 const ThreeDPreviewRendererScript = preload("res://scripts/ui/three_d_preview_renderer.gd")
 const GMDialogScript = preload("res://scripts/ui/gm_dialog.gd")
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
+const RuleDescriptionFormatterScript = preload("res://scripts/ui/rule_description_formatter.gd")
+const RuleTooltipThemeScript = preload("res://scripts/ui/rule_tooltip_theme.gd")
+const RuleTooltipTreeScript = preload("res://scripts/ui/rule_tooltip_tree.gd")
 const FALLBACK_TEMPLATES: Array = [
     {
         "id": "starter-farming",
@@ -573,7 +576,8 @@ func _build_installed_rules_panel() -> Control:
     tree_label.text = "依存ツリー"
     body.add_child(tree_label)
 
-    _installed_rule_tree = Tree.new()
+    _installed_rule_tree = RuleTooltipTreeScript.new()
+    _installed_rule_tree.theme = RuleTooltipThemeScript.build_theme()
     _installed_rule_tree.columns = 2
     _installed_rule_tree.column_titles_visible = true
     _installed_rule_tree.hide_root = true
@@ -1903,6 +1907,11 @@ func _add_rule_tree_item(parent_item: TreeItem, rule_id: String, dependency_mode
     rule_item.set_text(0, _format_rule_reference_list([rule_id], dependency_model))
     rule_item.set_text(1, _summarize_rule_dependency_status(rule_id, dependency_model))
     rule_item.set_metadata(0, rule_id)
+    var tooltip := RuleDescriptionFormatterScript.build_tooltip(
+        _build_rule_tree_tooltip_data(rule_id, dependency_model),
+        dependency_model.get("rules_by_id", {})
+    )
+    rule_item.set_metadata(1, tooltip)
     if not displayed_rule_ids.has(rule_id):
         displayed_rule_ids.append(rule_id)
 
@@ -1951,6 +1960,30 @@ func _summarize_rule_dependency_status(rule_id: String, dependency_model: Dictio
         parts.append("必要: %s" % _join_values(unresolved_required_kinds))
 
     return _join_values(parts) if not parts.is_empty() else "依存メタデータなし"
+
+func _build_rule_tree_tooltip_data(rule_id: String, dependency_model: Dictionary) -> Dictionary:
+    var rules_by_id: Dictionary = dependency_model.get("rules_by_id", {})
+    var rule_data: Dictionary = rules_by_id.get(rule_id, {})
+    var metadata: Dictionary = rule_data.get("metadata", {})
+    return {
+        "rule_id": rule_id,
+        "name": String(rule_data.get("name", rule_id)),
+        "player_description": String(rule_data.get("player_description", "")),
+        "concept": String(rule_data.get("concept", "")),
+        "rule_type": String(rule_data.get("rule_type", "")),
+        "description": String(rule_data.get("description", rule_data.get("summary", ""))),
+        "package_id": String(metadata.get("package_id", "")),
+        "package_display_name": String(metadata.get("package_display_name", metadata.get("package_id", ""))),
+        "package_description": String(metadata.get("package_description", "")),
+        "resolved_parent_rule_ids": Array(dependency_model.get("resolved_parents_by_rule", {}).get(rule_id, [])).duplicate(),
+        "child_rule_ids": Array(dependency_model.get("children_by_parent", {}).get(rule_id, [])).duplicate(),
+        "provides_rule_kinds": _extract_rule_provided_kinds(rule_data),
+        "requires_rule_kinds": _extract_rule_required_kinds(rule_data),
+        "unresolved_required_rule_kinds": _get_rule_unresolved_required_kinds(rule_id, dependency_model),
+        "blocked": bool(rule_data.get("blocked", false)),
+        "inactive": not bool(rule_data.get("enabled", true)) or bool(rule_data.get("inactive", false)),
+        "dependency_status": String(rule_data.get("dependency_status", ""))
+    }
 
 func _get_rule_unresolved_required_kinds(rule_id: String, dependency_model: Dictionary) -> Array:
     var unresolved_required_kinds: Array = []
@@ -2608,6 +2641,7 @@ func _simulate_task_submission(task_text: String) -> Dictionary:
                     "op": "upsert_rule",
                     "rule_id": "fallback.review_required",
                     "rule_type": "designer_review_required",
+                    "player_description": "プレイヤーの相談内容をもとに、人が詳細を詰めるためのレビュー待ちルールです。",
                     "design_prompt": task_text
                 }
             ]

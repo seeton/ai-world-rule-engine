@@ -193,3 +193,18 @@ test("repository validator rejects repository references that escape the project
   assert.match(output, /bad_reference\.gd/);
   assert.match(output, /res:\/\/\.\.\/outside\.gd is not a valid repository reference\./);
 });
+
+test("repository validator requires player_description on upsert_rule", () => {
+  const fixtureRoot = createFixture("missing-player-description");
+  const packageData = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+
+  delete packageData.patch.operations.find((operation) => operation.op === "upsert_rule").player_description;
+  writeJson(path.join(fixtureRoot, "rules", "packages", "time.rule.json"), packageData);
+
+  const result = runValidator(["--root", fixtureRoot]);
+  const output = `${result.stdout}\n${result.stderr}`;
+
+  assert.notEqual(result.status, 0);
+  assert.match(output, /\$\.patch\.operations\[\d+\]\.player_description/);
+  assert.match(output, /Every upsert_rule operation must include a non-empty player_description\./);
+});

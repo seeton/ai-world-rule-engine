@@ -40,6 +40,25 @@ func _initialize() -> void:
 				if displayed != (nodes_by_rule_id_variant as Dictionary).size():
 					exit_code = 1
 					failure_message = "displayed count %d does not match nodes %d" % [displayed, (nodes_by_rule_id_variant as Dictionary).size()]
+				elif not view.has_method("get_node_tooltip"):
+					exit_code = 1
+					failure_message = "graph view missing get_node_tooltip helper"
+				else:
+					var sample_rule_ids: Array = (nodes_by_rule_id_variant as Dictionary).keys()
+					sample_rule_ids.sort()
+					var sample_rule_id := String(sample_rule_ids[0])
+					var sample_node: Dictionary = (nodes_by_rule_id_variant as Dictionary).get(sample_rule_id, {})
+					var expected_name := String(sample_node.get("name", sample_rule_id))
+					var tooltip := String(view.call("get_node_tooltip", sample_rule_id))
+					if tooltip.is_empty():
+						exit_code = 1
+						failure_message = "sample rule tooltip was empty"
+					elif tooltip.find(expected_name) == -1 and tooltip.find(sample_rule_id) == -1:
+						exit_code = 1
+						failure_message = "sample tooltip missing rule identity: %s" % tooltip
+					elif tooltip.find("これは何？:") == -1 or tooltip.find("いまの状態:") == -1:
+						exit_code = 1
+						failure_message = "sample tooltip missing human summary lines: %s" % tooltip
 				print("[smoke] displayed=%d roots=%d" % [displayed, (roots_variant as Array).size()])
 
 	if exit_code != 0:

@@ -17,7 +17,11 @@ static func build(world: Object, snapshot_loaded_from: String = "") -> Dictionar
 			snapshot = snapshot_variant
 
 	var packages: Array = []
-	if world.has_method("get_available_rule_packages"):
+	if world.has_method("get_installed_rule_packages"):
+		var packages_variant: Variant = world.call("get_installed_rule_packages")
+		if packages_variant is Array:
+			packages = packages_variant
+	elif world.has_method("get_available_rule_packages"):
 		var packages_variant: Variant = world.call("get_available_rule_packages")
 		if packages_variant is Array:
 			packages = packages_variant
@@ -57,8 +61,8 @@ static func build_from_snapshot(snapshot: Dictionary, packages: Array, snapshot_
 		if not missing_kinds.is_empty():
 			rules_with_unmet_requirements.append(rule_id)
 
-	var has_movement: bool = _has_kind_provider(installed_rules, "space")
-	var has_input: bool = _has_kind_provider(installed_rules, "input")
+	var has_movement: bool = _has_any_kind_provider(installed_rules, ["world.movement", "movement", "world.space", "space"])
+	var has_input: bool = _has_any_kind_provider(installed_rules, ["input"])
 	var world_clock_value: Variant = snapshot.get("world_clock", {})
 	var has_world_clock: bool = (world_clock_value is Dictionary) and not (world_clock_value as Dictionary).is_empty()
 
@@ -100,9 +104,18 @@ static func _has_kind_provider(installed_rules: Array, required_kind: String) ->
 			continue
 		if not bool(rule.get("enabled", true)):
 			continue
+		if bool(rule.get("blocked", false)) or bool(rule.get("inactive", false)):
+			continue
 		for kind in rule.get("provides_rule_kinds", []):
 			if String(kind) == required_kind:
 				return true
+	return false
+
+
+static func _has_any_kind_provider(installed_rules: Array, required_kinds: Array) -> bool:
+	for required_kind_variant in required_kinds:
+		if _has_kind_provider(installed_rules, String(required_kind_variant)):
+			return true
 	return false
 
 

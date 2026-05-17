@@ -85,7 +85,7 @@
               "default": { "type": ["number", "null"] },
               "min": { "type": ["number", "null"] },
               "max": { "type": ["number", "null"] },
-              "ui_group": { "type": ["string", "null"] },
+               "ui_group": { "type": ["string", "null"] },
                "rule_id": { "type": ["string", "null"] },
                "rule_type": { "type": ["string", "null"] },
                "player_description": { "type": ["string", "null"] },

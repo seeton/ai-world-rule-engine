@@ -40,6 +40,17 @@ func _process(delta: float) -> void:
     _material.albedo_color = _material.albedo_color.lerp(target_color, min(delta * 8.0, 1.0))
 
 
+func set_render_enabled(enabled: bool) -> void:
+    visible = enabled
+    visual.visible = enabled
+    collision_shape.disabled = not enabled
+    input_ray_pickable = enabled
+
+
+func is_render_enabled() -> bool:
+    return visible and visual.visible
+
+
 func _exit_tree() -> void:
     Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 

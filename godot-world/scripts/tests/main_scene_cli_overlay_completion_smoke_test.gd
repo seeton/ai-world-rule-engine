@@ -35,7 +35,7 @@ func _initialize() -> void:
 		elif overlay._completion_candidates.is_empty():
 			exit_code = 1
 			failure_message = "Completion candidates were empty for 'rule enable' in main scene."
-		elif String(overlay._completion_candidates[0].get("summary", "")).find("導入済み rule がない") == -1:
+		elif String(overlay._completion_candidates[0].get("summary", "")).find("現在は無効な rule がない") == -1:
 			exit_code = 1
 			failure_message = "Unexpected enable completion summary: %s" % JSON.stringify(overlay._completion_candidates)
 
@@ -64,9 +64,18 @@ func _initialize() -> void:
 		elif overlay._completion_candidates.is_empty():
 			exit_code = 1
 			failure_message = "Completion candidates were empty for 'rule disable' in main scene."
-		elif String(overlay._completion_candidates[0].get("summary", "")).find("導入済み rule がない") == -1:
-			exit_code = 1
-			failure_message = "Unexpected disable completion summary: %s" % JSON.stringify(overlay._completion_candidates)
+		else:
+			var found_default_disable_candidate := false
+			for candidate in overlay._completion_candidates:
+				if candidate is Dictionary and String(candidate.get("value", "")).begins_with("rule disable default_package."):
+					found_default_disable_candidate = true
+					break
+			if not found_default_disable_candidate:
+				exit_code = 1
+				failure_message = "Expected bootstrap disable candidates in main scene: %s" % JSON.stringify(overlay._completion_candidates)
+			elif String(overlay._completion_candidates[0].get("summary", "")).find("導入済み rule がない") != -1:
+				exit_code = 1
+				failure_message = "Unexpected empty-world disable summary: %s" % JSON.stringify(overlay._completion_candidates)
 
 	if is_instance_valid(main):
 		main.queue_free()

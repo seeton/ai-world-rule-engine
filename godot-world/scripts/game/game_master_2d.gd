@@ -5,6 +5,7 @@ signal hover_changed(is_hovering: bool)
 
 @onready var interaction_area: Area2D = $InteractionArea
 @onready var visual: ColorRect = $Visual
+@onready var label: Label = $Label
 
 var _is_hovering: bool = false
 var _base_color := Color(1.0, 0.8, 0.2, 1.0)
@@ -32,6 +33,18 @@ func apply_visual_style(size: Vector2, color: Color) -> void:
 		($InteractionArea/CollisionShape2D.shape as RectangleShape2D).size = size + Vector2(20.0, 20.0)
 	if not _is_hovering:
 		visual.color = _base_color
+
+
+func set_render_enabled(enabled: bool) -> void:
+	visual.visible = enabled
+	label.visible = enabled
+	interaction_area.input_pickable = enabled
+	interaction_area.monitoring = enabled
+	interaction_area.monitorable = enabled
+
+
+func is_render_enabled() -> bool:
+	return visual.visible or label.visible
 
 
 func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:

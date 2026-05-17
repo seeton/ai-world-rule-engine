@@ -306,7 +306,7 @@ func _build_home_tab() -> Control:
 
     cards.add_child(_build_home_card("GM相談", "世界ルールの相談と PoC4 proposal の作成を行います。", TAB_CHAT))
     cards.add_child(_build_home_card("提案レビュー", "生成された提案を確認・承認してからゲームへ適用します。", TAB_REVIEW))
-    cards.add_child(_build_home_card("稼働ルール", "現在のルール依存ツリーを現行UIのまま確認します。", TAB_RULES))
+    cards.add_child(_build_home_card("稼働ルール", "ルールパッケージのタイル一覧から、インストール / 有効化 / 無効化を操作します。", TAB_RULES))
     cards.add_child(_build_home_card("ルール内部操作", "ティック進行などルール内部の動作を直接確認します。", TAB_RULE_INTERNAL))
     cards.add_child(_build_home_card("世界・履歴", "エンティティ関係ツリー、スナップショット、イベント履歴を確認します。", TAB_WORLD))
 
@@ -507,7 +507,7 @@ func _build_tick_panel() -> Control:
     return panel
 
 func _build_installed_rules_panel() -> Control:
-    var panel := _make_panel_section("稼働中のルール", "現在動いているルールを確認し、依存関係や詳細をGM視点で点検します。")
+    var panel := _make_panel_section("ルールパッケージ", "インストール済み / 未インストールのパッケージを一覧し、タイルをクリックして状態を切り替えます。")
     panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
     var body := panel.get_meta("body") as VBoxContainer
     body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2175,7 +2175,7 @@ func _refresh_packages_grid() -> void:
         _packages_empty_label.visible = false
 
     for entry in rows:
-        var tile := RulePackageTileScript.new() as Control
+        var tile := RulePackageTileScript.new()
         _packages_grid.add_child(tile)
         var summary: Dictionary = entry.get("summary", {})
         var details: Dictionary = entry.get("details", {})
@@ -2204,30 +2204,45 @@ func _recompute_packages_columns() -> void:
 
 
 func _build_packages_for_current_tab() -> Array:
+    var summary_by_id: Dictionary = {}
     var installed_state_by_id: Dictionary = {}
+    var ordered_ids: Array = []
+
     for installed_variant in _installed_package_cache:
         if not (installed_variant is Dictionary):
             continue
         var installed_pkg: Dictionary = installed_variant
-        installed_state_by_id[String(installed_pkg.get("package_id", ""))] = String(installed_pkg.get("state", "disabled"))
+        var pid := String(installed_pkg.get("package_id", ""))
+        if pid.is_empty():
+            continue
+        installed_state_by_id[pid] = String(installed_pkg.get("state", "disabled"))
+        summary_by_id[pid] = installed_pkg
+        ordered_ids.append(pid)
 
-    var rows: Array = []
     for available_variant in _available_package_cache:
         if not (available_variant is Dictionary):
             continue
         var summary: Dictionary = available_variant
-        var package_id := String(summary.get("package_id", ""))
-        if package_id.is_empty():
+        var pid := String(summary.get("package_id", ""))
+        if pid.is_empty():
             continue
-        var is_installed := installed_state_by_id.has(package_id)
+        # Prefer the available-package summary (it has richer metadata than the
+        # runtime installed view) but keep the installed-only entries above.
+        summary_by_id[pid] = summary
+        if not ordered_ids.has(pid):
+            ordered_ids.append(pid)
+
+    var rows: Array = []
+    for pid in ordered_ids:
+        var is_installed := installed_state_by_id.has(pid)
         if _current_packages_tab == PACKAGES_TAB_INSTALLED and not is_installed:
             continue
         if _current_packages_tab == PACKAGES_TAB_UNINSTALLED and is_installed:
             continue
-        var state: String = installed_state_by_id.get(package_id, "uninstalled") if is_installed else "uninstalled"
+        var state: String = installed_state_by_id.get(pid, "uninstalled") if is_installed else "uninstalled"
         rows.append({
-            "summary": summary,
-            "details": _fetch_package_details(package_id),
+            "summary": summary_by_id[pid],
+            "details": _fetch_package_details(pid),
             "state": state,
         })
     return rows
@@ -2308,11 +2323,18 @@ func _apply_package_install(package_id: String) -> void:
     if _world_state != null:
         result = WorldOpDispatcherScript.dispatch(_world_state, "InstallPackage", {"package_id": package_id}, {})
     else:
-        result = {"status": "error", "message": "WorldState unavailable; cannot install in fallback mode.", "package_id": package_id}
+        result = _simulate_package_install(_summary_for_package_id(package_id))
 
     _refresh_all()
     _append_log("パッケージをインストールしました: %s" % package_id, result)
     _select_packages_tab(PACKAGES_TAB_INSTALLED)
+
+
+func _summary_for_package_id(package_id: String) -> Dictionary:
+    for entry in _available_package_cache:
+        if entry is Dictionary and String(entry.get("package_id", "")) == package_id:
+            return entry
+    return {"package_id": package_id, "display_name": package_id}
 
 func _simulate_package_enabled(package_id: String, enabled: bool) -> Dictionary:
     var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})

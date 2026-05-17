@@ -86,7 +86,7 @@ func populate(
 		var effects_box := VBoxContainer.new()
 		effects_box.add_theme_constant_override("separation", 4)
 		effects_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		for i in min(effects.size(), 3):
+		for i in range(min(effects.size(), 3)):
 			effects_box.add_child(_build_effect_row(effects[i]))
 		vbox.add_child(effects_box)
 
@@ -204,29 +204,31 @@ func _build_stat_bar(stat: Dictionary, accent: Color) -> Control:
 	range_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header_row.add_child(range_label)
 
-	var track := PanelContainer.new()
-	track.custom_minimum_size = Vector2(0, 4)
-	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var track_sb := StyleBoxFlat.new()
-	track_sb.bg_color = Color("#262833")
-	track_sb.corner_radius_top_left = 2
-	track_sb.corner_radius_top_right = 2
-	track_sb.corner_radius_bottom_left = 2
-	track_sb.corner_radius_bottom_right = 2
-	track.add_theme_stylebox_override("panel", track_sb)
-
-	var fill := ColorRect.new()
-	var pct := 0.0
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 4)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var max_v := float(stat.get("max", 0))
-	var def_v := float(stat.get("default", 0))
-	if max_v > 0.0:
-		pct = clamp(def_v / max_v, 0.0, 1.0)
-	fill.color = Color(accent.r, accent.g, accent.b, 0.85)
-	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fill.anchor_right = pct
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	track.add_child(fill)
-	vbox.add_child(track)
+	bar.min_value = 0.0
+	bar.max_value = max_v if max_v > 0.0 else 1.0
+	bar.value = clamp(float(stat.get("default", 0)), bar.min_value, bar.max_value)
+
+	var bg_sb := StyleBoxFlat.new()
+	bg_sb.bg_color = Color("#262833")
+	bg_sb.corner_radius_top_left = 2
+	bg_sb.corner_radius_top_right = 2
+	bg_sb.corner_radius_bottom_left = 2
+	bg_sb.corner_radius_bottom_right = 2
+	bar.add_theme_stylebox_override("background", bg_sb)
+
+	var fill_sb := StyleBoxFlat.new()
+	fill_sb.bg_color = Color(accent.r, accent.g, accent.b, 0.85)
+	fill_sb.corner_radius_top_left = 2
+	fill_sb.corner_radius_top_right = 2
+	fill_sb.corner_radius_bottom_left = 2
+	fill_sb.corner_radius_bottom_right = 2
+	bar.add_theme_stylebox_override("fill", fill_sb)
+	vbox.add_child(bar)
 
 	return vbox
 

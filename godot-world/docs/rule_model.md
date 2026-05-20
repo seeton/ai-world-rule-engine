@@ -55,4 +55,4 @@ This keeps runtime behavior, tools, and future UI work aligned around the same r
 
 ## See also
 
-- [`rule_composition_invariants.md`](rule_composition_invariants.md) — world-order composition contract (DAG, cycle rejection, topological application order, conflict detection on stat / relation / event binding / capability, snapshot `rule_tree` view, 2D / 3D parity, and the 18-rule base taxonomy). New world-order rules must follow that contract on top of the rule model defined here.
+- [`rule_composition_invariants.md`](rule_composition_invariants.md) — world-order composition contract (DAG shape, implemented package-dependency rejection, future capability-cycle rejection, deterministic snapshot `rule_tree` view, conflict semantics on stat / relation / event binding / capability, 2D / 3D parity, and the 18-rule base taxonomy). New world-order rules must follow that contract on top of the rule model defined here.

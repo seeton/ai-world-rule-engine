@@ -3,7 +3,8 @@ extends SceneTree
 # Smoke test for godot-world/docs/rule_composition_invariants.md (issue #86).
 # Covers the runtime-observable guarantees of the world-order composition contract:
 #   1. installing a package with multi-parent capability requirements produces a
-#      valid prerequisite DAG (`resolved_parent_rule_ids` carries >1 entry)
+#      valid prerequisite DAG (`resolved_parent_rule_links` resolves every
+#      required kind)
 #   2. snapshot `rule_tree.nodes_by_rule_id` lists each rule exactly once with
 #      both `resolved_parent_rule_ids` and `child_rule_ids` so consumers cannot
 #      mistake the DAG for a strict tree
@@ -20,9 +21,11 @@ const WorldStateScript = preload("res://scripts/core/WorldState.gd")
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
 
 const PEACEFUL_PACKAGE_ID := "builtin.peaceful_world_order"
-const DEFAULT_PACKAGE_ID := "builtin.default_package"
 const MULTI_PARENT_RULE_ID := "world_order.time"
 const MULTI_PARENT_REQUIRED_KINDS := ["world-order.base", "world.base-time"]
+const WORLD_ORDER_BASE_KIND := "world-order.base"
+const BUILTIN_WORLD_ORDER_BASE_PROVIDER := "world_order.peaceful_foundation"
+const ALT_WORLD_ORDER_BASE_PROVIDER := "issue_86_smoke_alt_world_order_base"
 
 
 func _initialize() -> void:
@@ -59,12 +62,17 @@ func _initialize() -> void:
 			failure_message = "rule_tree.nodes_by_rule_id is missing %s" % MULTI_PARENT_RULE_ID
 		else:
 			var time_node: Dictionary = time_node_variant
-			var parents: Array = time_node.get("resolved_parent_rule_ids", [])
-			if parents.size() < 2:
+			var installed_rules_by_id: Dictionary = snapshot.get("installed_rules_by_id", {})
+			var time_rule: Dictionary = installed_rules_by_id.get(MULTI_PARENT_RULE_ID, {})
+			var resolved_links: Array = time_rule.get("resolved_parent_rule_links", [])
+			var parent_ids: Array = _parent_ids_for_required_kind(resolved_links, WORLD_ORDER_BASE_KIND)
+			parent_ids.append_array(_parent_ids_for_required_kind(resolved_links, "world.base-time"))
+			parent_ids = _unique_sorted_string_array(parent_ids)
+			if parent_ids.size() < 2:
 				exit_code = 1
-				failure_message = "%s expected multi-parent resolution, got %s" % [
+				failure_message = "%s expected per-kind multi-parent resolution, got links=%s" % [
 					MULTI_PARENT_RULE_ID,
-					JSON.stringify(parents)
+					JSON.stringify(resolved_links)
 				]
 			else:
 				var requires: Array = time_node.get("requires_rule_kinds", [])
@@ -77,6 +85,14 @@ func _initialize() -> void:
 							JSON.stringify(requires)
 						]
 						break
+					if _parent_ids_for_required_kind(resolved_links, required_kind).is_empty():
+						exit_code = 1
+						failure_message = "%s required kind %s did not resolve in links=%s" % [
+							MULTI_PARENT_RULE_ID,
+							required_kind,
+							JSON.stringify(resolved_links)
+						]
+						break
 
 	# 3. nodes_by_rule_id must list every rule exactly once, even rules that the
 	# nested `roots` rendering visits from multiple parents. The nested form
@@ -85,14 +101,24 @@ func _initialize() -> void:
 		var snapshot: Dictionary = world.get_world_snapshot()
 		var rule_tree: Dictionary = snapshot.get("rule_tree", {})
 		var nodes_by_rule_id: Dictionary = rule_tree.get("nodes_by_rule_id", {})
+		var installed_rules_by_id: Dictionary = snapshot.get("installed_rules_by_id", {})
+		var installed_rule_ids: Array = _sorted_string_array(installed_rules_by_id.keys())
+		var node_rule_ids: Array = _sorted_string_array(nodes_by_rule_id.keys())
+		if node_rule_ids != installed_rule_ids:
+			exit_code = 1
+			failure_message = "nodes_by_rule_id keys do not match installed_rules_by_id keys: nodes=%s installed=%s" % [
+				JSON.stringify(node_rule_ids),
+				JSON.stringify(installed_rule_ids)
+			]
 		var roots: Array = rule_tree.get("roots", [])
 		var nested_ids: Dictionary = {}
 		_collect_nested_rule_ids(roots, nested_ids)
-		for rule_id in nodes_by_rule_id.keys():
-			if not nested_ids.has(rule_id):
-				exit_code = 1
-				failure_message = "rule_tree.roots is missing rule %s present in nodes_by_rule_id" % rule_id
-				break
+		if exit_code == 0:
+			for rule_id in nodes_by_rule_id.keys():
+				if not nested_ids.has(rule_id):
+					exit_code = 1
+					failure_message = "rule_tree.roots is missing rule %s present in nodes_by_rule_id" % rule_id
+					break
 		if exit_code == 0:
 			# Every node carries DAG fields so consumers cannot infer a strict tree.
 			for node_variant in nodes_by_rule_id.values():
@@ -162,11 +188,9 @@ func _initialize() -> void:
 				failure_message = "orphan rule error did not list the missing kind: %s" % JSON.stringify(orphan_result)
 
 	# 6. Package install rejects a `package_dependencies` entry that does not
-	# resolve to a known package. The contract in §3 requires that bad
-	# dependency graphs (missing dependencies and cycles) never reach the
-	# applied state; this test covers the missing-dependency path because
-	# constructing a cyclic dependency requires committing fixture packages,
-	# which is out of scope for #86.
+	# resolve to a known package. This covers the missing-dependency path; known
+	# package cycles are handled by the recursive package install path and need
+	# repository fixtures outside this smoke test.
 	if exit_code == 0:
 		var bad_dependency_package := {
 			"schema_version": "rule_package_v1",
@@ -214,7 +238,7 @@ func _initialize() -> void:
 	# must still resolve to one of them.
 	if exit_code == 0:
 		var alt_provider_patch := {
-			"id": "issue_86_smoke_alt_world_order_base",
+			"id": ALT_WORLD_ORDER_BASE_PROVIDER,
 			"name": "Issue 86 Alternative world-order.base Provider",
 			"rule_type": "runtime_rule",
 			"requires_rule_kinds": [],
@@ -228,17 +252,21 @@ func _initialize() -> void:
 			var snapshot: Dictionary = world.get_world_snapshot()
 			var dependency_status: Dictionary = snapshot.get("rule_dependency_status", {})
 			var blocked_ids: Array = dependency_status.get("blocked_rule_ids", [])
-			if blocked_ids.has("world_order.peaceful_foundation") or blocked_ids.has("issue_86_smoke_alt_world_order_base"):
+			if blocked_ids.has(BUILTIN_WORLD_ORDER_BASE_PROVIDER) or blocked_ids.has(ALT_WORLD_ORDER_BASE_PROVIDER):
 				exit_code = 1
 				failure_message = "alternative providers should not block each other: %s" % JSON.stringify(blocked_ids)
 			else:
-				var rule_tree: Dictionary = snapshot.get("rule_tree", {})
-				var nodes_by_rule_id: Dictionary = rule_tree.get("nodes_by_rule_id", {})
-				var time_node: Dictionary = nodes_by_rule_id.get(MULTI_PARENT_RULE_ID, {})
-				var parents: Array = time_node.get("resolved_parent_rule_ids", [])
-				if parents.is_empty():
+				var installed_rules_by_id: Dictionary = snapshot.get("installed_rules_by_id", {})
+				var time_rule: Dictionary = installed_rules_by_id.get(MULTI_PARENT_RULE_ID, {})
+				var links: Array = time_rule.get("resolved_parent_rule_links", [])
+				var world_order_base_providers := _parent_ids_for_required_kind(links, WORLD_ORDER_BASE_KIND)
+				if not world_order_base_providers.has(BUILTIN_WORLD_ORDER_BASE_PROVIDER) or not world_order_base_providers.has(ALT_WORLD_ORDER_BASE_PROVIDER):
 					exit_code = 1
-					failure_message = "%s lost its resolved parents after adding an alternative provider" % MULTI_PARENT_RULE_ID
+					failure_message = "%s did not list both %s providers after adding an alternative provider: %s" % [
+						MULTI_PARENT_RULE_ID,
+						WORLD_ORDER_BASE_KIND,
+						JSON.stringify(links)
+					]
 
 	if exit_code != 0:
 		push_error("[smoke] rule_composition_invariants smoke test failed: %s" % failure_message)
@@ -264,3 +292,23 @@ func _sorted_string_array(values: Array) -> Array:
 	var copy: Array = values.duplicate(true)
 	copy.sort()
 	return copy
+
+
+func _unique_sorted_string_array(values: Array) -> Array:
+	var unique: Array = []
+	for value in values:
+		var text := String(value)
+		if not unique.has(text):
+			unique.append(text)
+	unique.sort()
+	return unique
+
+
+func _parent_ids_for_required_kind(links: Array, required_kind: String) -> Array:
+	for link_variant in links:
+		if not (link_variant is Dictionary):
+			continue
+		var link: Dictionary = link_variant
+		if String(link.get("required_kind", "")) == required_kind:
+			return _unique_sorted_string_array(link.get("rule_ids", []))
+	return []

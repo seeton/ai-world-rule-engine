@@ -337,6 +337,13 @@ func get_installed_rule_packages() -> Array:
     return []
 
 
+func get_rule_package_details(package_id: String) -> Dictionary:
+    _ensure_runtime()
+    if _rule_package_repository == null:
+        return {}
+    return _rule_package_repository.get_rule_package(package_id)
+
+
 func create_world_snapshot() -> Dictionary:
     _ensure_runtime()
     return _runtime.create_snapshot()

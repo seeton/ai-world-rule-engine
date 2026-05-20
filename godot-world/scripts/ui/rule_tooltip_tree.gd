@@ -34,7 +34,8 @@ func _update_tooltip_for_position(local_position: Vector2) -> void:
 		_hide_tooltip()
 		return
 	_hovered_item = item
-	_tooltip_popup.show_tooltip(
+	(_tooltip_popup as Object).call(
+		"show_tooltip",
 		tooltip_text,
 		get_viewport().get_mouse_position(),
 		get_viewport_rect().size

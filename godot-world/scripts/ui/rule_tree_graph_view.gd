@@ -756,7 +756,8 @@ func _show_hover_tooltip(rule_id: String) -> void:
 	if tooltip_text.is_empty():
 		_hide_hover_tooltip()
 		return
-	_tooltip_popup.show_tooltip(
+	(_tooltip_popup as Object).call(
+		"show_tooltip",
 		tooltip_text,
 		get_viewport().get_mouse_position(),
 		get_viewport_rect().size

@@ -30,6 +30,26 @@ Helper commands:
 - `bash scripts/worktree.sh root-status` — prints only the repo-root checkout state
 - `bash scripts/worktree.sh status --stale-days 14` — lists issue worktrees with issue state, dirty state, claim state, and age-based stale status
 - `bash scripts/worktree.sh sync-root` — fast-forwards the repo-root default branch when tracked files are clean
+- `bash scripts/launch_copilot.sh` — starts Copilot CLI with this repository's default model/effort/permission settings
+
+## Copilot CLI launcher defaults
+
+When you want the repository's standard Copilot startup defaults, launch it through:
+
+`bash scripts/launch_copilot.sh`
+
+That wrapper starts Copilot CLI with:
+
+- `--model gpt-5.4`
+- `--effort high`
+- `--allow-all`
+
+The wrapper prepends those defaults, then forwards any extra Copilot arguments after them. That keeps the repo default behavior for normal launches while still allowing explicit overrides when needed, for example:
+
+- `bash scripts/launch_copilot.sh -- --continue`
+- `bash scripts/launch_copilot.sh -- --model gpt-5-mini`
+
+`/clear` starts a fresh session inside the same running CLI launch, so the startup defaults from `scripts/launch_copilot.sh` remain in effect for that launch context.
 
 ## Pre-implementation worktree freshness check
 

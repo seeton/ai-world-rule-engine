@@ -429,7 +429,41 @@ func _reset_world() -> void:
     _available_rule_packages = _rule_compiler.list_available_rule_packages()
     _available_templates = RuleTemplatesScript.get_templates()
     _runtime = SimulationRuntimeScript.new(_available_templates)
+    _bootstrap_default_rule_packages()
     _proposal_workflow = RuleProposalWorkflowScript.new()
+
+
+func _bootstrap_default_rule_packages() -> void:
+    if _runtime == null or _rule_package_repository == null:
+        return
+
+    for package_summary_variant in _available_rule_packages:
+        if not (package_summary_variant is Dictionary):
+            continue
+        var package_summary: Dictionary = package_summary_variant
+        if not _package_is_default_installed(package_summary):
+            continue
+        var package_id := String(package_summary.get("package_id", "")).strip_edges()
+        if package_id.is_empty():
+            continue
+        var rule_package: Dictionary = _rule_package_repository.get_rule_package(package_id)
+        if rule_package.is_empty():
+            push_warning("Default-installed package '%s' could not be loaded during bootstrap." % package_id)
+            continue
+        var install_result: Dictionary = _install_rule_package(rule_package)
+        if String(install_result.get("status", "")) != "installed":
+            push_warning("Default-installed package '%s' failed to bootstrap: %s" % [package_id, JSON.stringify(install_result)])
+
+
+func _package_is_default_installed(package_summary: Dictionary) -> bool:
+    var runtime_contract_variant: Variant = package_summary.get("runtime_contract", {})
+    if not (runtime_contract_variant is Dictionary):
+        return false
+    var runtime_contract: Dictionary = runtime_contract_variant
+    var lifecycle_variant: Variant = runtime_contract.get("lifecycle", {})
+    if not (lifecycle_variant is Dictionary):
+        return false
+    return bool((lifecycle_variant as Dictionary).get("default_installed", false))
 
 
 func _ensure_runtime() -> void:

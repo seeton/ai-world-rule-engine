@@ -95,9 +95,9 @@ func _initialize() -> void:
 		elif overlay._completion_candidates.is_empty():
 			exit_code = 1
 			failure_message = "Completion candidates were empty for 'rule enable'."
-		elif String(overlay._completion_candidates[0].get("summary", "")).find("導入済み rule がない") == -1:
+		elif String(overlay._completion_candidates[0].get("summary", "")).find("現在は無効な rule がない") == -1:
 			exit_code = 1
-			failure_message = "Expected empty-world fallback summary for 'rule enable': %s" % JSON.stringify(overlay._completion_candidates)
+			failure_message = "Expected no-disabled-rule fallback summary for 'rule enable': %s" % JSON.stringify(overlay._completion_candidates)
 
 	if exit_code == 0:
 		overlay._hide_completion_candidates()
@@ -174,14 +174,20 @@ func _initialize() -> void:
 		overlay._set_input_text("rule disable")
 		overlay._handle_tab_completion()
 		await process_frame
+		var found_default_disable_candidate := false
 		var found_time_disable_candidate := false
 		var found_disable_candidate := false
 		for candidate in overlay._completion_candidates:
+			if candidate is Dictionary and String(candidate.get("value", "")).begins_with("rule disable default_package."):
+				found_default_disable_candidate = true
 			if candidate is Dictionary and String(candidate.get("value", "")) == "rule disable %s" % installed_package_rule_id:
 				found_time_disable_candidate = true
 			if candidate is Dictionary and String(candidate.get("value", "")) == "rule disable overlay_tab_rule":
 				found_disable_candidate = true
-		if not found_time_disable_candidate:
+		if not found_default_disable_candidate:
+			exit_code = 1
+			failure_message = "Expected disable candidate missing for bootstrap default package rules: %s" % JSON.stringify(overlay._completion_candidates)
+		elif not found_time_disable_candidate:
 			exit_code = 1
 			failure_message = "Expected disable candidate missing for installed package rule: %s" % JSON.stringify(overlay._completion_candidates)
 		elif not found_disable_candidate:

@@ -52,9 +52,8 @@ var _effects_overlay: Node2D = null
 var _is_hovering_gm: bool = false
 var _entity_nodes: Dictionary = {}
 var _effect_nodes: Dictionary = {}
-var _player_position_initialized: bool = false
-var _last_synced_player_position: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
 var _overlay_active: bool = false
+var _last_runtime_movement_intent: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
 
 
 func _ready() -> void:
@@ -66,16 +65,16 @@ func _ready() -> void:
 	if gm.has_signal("hover_changed"):
 		gm.hover_changed.connect(_on_gm_hover_changed)
 	_setup_hud()
-	_apply_snapshot(_get_world_snapshot())
+	var snapshot := _get_world_snapshot()
+	_apply_snapshot(snapshot)
 	camera.global_position = _desired_camera_position()
 	camera.look_at(player.global_position + Vector3.UP * CAMERA_LOOK_HEIGHT, Vector3.UP)
 
 
 func _process(delta: float) -> void:
+	_sync_runtime_movement_intent()
 	if not _overlay_active and _world_state != null and _world_state.has_method("advance_tick"):
 		_world_state.call("advance_tick", delta)
-
-	_sync_player_to_world_state()
 
 	var snapshot := _get_world_snapshot()
 	_apply_snapshot(snapshot)
@@ -109,7 +108,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_overlay_active(active: bool) -> void:
 	_overlay_active = active
-	player.set_physics_process(not active)
+	_sync_runtime_movement_intent(true)
 	if _hud_layer != null:
 		_hud_layer.visible = not active
 
@@ -199,14 +198,26 @@ func _get_world_snapshot() -> Dictionary:
 func _apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		_world_name_label.text = _text("world_fallback")
+		_set_player_visible(false)
+		_set_gm_visible(false)
+		_set_ground_visible(false)
+		_set_sun_visible(false)
+		_is_hovering_gm = false
+		_sync_world_entities([])
+		_sync_visual_effects([])
 		return
 
-	_world_name_label.text = String(snapshot.get("world_name", _text("world_fallback")))
+	var world_name := String(snapshot.get("world_name", "")).strip_edges()
+	_world_name_label.text = world_name if not world_name.is_empty() else _text("world_fallback")
 	var preview_data := _coerce_dictionary(snapshot.get("three_d_preview", {}))
 	var renderables := _normalize_renderables(preview_data.get("renderables", []))
 	if renderables.is_empty():
 		renderables = _build_renderables_from_entities(_coerce_dictionary(snapshot.get("entities", {})))
 
+	_set_player_visible(false)
+	_set_gm_visible(false)
+	_set_ground_visible(false)
+	_is_hovering_gm = false
 	var renderable_by_id: Dictionary = {}
 	for renderable in renderables:
 		renderable_by_id[String(renderable.get("id", ""))] = renderable
@@ -220,18 +231,23 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 
 func _apply_player_renderable(renderable: Dictionary) -> void:
 	if renderable.is_empty():
+		_set_player_visible(false)
 		return
-	if not _player_position_initialized:
-		player.global_position = renderable.get("position", player.global_position)
-		_last_synced_player_position = player.global_position
-		_player_position_initialized = true
+	_set_player_visible(true)
+	player.global_position = renderable.get("position", player.global_position)
 	if player.has_method("apply_visual_style"):
 		player.call("apply_visual_style", renderable.get("size", Vector3(0.9, 1.8, 0.9)), renderable.get("color", Color(0.33, 0.55, 0.97, 1.0)))
+	if player.has_method("apply_runtime_motion"):
+		var physics := _coerce_dictionary(renderable.get("physics", {}))
+		player.call("apply_runtime_motion", _vector3_from_variant(physics.get("velocity", {}), Vector3.ZERO))
 
 
 func _apply_gm_renderable(renderable: Dictionary) -> void:
 	if renderable.is_empty():
+		_set_gm_visible(false)
+		_is_hovering_gm = false
 		return
+	_set_gm_visible(true)
 	gm.global_position = renderable.get("position", gm.global_position)
 	if gm.has_method("apply_renderable"):
 		gm.call("apply_renderable", renderable.get("size", Vector3(1.1, 2.2, 1.1)), renderable.get("color", Color(0.95, 0.79, 0.41, 1.0)))
@@ -286,6 +302,11 @@ func _update_world_entity_node(entity_node: Node3D, renderable: Dictionary) -> v
 
 
 func _apply_floor_and_lighting(preview_data: Dictionary, renderables: Array) -> void:
+	var world_visible := bool(preview_data.get("enabled", false)) or not renderables.is_empty()
+	_set_ground_visible(world_visible)
+	if not world_visible:
+		_apply_lighting({"enabled": false, "shadows_enabled": false})
+		return
 	var gravity_data := _coerce_dictionary(preview_data.get("gravity", {}))
 	var lighting_data := _coerce_dictionary(preview_data.get("lighting", {}))
 	var floor_y := float(gravity_data.get("floor_y", 0.0))
@@ -300,7 +321,7 @@ func _apply_floor_and_lighting(preview_data: Dictionary, renderables: Array) -> 
 
 func _apply_lighting(lighting_data: Dictionary) -> void:
 	var lighting_enabled := _variant_to_bool(lighting_data.get("enabled", true), true)
-	sun.visible = lighting_enabled
+	_set_sun_visible(lighting_enabled)
 	sun.shadow_enabled = _variant_to_bool(lighting_data.get("shadows_enabled", true), true)
 	sun.light_energy = float(lighting_data.get("intensity", 1.45))
 	sun.light_color = _color_from_variant(lighting_data.get("color", "#fff1cf"), Color(1.0, 0.94, 0.82))
@@ -342,23 +363,44 @@ func _desired_camera_position() -> Vector3:
 	)
 
 
-func _sync_player_to_world_state() -> void:
-	if not _player_position_initialized or _overlay_active:
+func _sync_runtime_movement_intent(force: bool = false) -> void:
+	if _world_state == null or not _world_state.has_method("dispatch_input_event"):
 		return
-	if _world_state == null or not _world_state.has_method("set_entity_position"):
+	var movement_intent := _movement_intent_from_input()
+	if not force and movement_intent.distance_to(_last_runtime_movement_intent) < 0.0001:
 		return
-	if player.global_position.distance_to(_last_synced_player_position) < 0.02:
-		return
-	_last_synced_player_position = player.global_position
-	_world_state.call(
-		"set_entity_position",
-		PLAYER_ENTITY_ID,
-		{
-			"x": snappedf(player.global_position.x, 0.001),
-			"y": snappedf(player.global_position.y, 0.001),
-			"z": snappedf(player.global_position.z, 0.001)
-		}
-	)
+	_last_runtime_movement_intent = movement_intent
+	_world_state.call("dispatch_input_event", "input.move.intent", {
+		"entity_id": PLAYER_ENTITY_ID,
+		"movement_vector": {
+			"x": snappedf(movement_intent.x, 0.0001),
+			"y": 0.0,
+			"z": snappedf(movement_intent.z, 0.0001)
+		},
+		"world_mode": "three_d"
+	})
+
+
+func _movement_intent_from_input() -> Vector3:
+	if _overlay_active:
+		return Vector3.ZERO
+	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if input_vector.length_squared() <= 0.0001:
+		return Vector3.ZERO
+	return _camera_relative_direction(input_vector)
+
+
+func _camera_relative_direction(input_vector: Vector2) -> Vector3:
+	var camera_basis := camera.global_transform.basis if camera != null else global_transform.basis
+	var forward := -camera_basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var right := camera_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var movement_direction := (right * input_vector.x) + (forward * -input_vector.y)
+	movement_direction.y = 0.0
+	return movement_direction.normalized()
 
 
 func _update_interaction_hint(delta: float) -> void:
@@ -450,6 +492,8 @@ func _on_gm_interaction() -> void:
 
 
 func _is_player_in_range() -> bool:
+	if not player.visible or not gm.visible:
+		return false
 	return player.global_position.distance_to(gm.global_position) <= INTERACTION_DISTANCE
 
 
@@ -555,6 +599,45 @@ func _variant_to_bool(value: Variant, default_value: bool = false) -> bool:
 
 func _coerce_dictionary(value: Variant) -> Dictionary:
 	return value if value is Dictionary else {}
+
+
+func _set_player_visible(is_visible: bool) -> void:
+	if player.has_method("set_render_enabled"):
+		player.call("set_render_enabled", is_visible)
+	var player_visual := player.get_node_or_null("Visual")
+	if player_visual is GeometryInstance3D:
+		(player_visual as GeometryInstance3D).visible = is_visible
+	if player is Node3D:
+		(player as Node3D).visible = is_visible
+	var player_collision := player.get_node_or_null("CollisionShape3D")
+	if player_collision is CollisionShape3D:
+		(player_collision as CollisionShape3D).disabled = not is_visible
+
+
+func _set_gm_visible(is_visible: bool) -> void:
+	if gm.has_method("set_render_enabled"):
+		gm.call("set_render_enabled", is_visible)
+	var gm_visual := gm.get_node_or_null("Visual")
+	if gm_visual is GeometryInstance3D:
+		(gm_visual as GeometryInstance3D).visible = is_visible
+	if gm is Node3D:
+		(gm as Node3D).visible = is_visible
+	var gm_collision := gm.get_node_or_null("CollisionShape3D")
+	if gm_collision is CollisionShape3D:
+		(gm_collision as CollisionShape3D).disabled = not is_visible
+	if gm is CollisionObject3D:
+		(gm as CollisionObject3D).input_ray_pickable = is_visible
+
+
+func _set_ground_visible(is_visible: bool) -> void:
+	if ground is Node3D:
+		(ground as Node3D).visible = is_visible
+	if ground_visual is GeometryInstance3D:
+		ground_visual.visible = is_visible
+
+
+func _set_sun_visible(is_visible: bool) -> void:
+	sun.visible = is_visible
 
 
 func _text(key: String) -> String:

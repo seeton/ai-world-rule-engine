@@ -44,7 +44,7 @@ CLI 文法 → operation request の対応表。actuation の中身は [`world_o
 | `rule enable <rule_id>` | `EnableRule` | 指定ルールの `enabled` を true に。rule 不在は validation_error。 |
 | `rule disable <rule_id>` | `DisableRule` | 指定ルールの `enabled` を false に。 |
 | `package list` | `ListPackages` | `res://rules/packages` 配下から発見された package を列挙する。 |
-| `package install <package_id>` | `InstallPackage` | 指定 package を現在の world に導入する。初期 world が空でも CLI 単体で rule を入れられる。 |
+| `package install <package_id>` | `InstallPackage` | 指定 package を現在の world に導入する。初期 bootstrap で `builtin.default_package` だけが入った状態から追加 package を積める。 |
 | `snapshot dump <path>` | `DumpSnapshot` | `WorldState.save_world_snapshot` で deterministic snapshot を書き出す。 |
 | `snapshot load <path>` | `LoadSnapshot` | `WorldState.load_world_snapshot` で現在世界を置換する。 |
 
@@ -100,22 +100,52 @@ CLI 本体 (`scripts/cli/main.gd`) のフラグと、ラッパー (`scripts/worl
       "missing_required_rule_kinds": []
     }
   ],
-  "installed_rule_count": 0,
+  "installed_rule_count": 8,
   "disabled_rule_ids": [],
   "rules_with_unmet_requirements": [],
-  "installed_packages": [],
-  "installed_package_count": 0,
+  "installed_packages": [
+    {
+      "package_id": "builtin.default_package",
+      "display_name": "Default Package",
+      "version": "1.0.0",
+      "state": "enabled",
+      "enabled": true,
+      "all_rules_enabled": true,
+      "enabled_rule_count": 8,
+      "disabled_rule_count": 0,
+      "rule_count": 8,
+      "rule_ids": [
+        "default_package.base_time",
+        "default_package.basic_action",
+        "default_package.existence",
+        "default_package.foundation",
+        "default_package.movement",
+        "default_package.representation",
+        "default_package.space",
+        "default_package.state"
+      ],
+      "source_repo": "github.com/godot-world/rule-library",
+      "source_ref": "refs/heads/main",
+      "forked_from": null,
+      "suggested_pr_target": {
+        "repo": "github.com/godot-world/rule-library",
+        "base_ref": "main",
+        "package_id": "builtin.default_package"
+      }
+    }
+  ],
+  "installed_package_count": 1,
   "world_status": {
-    "has_world_clock": false,
-    "has_movement_provider": false,
+    "has_world_clock": true,
+    "has_movement_provider": true,
     "has_input_provider": false,
-    "collapse_signals": ["no_installed_rules"]
+    "collapse_signals": []
   },
   "snapshot_loaded_from": ""
 }
 ```
 
-`world_status.collapse_signals` には次のいずれかが入る (複数可):
+新規 bootstrap では `builtin.default_package` が最初から導入済みなので、`inspect` は最低限の world provider を最初から報告する。`world_status.collapse_signals` には次のいずれかが入る (複数可):
 
 - `no_installed_rules` — ルールが 1 つも入っていない。
 - `disabled_rules_present` — disable 済みルールがある。

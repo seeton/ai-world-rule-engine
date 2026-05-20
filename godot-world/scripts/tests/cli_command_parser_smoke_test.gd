@@ -41,9 +41,25 @@ func _initialize() -> void:
 			var payload: Dictionary = inspect_result.get("payload", {})
 			var status: Dictionary = payload.get("world_status", {})
 			var collapse: Array = status.get("collapse_signals", [])
-			if not collapse.has("no_installed_rules"):
+			var installed_rules: Array = payload.get("installed_rules", [])
+			var installed_packages: Array = payload.get("installed_packages", [])
+			var saw_default_package := false
+			for package_variant in installed_packages:
+				if package_variant is Dictionary and String(package_variant.get("package_id", "")) == "builtin.default_package":
+					saw_default_package = true
+					break
+			if collapse.has("no_installed_rules"):
 				exit_code = 1
-				failure_message = "inspect did not include no_installed_rules: %s" % JSON.stringify(collapse)
+				failure_message = "inspect unexpectedly reported no_installed_rules: %s" % JSON.stringify(collapse)
+			elif installed_rules.is_empty():
+				exit_code = 1
+				failure_message = "inspect did not report bootstrap-installed rules: %s" % JSON.stringify(payload)
+			elif not bool(status.get("has_world_clock", false)) or not bool(status.get("has_movement_provider", false)):
+				exit_code = 1
+				failure_message = "inspect did not report default-package providers: %s" % JSON.stringify(status)
+			elif not saw_default_package:
+				exit_code = 1
+				failure_message = "inspect did not report builtin.default_package as installed: %s" % JSON.stringify(installed_packages)
 
 	if exit_code == 0:
 		var install_result: Dictionary = world.create_rule_from_patch({

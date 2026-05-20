@@ -376,7 +376,9 @@
             "op": "merge_world_state",
             "path": "world_contract.default_package.capabilities.movement",
             "value": {
-              "runtime_entrypoint": "WorldState.set_entity_position",
+              "runtime_entrypoint": "WorldState.dispatch_input_event(input.move.intent) + WorldState.advance_tick",
+              "movement_intent_event": "input.move.intent",
+              "movement_state_path": "entities.*.components.input.movement_intent",
               "supported_axes": [
                 "x",
                 "y",

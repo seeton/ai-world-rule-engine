@@ -37,8 +37,15 @@ const COLOR_BORDER_DIM := Color(0.32, 0.40, 0.50, 0.85)
 
 const COLOR_TITLE := Color(0.96, 0.97, 1.0, 1.0)
 const COLOR_TITLE_DIM := Color(0.62, 0.66, 0.74, 0.88)
+const COLOR_TITLE_UNRESOLVED := Color(1.0, 0.73, 0.70, 1.0)
+const COLOR_TITLE_CYCLE := Color(0.93, 0.76, 1.0, 1.0)
 const COLOR_RULE_ID := Color(0.70, 0.78, 0.90, 0.78)
 const COLOR_RULE_ID_DIM := Color(0.46, 0.50, 0.58, 0.7)
+const COLOR_RULE_ID_UNRESOLVED := Color(0.98, 0.66, 0.60, 0.95)
+const COLOR_STATUS_NORMAL := Color(0.78, 0.84, 0.94, 0.92)
+const COLOR_STATUS_UNRESOLVED := Color(0.98, 0.58, 0.50, 1.0)
+const COLOR_STATUS_CYCLE := Color(0.90, 0.62, 0.98, 1.0)
+const COLOR_STATUS_INACTIVE := Color(0.68, 0.72, 0.80, 0.88)
 const COLOR_BADGE_PROVIDES := Color(0.30, 0.58, 0.40, 1.0)
 const COLOR_BADGE_REQUIRES := Color(0.78, 0.40, 0.30, 1.0)
 const COLOR_BADGE_REQUIRES_OK := Color(0.40, 0.58, 0.78, 1.0)
@@ -192,6 +199,7 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nod
 	card.mouse_exited.connect(_on_card_hover.bind(rule_id, false))
 
 	var content := VBoxContainer.new()
+	content.name = "Content"
 	content.set_anchors_preset(PRESET_FULL_RECT)
 	content.offset_left = 12
 	content.offset_right = -12
@@ -202,18 +210,20 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nod
 	card.add_child(content)
 
 	var rule_id_label := Label.new()
+	rule_id_label.name = "RuleIdLabel"
 	rule_id_label.text = rule_id
 	rule_id_label.add_theme_font_size_override("font_size", 11)
-	rule_id_label.add_theme_color_override("font_color", COLOR_RULE_ID)
+	rule_id_label.add_theme_color_override("font_color", _rule_id_color_for_state(node_data, state))
 	rule_id_label.clip_text = true
 	rule_id_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	rule_id_label.mouse_filter = MOUSE_FILTER_IGNORE
 	content.add_child(rule_id_label)
 
 	var name_label := Label.new()
+	name_label.name = "NameLabel"
 	name_label.text = str(node_data.get("name", rule_id))
 	name_label.add_theme_font_size_override("font_size", 17)
-	name_label.add_theme_color_override("font_color", COLOR_TITLE)
+	name_label.add_theme_color_override("font_color", _title_color_for_state(node_data, state))
 	name_label.clip_text = true
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.mouse_filter = MOUSE_FILTER_IGNORE
@@ -229,7 +239,7 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nod
 	var provides := _normalize_string_array(node_data.get("provides_rule_kinds", []))
 	var requires := _normalize_string_array(node_data.get("requires_rule_kinds", []))
 	var resolved_parent_ids := _normalize_string_array(node_data.get("resolved_parent_rule_ids", []))
-	var unresolved := _unresolved_required_kinds(node_data, resolved_parent_ids, nodes_by_rule_id)
+	var unresolved := _normalize_string_array(node_data.get("missing_required_rule_kinds", []))
 
 	var added_badges := 0
 	var max_badges := 3
@@ -255,8 +265,21 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nod
 			badges.add_child(_make_badge("循環", COLOR_BORDER_CYCLE))
 			added_badges += 1
 		elif state == "unresolved":
-			badges.add_child(_make_badge("親未解決", COLOR_BORDER_UNRESOLVED))
+			badges.add_child(_make_badge("親未解決/未適用", COLOR_BORDER_UNRESOLVED))
 			added_badges += 1
+		elif _is_explicitly_disabled(node_data):
+			badges.add_child(_make_badge("無効化中", COLOR_BORDER_UNRESOLVED))
+			added_badges += 1
+
+	var status_label := Label.new()
+	status_label.name = "StatusLabel"
+	status_label.text = _status_text_for_node(node_data, state, unresolved)
+	status_label.add_theme_font_size_override("font_size", 12)
+	status_label.add_theme_color_override("font_color", _status_color_for_state(node_data, state))
+	status_label.clip_text = true
+	status_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	status_label.mouse_filter = MOUSE_FILTER_IGNORE
+	content.add_child(status_label)
 
 	return card
 
@@ -284,6 +307,24 @@ func _build_tooltip_rule_data(rule_id: String, node_data: Dictionary, nodes_by_r
 	}
 
 
+func _unresolved_required_kinds(node_data: Dictionary, resolved_parent_ids: Array, nodes_by_rule_id: Dictionary) -> Array:
+	var unresolved_required_kinds: Array = []
+	var required_kinds := _normalize_string_array(node_data.get("requires_rule_kinds", []))
+
+	for required_kind in required_kinds:
+		var is_resolved := false
+		for parent_rule_id in resolved_parent_ids:
+			var parent_node := _coerce_dictionary(nodes_by_rule_id.get(parent_rule_id, {}))
+			var provided_kinds := _normalize_string_array(parent_node.get("provides_rule_kinds", []))
+			if provided_kinds.has(required_kind):
+				is_resolved = true
+				break
+		if not is_resolved and not unresolved_required_kinds.has(required_kind):
+			unresolved_required_kinds.append(required_kind)
+
+	return unresolved_required_kinds
+
+
 func _make_badge(text: String, color: Color) -> Control:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
@@ -304,6 +345,58 @@ func _make_badge(text: String, color: Color) -> Control:
 	label.add_theme_color_override("font_color", COLOR_BADGE_TEXT)
 	panel.add_child(label)
 	return panel
+
+
+func _title_color_for_state(node_data: Dictionary, state: String) -> Color:
+	if state == "cycle":
+		return COLOR_TITLE_CYCLE
+	if state == "unresolved":
+		return COLOR_TITLE_UNRESOLVED
+	if _is_explicitly_disabled(node_data):
+		return COLOR_TITLE_UNRESOLVED
+	if bool(node_data.get("inactive", false)):
+		return COLOR_TITLE_DIM
+	return COLOR_TITLE
+
+
+func _rule_id_color_for_state(node_data: Dictionary, state: String) -> Color:
+	if state == "unresolved":
+		return COLOR_RULE_ID_UNRESOLVED
+	if _is_explicitly_disabled(node_data):
+		return COLOR_RULE_ID_UNRESOLVED
+	if bool(node_data.get("inactive", false)):
+		return COLOR_RULE_ID_DIM
+	return COLOR_RULE_ID
+
+
+func _status_text_for_node(node_data: Dictionary, state: String, unresolved: Array) -> String:
+	if state == "cycle":
+		return "循環依存/未適用"
+	if not unresolved.is_empty():
+		return "親未解決/未適用"
+	if _is_explicitly_disabled(node_data):
+		return "無効化中/未適用"
+	if bool(node_data.get("inactive", false)):
+		return "未適用"
+	if state == "root":
+		return "適用中/起点"
+	return "適用中"
+
+
+func _status_color_for_state(node_data: Dictionary, state: String) -> Color:
+	if state == "cycle":
+		return COLOR_STATUS_CYCLE
+	if state == "unresolved":
+		return COLOR_STATUS_UNRESOLVED
+	if _is_explicitly_disabled(node_data):
+		return COLOR_STATUS_UNRESOLVED
+	if bool(node_data.get("inactive", false)):
+		return COLOR_STATUS_INACTIVE
+	return COLOR_STATUS_NORMAL
+
+
+func _is_explicitly_disabled(node_data: Dictionary) -> bool:
+	return not bool(node_data.get("enabled", true))
 
 
 func _apply_card_style(card: Panel, state: String, hovered: bool, full_alpha: bool) -> void:
@@ -390,7 +483,7 @@ func _compute_layout(nodes_by_rule_id: Dictionary, declared_roots: Array) -> Dic
 
 		var node := _coerce_dictionary(nodes_by_rule_id.get(rid, {}))
 		var parents := _normalize_string_array(node.get("resolved_parent_rule_ids", []))
-		var unresolved := _unresolved_required_kinds(node, parents, nodes_by_rule_id)
+		var unresolved := _normalize_string_array(node.get("missing_required_rule_kinds", []))
 		if cycle_set.has(rid):
 			states[rid] = "cycle"
 		elif parents.is_empty() and unresolved.is_empty():
@@ -495,26 +588,6 @@ func _compute_connectors(nodes_by_rule_id: Dictionary) -> Array:
 			})
 			first_parent = false
 	return connectors
-
-
-func _unresolved_required_kinds(node: Dictionary, resolved_parent_ids: Array, nodes_by_rule_id: Dictionary) -> Array:
-	var required := _normalize_string_array(node.get("requires_rule_kinds", []))
-	if required.is_empty():
-		return []
-	if resolved_parent_ids.is_empty():
-		return required
-	var unresolved: Array = []
-	for kind in required:
-		var resolved := false
-		for parent_id in resolved_parent_ids:
-			var parent_node := _coerce_dictionary(nodes_by_rule_id.get(str(parent_id), {}))
-			var provided := _normalize_string_array(parent_node.get("provides_rule_kinds", []))
-			if provided.has(str(kind)):
-				resolved = true
-				break
-		if not resolved:
-			unresolved.append(kind)
-	return unresolved
 
 
 func _on_self_resized() -> void:
@@ -655,6 +728,10 @@ func get_connectors() -> Array:
 
 func get_node_position(rule_id: String) -> Vector2:
 	return _node_positions.get(rule_id, Vector2.ZERO)
+
+
+func get_node_card(rule_id: String) -> Control:
+	return _node_controls.get(rule_id, null)
 
 
 func get_highlight_set() -> Dictionary:

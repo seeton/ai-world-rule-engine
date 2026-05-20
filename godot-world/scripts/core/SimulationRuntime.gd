@@ -26,6 +26,16 @@ const CHARACTER_ARCHETYPE_HINTS := ["actor", "character", "gm", "npc", "origin",
 const CHARACTER_TAG_HINTS := ["agent", "character", "gm", "mortal", "npc", "person", "villager"]
 const GM_ARCHETYPE_HINTS := ["director", "game_master", "gm"]
 const GM_TAG_HINTS := ["director", "game_master", "gm"]
+const MOVEMENT_PROVIDER_KINDS := ["world.movement", "movement"]
+const WORLD_EXISTENCE_PROVIDER_KINDS := ["world.existence"]
+const WORLD_REPRESENTATION_PROVIDER_KINDS := ["world.representation"]
+const WORLD_STATE_PROVIDER_KINDS := ["world.state"]
+const WORLD_SPACE_PROVIDER_KINDS := ["world.space", "space"]
+const WORLD_TIME_PROVIDER_KINDS := ["world.base-time", "world-clock"]
+const WORLD_BASIC_ACTION_PROVIDER_KINDS := ["world.basic-action"]
+const MOVEMENT_INTENT_EVENT := "input.move.intent"
+const DEFAULT_MOVEMENT_SPEED_UNITS := 5.6
+const TWO_D_HORIZONTAL_MOVEMENT_SCALE := 0.5
 
 var fixed_step_seconds: float = DEFAULT_FIXED_STEP
 var _accumulator_seconds: float = 0.0
@@ -381,6 +391,13 @@ func get_snapshot() -> Dictionary:
 	var template_ids: Array = _template_index.keys()
 	template_ids.sort()
 	var installed_package_summary := _build_installed_rule_packages(installed_rules_by_id)
+	var has_world_existence := _has_active_provider_kind(installed_rules_by_id, WORLD_EXISTENCE_PROVIDER_KINDS)
+	var has_world_representation := _has_active_provider_kind(installed_rules_by_id, WORLD_REPRESENTATION_PROVIDER_KINDS)
+	var has_world_state := _has_active_provider_kind(installed_rules_by_id, WORLD_STATE_PROVIDER_KINDS)
+	var has_world_space := _has_active_provider_kind(installed_rules_by_id, WORLD_SPACE_PROVIDER_KINDS)
+	var has_world_time := _has_active_provider_kind(installed_rules_by_id, WORLD_TIME_PROVIDER_KINDS)
+	var has_world_basic_action := _has_active_provider_kind(installed_rules_by_id, WORLD_BASIC_ACTION_PROVIDER_KINDS)
+	var visible_entities := _build_observable_entities(snapshot.get("entities", {}), has_world_existence, has_world_representation, has_world_space)
 
 	snapshot["accumulator_seconds"] = _accumulator_seconds
 	snapshot["available_template_ids"] = template_ids
@@ -388,20 +405,33 @@ func get_snapshot() -> Dictionary:
 	snapshot["installed_rules"] = installed_rules
 	snapshot["installed_rule_packages_by_id"] = installed_package_summary.get("packages_by_id", {}).duplicate(true)
 	snapshot["installed_rule_packages"] = installed_package_summary.get("packages", []).duplicate(true)
-	snapshot["world_mode"] = "three_d" if bool(_world_state.get("preview_3d", {}).get("enabled", false)) else "two_d"
-	snapshot["tick"] = snapshot.get("tick_index", 0)
-	snapshot["world_name"] = snapshot.get("world_name", "はじまりの広場")
-	snapshot["characters"] = _build_character_list(snapshot.get("entities", {}))
-	snapshot["objects"] = _build_object_list(snapshot.get("entities", {}))
-	snapshot["three_d_preview"] = _build_three_d_preview(snapshot.get("entities", {}), snapshot.get("preview_3d", {}))
+	snapshot["entities"] = visible_entities
+	snapshot["world_id"] = snapshot.get("world_id", "") if has_world_existence else ""
+	snapshot["world_name"] = snapshot.get("world_name", "はじまりの広場") if has_world_existence else ""
+	snapshot["world_mode"] = _observable_world_mode(has_world_existence, has_world_representation, has_world_space)
+	if has_world_time:
+		snapshot["tick"] = snapshot.get("tick_index", 0)
+	else:
+		snapshot["tick_index"] = 0
+		snapshot["elapsed_seconds"] = 0.0
+		snapshot["tick"] = 0
+	snapshot["characters"] = _build_character_list(visible_entities)
+	snapshot["objects"] = _build_object_list(visible_entities)
+	snapshot["three_d_preview"] = _build_three_d_preview(visible_entities, snapshot.get("preview_3d", {})) if has_world_representation and has_world_space else _build_hidden_three_d_preview(snapshot.get("preview_3d", {}))
 	snapshot["rule_tree"] = _build_rule_tree(installed_rules_by_id)
 	snapshot["rule_dependency_status"] = _build_rule_dependency_status(installed_rules_by_id)
-	var world_clock := _build_world_clock_summary(installed_rules_by_id, snapshot)
-	if not world_clock.is_empty():
-		snapshot["world_clock"] = world_clock
-	snapshot["events"] = _build_event_messages(snapshot.get("event_log", []))
-	snapshot["poc4"] = _build_snapshot_poc4_state()
-	snapshot["visual_effects"] = _build_visual_effects_snapshot(Array(_world_state.get("visual_effects", [])))
+	if has_world_time:
+		var world_clock := _build_world_clock_summary(installed_rules_by_id, snapshot)
+		if not world_clock.is_empty():
+			snapshot["world_clock"] = world_clock
+		else:
+			snapshot.erase("world_clock")
+	else:
+		snapshot.erase("world_clock")
+	snapshot["events"] = _build_event_messages(snapshot.get("event_log", [])) if has_world_state else []
+	snapshot["poc4"] = _build_snapshot_poc4_state() if has_world_basic_action else {}
+	snapshot["player_task_history"] = Array(snapshot.get("player_task_history", [])).duplicate(true) if has_world_basic_action else []
+	snapshot["visual_effects"] = _build_visual_effects_snapshot(Array(_world_state.get("visual_effects", []))) if has_world_representation and has_world_state else []
 	return snapshot
 
 
@@ -609,6 +639,12 @@ func advance_tick(delta_seconds: float) -> void:
 	if delta_seconds <= 0.0:
 		return
 
+	var entities: Dictionary = _world_state.get("entities", {})
+	if not entities.is_empty():
+		_apply_runtime_movement(entities, delta_seconds)
+		_apply_gravity(entities, delta_seconds)
+		_world_state["entities"] = entities
+
 	_accumulator_seconds += delta_seconds
 	while _accumulator_seconds >= fixed_step_seconds:
 		_run_tick(fixed_step_seconds)
@@ -642,6 +678,17 @@ func dispatch_input_event(event_name: String, context: Dictionary = {}) -> Dicti
 			"status": "ignored",
 			"event": "",
 			"triggered_effect_count": 0
+		}
+
+	if normalized_event == MOVEMENT_INTENT_EVENT:
+		return _update_entity_movement_intent(context)
+
+	if not _has_active_provider_kind(_world_state.get("installed_rules", {}), WORLD_BASIC_ACTION_PROVIDER_KINDS):
+		return {
+			"status": "ignored",
+			"event": normalized_event,
+			"triggered_effect_count": 0,
+			"reason": "missing_basic_action_provider"
 		}
 
 	var proposal_runtime: Dictionary = _world_state.get("proposal_runtime", {})
@@ -907,6 +954,10 @@ func _build_null_world() -> Dictionary:
 					"behavior": {
 						"current_task": "ゲームマスターのところへ歩いて相談する"
 					},
+					"input": {
+						"movement_intent": {"x": 0.0, "y": 0.0, "z": 0.0},
+						"world_mode": "two_d"
+					},
 					"physics": {
 						"dynamic": false,
 						"grounded": true,
@@ -1048,7 +1099,6 @@ func _run_tick(step_seconds: float) -> void:
 			_apply_rule(entity, rule, step_seconds)
 		entities[entity_id] = entity
 
-	_apply_gravity(entities, step_seconds)
 	_update_visual_effects(step_seconds)
 	_world_state["entities"] = entities
 	_world_state["tick_index"] = int(_world_state.get("tick_index", 0)) + 1
@@ -1116,6 +1166,8 @@ func _install_normalized_rule(normalized_rule: Dictionary) -> Dictionary:
 
 	normalized_rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
 	normalized_rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
+	normalized_rule["active_parent_rule_ids"] = parent_resolution.get("active_parent_rule_ids", []).duplicate(true)
+	normalized_rule["active_parent_rule_links"] = parent_resolution.get("active_parent_rule_links", []).duplicate(true)
 	normalized_rule["missing_required_rule_kinds"] = []
 	normalized_rule["blocked"] = false
 	normalized_rule["inactive"] = not bool(normalized_rule.get("enabled", true))
@@ -1167,6 +1219,8 @@ func _normalize_rule_patch(rule_patch: Dictionary, merge_template: bool = true) 
 	merged_rule["install_actions"] = _normalize_install_actions(_extract_rule_array_metadata(merged_rule, "install_actions"))
 	merged_rule["resolved_parent_rule_ids"] = []
 	merged_rule["resolved_parent_rule_links"] = []
+	merged_rule["active_parent_rule_ids"] = []
+	merged_rule["active_parent_rule_links"] = []
 	merged_rule["missing_required_rule_kinds"] = []
 	merged_rule["blocked"] = false
 	merged_rule["inactive"] = not bool(merged_rule.get("enabled", true))
@@ -1202,6 +1256,8 @@ func _resolve_parent_rule_links(rule: Dictionary, installed_rules: Dictionary) -
 	var missing_rule_kinds: Array = []
 	var resolved_parent_rule_ids: Array = []
 	var resolved_parent_rule_links: Array = []
+	var active_parent_rule_ids: Array = []
+	var active_parent_rule_links: Array = []
 	var installed_rule_ids: Array = installed_rules.keys()
 	installed_rule_ids.sort()
 	var rule_id := String(rule.get("id", ""))
@@ -1212,6 +1268,7 @@ func _resolve_parent_rule_links(rule: Dictionary, installed_rules: Dictionary) -
 			continue
 
 		var matching_rule_ids: Array = []
+		var active_matching_rule_ids: Array = []
 		for installed_rule_id in installed_rule_ids:
 			var candidate_rule: Dictionary = installed_rules[installed_rule_id]
 			if String(candidate_rule.get("id", installed_rule_id)) == rule_id:
@@ -1220,28 +1277,44 @@ func _resolve_parent_rule_links(rule: Dictionary, installed_rules: Dictionary) -
 				matching_rule_ids.append(installed_rule_id)
 				if not resolved_parent_rule_ids.has(installed_rule_id):
 					resolved_parent_rule_ids.append(installed_rule_id)
+				if _rule_is_active(candidate_rule):
+					active_matching_rule_ids.append(installed_rule_id)
+					if not active_parent_rule_ids.has(installed_rule_id):
+						active_parent_rule_ids.append(installed_rule_id)
 		matching_rule_ids.sort()
+		active_matching_rule_ids.sort()
 		resolved_parent_rule_links.append({
 			"required_kind": required_kind,
 			"rule_ids": matching_rule_ids.duplicate(true)
 		})
-		if matching_rule_ids.is_empty():
+		active_parent_rule_links.append({
+			"required_kind": required_kind,
+			"rule_ids": active_matching_rule_ids.duplicate(true)
+		})
+		if active_matching_rule_ids.is_empty():
 			missing_rule_kinds.append(required_kind)
 
 	resolved_parent_rule_ids.sort()
+	active_parent_rule_ids.sort()
 	if not missing_rule_kinds.is_empty():
 		return {
 			"status": "error",
 			"message": "ルール '%s' には、導入済みの親ルール種別 [%s] が必要です。先に対応するルールを入れてください。" % [rule_id, ", ".join(missing_rule_kinds)],
 			"rule_id": rule_id,
 			"requires_rule_kinds": required_rule_kinds.duplicate(true),
-			"missing_required_rule_kinds": missing_rule_kinds.duplicate(true)
+			"missing_required_rule_kinds": missing_rule_kinds.duplicate(true),
+			"resolved_parent_rule_ids": resolved_parent_rule_ids.duplicate(true),
+			"resolved_parent_rule_links": resolved_parent_rule_links.duplicate(true),
+			"active_parent_rule_ids": active_parent_rule_ids.duplicate(true),
+			"active_parent_rule_links": active_parent_rule_links.duplicate(true)
 		}
 
 	return {
 		"status": "resolved",
 		"resolved_parent_rule_ids": resolved_parent_rule_ids.duplicate(true),
 		"resolved_parent_rule_links": resolved_parent_rule_links.duplicate(true),
+		"active_parent_rule_ids": active_parent_rule_ids.duplicate(true),
+		"active_parent_rule_links": active_parent_rule_links.duplicate(true),
 		"missing_required_rule_kinds": []
 	}
 
@@ -1280,23 +1353,46 @@ func _refresh_rule_relationships() -> void:
 	var installed_rules: Dictionary = _world_state.get("installed_rules", {})
 	var rule_ids: Array = installed_rules.keys()
 	rule_ids.sort()
-
-	for rule_id in rule_ids:
-		var rule: Dictionary = installed_rules[rule_id]
-		var parent_resolution := _resolve_parent_rule_links(rule, installed_rules)
-		rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
-		rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
-		var missing_required_rule_kinds: Array = parent_resolution.get("missing_required_rule_kinds", [])
-		rule["missing_required_rule_kinds"] = missing_required_rule_kinds.duplicate(true)
-		rule["blocked"] = not missing_required_rule_kinds.is_empty()
-		rule["inactive"] = bool(rule.get("blocked", false)) or not bool(rule.get("enabled", true))
-		if bool(rule.get("blocked", false)):
-			rule["dependency_status"] = "blocked"
-		elif bool(rule.get("inactive", false)):
-			rule["dependency_status"] = "inactive"
-		else:
-			rule["dependency_status"] = "active"
-		installed_rules[rule_id] = rule
+	var max_passes: int = max(1, rule_ids.size())
+	for _pass_index in range(max_passes):
+		var changed := false
+		for rule_id in rule_ids:
+			var rule: Dictionary = installed_rules[rule_id]
+			var previous_missing: Array = rule.get("missing_required_rule_kinds", []).duplicate(true)
+			var previous_resolved_ids: Array = rule.get("resolved_parent_rule_ids", []).duplicate(true)
+			var previous_resolved_links: Array = rule.get("resolved_parent_rule_links", []).duplicate(true)
+			var previous_active_parent_ids: Array = rule.get("active_parent_rule_ids", []).duplicate(true)
+			var previous_active_parent_links: Array = rule.get("active_parent_rule_links", []).duplicate(true)
+			var previous_blocked := bool(rule.get("blocked", false))
+			var previous_inactive := bool(rule.get("inactive", false))
+			var previous_dependency_status := String(rule.get("dependency_status", ""))
+			var parent_resolution := _resolve_parent_rule_links(rule, installed_rules)
+			rule["resolved_parent_rule_ids"] = parent_resolution.get("resolved_parent_rule_ids", []).duplicate(true)
+			rule["resolved_parent_rule_links"] = parent_resolution.get("resolved_parent_rule_links", []).duplicate(true)
+			rule["active_parent_rule_ids"] = parent_resolution.get("active_parent_rule_ids", []).duplicate(true)
+			rule["active_parent_rule_links"] = parent_resolution.get("active_parent_rule_links", []).duplicate(true)
+			var missing_required_rule_kinds: Array = parent_resolution.get("missing_required_rule_kinds", [])
+			rule["missing_required_rule_kinds"] = missing_required_rule_kinds.duplicate(true)
+			rule["blocked"] = not missing_required_rule_kinds.is_empty()
+			rule["inactive"] = bool(rule.get("blocked", false)) or not bool(rule.get("enabled", true))
+			if bool(rule.get("blocked", false)):
+				rule["dependency_status"] = "blocked"
+			elif bool(rule.get("inactive", false)):
+				rule["dependency_status"] = "inactive"
+			else:
+				rule["dependency_status"] = "active"
+			installed_rules[rule_id] = rule
+			if previous_missing != rule.get("missing_required_rule_kinds", []) \
+			or previous_resolved_ids != rule.get("resolved_parent_rule_ids", []) \
+			or previous_resolved_links != rule.get("resolved_parent_rule_links", []) \
+			or previous_active_parent_ids != rule.get("active_parent_rule_ids", []) \
+			or previous_active_parent_links != rule.get("active_parent_rule_links", []) \
+			or previous_blocked != bool(rule.get("blocked", false)) \
+			or previous_inactive != bool(rule.get("inactive", false)) \
+			or previous_dependency_status != String(rule.get("dependency_status", "")):
+				changed = true
+		if not changed:
+			break
 
 	_world_state["installed_rules"] = installed_rules
 
@@ -1546,7 +1642,7 @@ func _find_world_clock_provider(installed_rules_by_id: Dictionary) -> Dictionary
 		if not (rule is Dictionary):
 			continue
 		var rule_data: Dictionary = rule
-		if not bool(rule_data.get("enabled", true)):
+		if not _rule_is_active(rule_data):
 			continue
 		var metadata: Dictionary = rule_data.get("metadata", {})
 		var package_id := String(metadata.get("package_id", ""))
@@ -2057,6 +2153,91 @@ func _build_visual_effects_snapshot(raw_effects: Array) -> Array:
 	return snapshot_effects
 
 
+func _update_entity_movement_intent(context: Dictionary) -> Dictionary:
+	var entity_id := String(context.get("entity_id", "")).strip_edges()
+	if entity_id.is_empty():
+		return {
+			"status": "ignored",
+			"event": MOVEMENT_INTENT_EVENT,
+			"reason": "missing_entity_id"
+		}
+
+	var entities: Dictionary = _world_state.get("entities", {})
+	if not entities.has(entity_id):
+		return {
+			"status": "ignored",
+			"event": MOVEMENT_INTENT_EVENT,
+			"entity_id": entity_id,
+			"reason": "missing_entity"
+		}
+
+	var entity: Dictionary = entities[entity_id].duplicate(true)
+	var components: Dictionary = entity.get("components", {}).duplicate(true) if entity.get("components", {}) is Dictionary else {}
+	var input_state: Dictionary = components.get("input", {}).duplicate(true) if components.get("input", {}) is Dictionary else {}
+	input_state["movement_intent"] = _normalize_movement_vector(context.get("movement_vector", context.get("movement_intent", {})))
+	var world_mode := String(context.get("world_mode", input_state.get("world_mode", ""))).strip_edges()
+	if not world_mode.is_empty():
+		input_state["world_mode"] = world_mode
+	components["input"] = input_state
+	entity["components"] = components
+	entities[entity_id] = entity
+	_world_state["entities"] = entities
+	return {
+		"status": "updated",
+		"event": MOVEMENT_INTENT_EVENT,
+		"entity_id": entity_id,
+		"movement_vector": input_state.get("movement_intent", {}).duplicate(true)
+	}
+
+
+func _apply_runtime_movement(entities: Dictionary, step_seconds: float) -> void:
+	var movement_provider_active := _movement_provider_is_active()
+	var entity_ids: Array = entities.keys()
+	entity_ids.sort()
+
+	for entity_id in entity_ids:
+		var entity: Dictionary = entities[entity_id]
+		var components: Dictionary = entity.get("components", {}).duplicate(true) if entity.get("components", {}) is Dictionary else {}
+		var input_state: Dictionary = components.get("input", {}).duplicate(true) if components.get("input", {}) is Dictionary else {}
+		var movement_intent := _normalize_movement_vector(input_state.get("movement_intent", {}))
+		var physics: Dictionary = components.get("physics", {}).duplicate(true) if components.get("physics", {}) is Dictionary else {}
+		var velocity := _normalize_vector3_dict(physics.get("velocity", {}), {"x": 0.0, "y": 0.0, "z": 0.0})
+
+		if not movement_provider_active:
+			velocity["x"] = 0.0
+			velocity["z"] = 0.0
+			if not physics.is_empty():
+				physics["velocity"] = velocity
+				components["physics"] = physics
+				entity["components"] = components
+				entities[entity_id] = entity
+			continue
+
+		var movement_direction := Vector2(float(movement_intent.get("x", 0.0)), float(movement_intent.get("z", 0.0)))
+		if movement_direction.length_squared() <= 0.0001:
+			velocity["x"] = 0.0
+			velocity["z"] = 0.0
+		else:
+			var speed := _movement_speed_for_entity(entity, input_state, physics)
+			var normalized_direction := movement_direction.normalized()
+			var axis_scale := _movement_axis_scale(input_state)
+			velocity["x"] = normalized_direction.x * speed * axis_scale.x
+			velocity["z"] = normalized_direction.y * speed * axis_scale.y
+			var position := _normalize_vector3_dict(entity.get("position", {}), {"x": 0.0, "y": 0.0, "z": 0.0})
+			position["x"] = snappedf(float(position.get("x", 0.0)) + (float(velocity.get("x", 0.0)) * step_seconds), 0.0001)
+			position["z"] = snappedf(float(position.get("z", 0.0)) + (float(velocity.get("z", 0.0)) * step_seconds), 0.0001)
+			entity["position"] = position
+
+		if not physics.is_empty():
+			velocity["x"] = snappedf(float(velocity.get("x", 0.0)), 0.0001)
+			velocity["z"] = snappedf(float(velocity.get("z", 0.0)), 0.0001)
+			physics["velocity"] = velocity
+			components["physics"] = physics
+			entity["components"] = components
+
+		entities[entity_id] = entity
+
+
 func _apply_gravity(entities: Dictionary, step_seconds: float) -> void:
 	var preview_state: Dictionary = _world_state.get("preview_3d", {})
 	var gravity := _normalize_preview_gravity(preview_state.get("gravity", {}), bool(preview_state.get("enabled", false)))
@@ -2107,6 +2288,90 @@ func _apply_gravity(entities: Dictionary, step_seconds: float) -> void:
 
 		if is_grounded and not was_grounded:
 			_append_event("gravity_landed", "プレビュー床に '%s' が着地しました。" % String(entity.get("name", entity_id)), {"entity_id": entity_id, "floor_y": target_floor_y})
+
+
+func _movement_provider_is_active() -> bool:
+	return _has_active_provider_kind(_world_state.get("installed_rules", {}), MOVEMENT_PROVIDER_KINDS)
+
+
+func _rule_provides_any_kind(rule: Dictionary, candidate_kinds: Array) -> bool:
+	for provided_kind_variant in rule.get("provides_rule_kinds", []):
+		if candidate_kinds.has(String(provided_kind_variant)):
+			return true
+	return false
+
+
+func _rule_is_active(rule: Dictionary) -> bool:
+	return bool(rule.get("enabled", true)) and not bool(rule.get("blocked", false)) and not bool(rule.get("inactive", false))
+
+
+func _has_active_provider_kind(installed_rules_by_id: Dictionary, candidate_kinds: Array) -> bool:
+	for rule_variant in installed_rules_by_id.values():
+		if not (rule_variant is Dictionary):
+			continue
+		var rule: Dictionary = rule_variant
+		if not _rule_is_active(rule):
+			continue
+		if _rule_provides_any_kind(rule, candidate_kinds):
+			return true
+	return false
+
+
+func _build_observable_entities(entities_variant: Variant, has_world_existence: bool, has_world_representation: bool, has_world_space: bool) -> Dictionary:
+	if not has_world_existence or not has_world_representation or not has_world_space:
+		return {}
+	if entities_variant is Dictionary:
+		return (entities_variant as Dictionary).duplicate(true)
+	return {}
+
+
+func _observable_world_mode(has_world_existence: bool, has_world_representation: bool, has_world_space: bool) -> String:
+	if not has_world_existence or not has_world_representation or not has_world_space:
+		return ""
+	return "three_d" if bool(_world_state.get("preview_3d", {}).get("enabled", false)) else "two_d"
+
+
+func _build_hidden_three_d_preview(preview_state: Variant) -> Dictionary:
+	var camera := _normalize_preview_camera({})
+	if preview_state is Dictionary:
+		camera = _normalize_preview_camera((preview_state as Dictionary).get("camera", {}))
+	return {
+		"enabled": false,
+		"renderables": [],
+		"lighting": _normalize_preview_lighting({}, false),
+		"gravity": _normalize_preview_gravity({}, false),
+		"camera": camera
+	}
+
+
+func _movement_speed_for_entity(entity: Dictionary, input_state: Dictionary = {}, physics: Dictionary = {}) -> float:
+	var speed_value: Variant = input_state.get("movement_speed", physics.get("movement_speed", DEFAULT_MOVEMENT_SPEED_UNITS))
+	if entity.has("movement_speed"):
+		speed_value = entity.get("movement_speed", speed_value)
+	return max(0.0, float(speed_value))
+
+
+func _movement_axis_scale(input_state: Dictionary) -> Vector2:
+	var world_mode := String(input_state.get("world_mode", "")).strip_edges().to_lower()
+	if world_mode == "two_d":
+		return Vector2(TWO_D_HORIZONTAL_MOVEMENT_SCALE, 1.0)
+	return Vector2.ONE
+
+
+func _normalize_movement_vector(raw_value: Variant) -> Dictionary:
+	var normalized := _normalize_vector3_dict(raw_value, {"x": 0.0, "y": 0.0, "z": 0.0})
+	var vector := Vector3(
+		float(normalized.get("x", 0.0)),
+		float(normalized.get("y", 0.0)),
+		float(normalized.get("z", 0.0))
+	)
+	if vector.length() > 1.0:
+		vector = vector.normalized()
+	return {
+		"x": snappedf(vector.x, 0.0001),
+		"y": snappedf(vector.y, 0.0001),
+		"z": snappedf(vector.z, 0.0001)
+	}
 
 
 func _normalize_vector3_dict(raw_value: Variant, default_value: Dictionary) -> Dictionary:
@@ -2192,9 +2457,11 @@ func _build_rule_tree(installed_rules_by_id: Dictionary) -> Dictionary:
 			"package_id": String(metadata.get("package_id", "")),
 			"package_display_name": String(metadata.get("package_display_name", metadata.get("package_id", ""))),
 			"package_description": String(metadata.get("package_description", "")),
+			"enabled": bool(rule.get("enabled", true)),
 			"requires_rule_kinds": rule.get("requires_rule_kinds", []).duplicate(true),
 			"provides_rule_kinds": rule.get("provides_rule_kinds", []).duplicate(true),
 			"resolved_parent_rule_ids": rule.get("resolved_parent_rule_ids", []).duplicate(true),
+			"active_parent_rule_ids": rule.get("active_parent_rule_ids", []).duplicate(true),
 			"missing_required_rule_kinds": rule.get("missing_required_rule_kinds", []).duplicate(true),
 			"blocked": bool(rule.get("blocked", false)),
 			"inactive": bool(rule.get("inactive", false)),
@@ -2406,6 +2673,12 @@ func _normalize_entity(entity: Dictionary) -> Dictionary:
 		if physics.has("floor_offset_y"):
 			physics["floor_offset_y"] = float(physics.get("floor_offset_y", 0.0))
 		components["physics"] = physics
+	if components.has("input") and components["input"] is Dictionary:
+		var input_state: Dictionary = components["input"].duplicate(true)
+		input_state["movement_intent"] = _normalize_movement_vector(input_state.get("movement_intent", {}))
+		if input_state.has("world_mode"):
+			input_state["world_mode"] = String(input_state.get("world_mode", ""))
+		components["input"] = input_state
 	for component_name in ["needs", "stats", "traits", "behavior"]:
 		if not components.has(component_name) or not (components[component_name] is Dictionary):
 			components[component_name] = {}

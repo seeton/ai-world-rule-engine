@@ -42,9 +42,8 @@ var _goal_hint: Label = null
 var _status_hint: Label = null
 var _effects_overlay: Node2D = null
 var _is_hovering_gm: bool = false
-var _player_position_initialized: bool = false
-var _last_synced_player_position: Vector2 = Vector2(9999.0, 9999.0)
 var _overlay_active: bool = false
+var _last_runtime_movement_intent: Vector3 = Vector3(9999.0, 9999.0, 9999.0)
 var _entity_nodes: Dictionary = {}
 var _effect_nodes: Dictionary = {}
 
@@ -56,14 +55,14 @@ func _ready() -> void:
 	if gm.has_signal("hover_changed"):
 		gm.hover_changed.connect(_on_gm_hover_changed)
 	_setup_hud()
-	_apply_snapshot(_get_world_snapshot())
+	var snapshot := _get_world_snapshot()
+	_apply_snapshot(snapshot)
 
 
 func _process(delta: float) -> void:
+	_sync_runtime_movement_intent()
 	if not _overlay_active and _world_state != null and _world_state.has_method("advance_tick"):
 		_world_state.call("advance_tick", delta)
-
-	_sync_player_to_world_state()
 
 	var snapshot := _get_world_snapshot()
 	_apply_snapshot(snapshot)
@@ -96,7 +95,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_overlay_active(active: bool) -> void:
 	_overlay_active = active
-	player.set_physics_process(not active)
+	_sync_runtime_movement_intent(true)
 	if _hud_layer != null:
 		_hud_layer.visible = not active
 	if active:
@@ -178,10 +177,19 @@ func _get_world_snapshot() -> Dictionary:
 func _apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		_world_name_label.text = _text("world_fallback")
+		_set_player_visible(false)
+		_set_gm_visible(false)
+		_is_hovering_gm = false
+		_sync_world_entities({})
+		_sync_visual_effects([])
 		return
 
-	_world_name_label.text = String(snapshot.get("world_name", _text("world_fallback")))
+	var world_name := String(snapshot.get("world_name", "")).strip_edges()
+	_world_name_label.text = world_name if not world_name.is_empty() else _text("world_fallback")
 	var entities := _coerce_dictionary(snapshot.get("entities", {}))
+	_set_player_visible(false)
+	_set_gm_visible(false)
+	_is_hovering_gm = false
 	_apply_player_entity(entities.get(PLAYER_ENTITY_ID, {}))
 	_apply_gm_entity(entities.get(GM_ENTITY_ID, {}))
 	_sync_world_entities(entities)
@@ -190,24 +198,32 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 
 func _apply_player_entity(entity_variant: Variant) -> void:
 	if not (entity_variant is Dictionary):
+		_set_player_visible(false)
 		return
 
 	var entity: Dictionary = entity_variant
+	if entity.is_empty():
+		_set_player_visible(false)
+		return
+	_set_player_visible(true)
 	var world_position := _entity_position(entity)
-	if not _player_position_initialized:
-		player.global_position = _world_to_screen(world_position)
-		_last_synced_player_position = player.global_position
-		_player_position_initialized = true
-
+	player.global_position = _world_to_screen(world_position)
 	if player.has_method("apply_visual_style"):
 		player.call("apply_visual_style", _entity_size_2d(entity), _entity_color(entity, Color(0.33, 0.55, 0.97, 1.0)))
 
 
 func _apply_gm_entity(entity_variant: Variant) -> void:
 	if not (entity_variant is Dictionary):
+		_set_gm_visible(false)
+		_is_hovering_gm = false
 		return
 
 	var entity: Dictionary = entity_variant
+	if entity.is_empty():
+		_set_gm_visible(false)
+		_is_hovering_gm = false
+		return
+	_set_gm_visible(true)
 	gm.global_position = _world_to_screen(_entity_position(entity))
 	if gm.has_method("apply_visual_style"):
 		gm.call("apply_visual_style", _entity_size_2d(entity), _entity_color(entity, Color(0.95, 0.79, 0.41, 1.0)))
@@ -275,24 +291,31 @@ func _update_world_entity_node(entity_node: Node2D, entity: Dictionary) -> void:
 	entity_node.global_position = _world_to_screen(_entity_position(entity))
 
 
-func _sync_player_to_world_state() -> void:
-	if not _player_position_initialized or _overlay_active:
+func _sync_runtime_movement_intent(force: bool = false) -> void:
+	if _world_state == null or not _world_state.has_method("dispatch_input_event"):
 		return
-	if _world_state == null or not _world_state.has_method("set_entity_position"):
+	var movement_intent := _movement_intent_from_input()
+	if not force and movement_intent.distance_to(_last_runtime_movement_intent) < 0.0001:
 		return
-	if player.global_position.distance_to(_last_synced_player_position) < 0.5:
-		return
+	_last_runtime_movement_intent = movement_intent
+	_world_state.call("dispatch_input_event", "input.move.intent", {
+		"entity_id": PLAYER_ENTITY_ID,
+		"movement_vector": {
+			"x": snappedf(movement_intent.x, 0.0001),
+			"y": 0.0,
+			"z": snappedf(movement_intent.z, 0.0001)
+		},
+		"world_mode": "two_d"
+	})
 
-	_last_synced_player_position = player.global_position
-	var world_position := _screen_to_world(player.global_position)
-	_world_state.call(
-		"set_entity_position",
-		PLAYER_ENTITY_ID,
-		{
-			"x": snappedf(world_position.x, 0.001),
-			"z": snappedf(world_position.y, 0.001)
-		}
-	)
+
+func _movement_intent_from_input() -> Vector3:
+	if _overlay_active:
+		return Vector3.ZERO
+	var input_vector := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if input_vector.length_squared() <= 0.0001:
+		return Vector3.ZERO
+	return Vector3(input_vector.x, 0.0, input_vector.y)
 
 
 func _update_interaction_hint(delta: float) -> void:
@@ -380,6 +403,8 @@ func _on_gm_interaction() -> void:
 
 
 func _is_player_in_range() -> bool:
+	if not player.visible or not gm.visible:
+		return false
 	return player.global_position.distance_to(gm.global_position) <= INTERACTION_DISTANCE
 
 
@@ -458,6 +483,40 @@ func _color_from_variant(value: Variant, default_value: Color) -> Color:
 
 func _coerce_dictionary(value: Variant) -> Dictionary:
 	return value if value is Dictionary else {}
+
+
+func _set_player_visible(is_visible: bool) -> void:
+	if player.has_method("set_render_enabled"):
+		player.call("set_render_enabled", is_visible)
+	var player_visual := player.get_node_or_null("Visual")
+	if player_visual is CanvasItem:
+		(player_visual as CanvasItem).visible = is_visible
+	var player_label := player.get_node_or_null("Label")
+	if player_label is CanvasItem:
+		(player_label as CanvasItem).visible = is_visible
+	if player is CanvasItem:
+		(player as CanvasItem).visible = is_visible
+	var player_collision := player.get_node_or_null("CollisionShape2D")
+	if player_collision is CollisionShape2D:
+		(player_collision as CollisionShape2D).disabled = not is_visible
+
+
+func _set_gm_visible(is_visible: bool) -> void:
+	if gm.has_method("set_render_enabled"):
+		gm.call("set_render_enabled", is_visible)
+	var gm_visual := gm.get_node_or_null("Visual")
+	if gm_visual is CanvasItem:
+		(gm_visual as CanvasItem).visible = is_visible
+	var gm_label := gm.get_node_or_null("Label")
+	if gm_label is CanvasItem:
+		(gm_label as CanvasItem).visible = is_visible
+	if gm is CanvasItem:
+		(gm as CanvasItem).visible = is_visible
+	var interaction_area := gm.get_node_or_null("InteractionArea")
+	if interaction_area is Area2D:
+		(interaction_area as Area2D).input_pickable = is_visible
+		(interaction_area as Area2D).monitoring = is_visible
+		(interaction_area as Area2D).monitorable = is_visible
 
 
 func _text(key: String) -> String:

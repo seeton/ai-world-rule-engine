@@ -135,6 +135,7 @@ func _build_layers() -> void:
 	add_child(_empty_label)
 
 	_tooltip_popup = RuleTooltipPopupScript.new()
+	_tooltip_popup.theme = RuleTooltipThemeScript.build_theme()
 	add_child(_tooltip_popup)
 
 

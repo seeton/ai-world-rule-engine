@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.hunger",
+  "package_tier": "capability",
   "display_name": "Hunger",
   "description": "Adds a hunger need, food recovery hooks, and starvation pressure tied to health.",
   "version": "1.0.0",

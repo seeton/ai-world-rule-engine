@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.health",
+  "package_tier": "capability",
   "display_name": "Health",
   "description": "Adds a core health stat, damage and healing bindings, and defeated state thresholds.",
   "version": "1.0.0",

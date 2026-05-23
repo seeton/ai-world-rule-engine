@@ -106,6 +106,7 @@ CLI 本体 (`scripts/cli/main.gd`) のフラグと、ラッパー (`scripts/worl
   "installed_packages": [
     {
       "package_id": "builtin.default_package",
+      "package_tier": "foundation",
       "display_name": "Default Package",
       "version": "1.0.0",
       "state": "enabled",

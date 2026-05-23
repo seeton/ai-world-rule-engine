@@ -1724,6 +1724,7 @@ func _build_installed_rule_packages(installed_rules_by_id: Dictionary) -> Dictio
 func _build_package_summary(package_id: String, rule_ids: Array, installed_rules_by_id: Dictionary) -> Dictionary:
 	var enabled_rule_count := 0
 	var display_name := package_id
+	var package_tier := ""
 	var package_version := ""
 	var source_repo := ""
 	var source_ref := ""
@@ -1744,6 +1745,8 @@ func _build_package_summary(package_id: String, rule_ids: Array, installed_rules
 				display_name = metadata_display_name
 			else:
 				display_name = String(rule.get("name", package_id))
+		if package_tier.is_empty():
+			package_tier = String(metadata.get("package_tier", "")).strip_edges()
 		if package_version.is_empty():
 			package_version = String(metadata.get("package_version", "")).strip_edges()
 		if source_repo.is_empty():
@@ -1764,6 +1767,7 @@ func _build_package_summary(package_id: String, rule_ids: Array, installed_rules
 
 	return {
 		"package_id": package_id,
+		"package_tier": package_tier,
 		"display_name": display_name,
 		"version": package_version,
 		"state": state,

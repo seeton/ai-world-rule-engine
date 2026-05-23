@@ -105,6 +105,7 @@ func _is_valid_package(package_data: Dictionary) -> bool:
 func _summarize_package(package_data: Dictionary) -> Dictionary:
 	return {
 		"package_id": package_data.get("package_id", ""),
+		"package_tier": package_data.get("package_tier", ""),
 		"display_name": package_data.get("display_name", ""),
 		"description": package_data.get("description", ""),
 		"version": package_data.get("version", ""),

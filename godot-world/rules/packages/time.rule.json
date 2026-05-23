@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.time",
+  "package_tier": "capability",
   "display_name": "Time",
   "description": "Adds a deterministic elapsed time counter that updates each tick.",
   "version": "1.0.0",

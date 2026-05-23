@@ -356,6 +356,26 @@ def validate_default_package_contract(
 
     default_path, default_package = default_entry
     peaceful_path, peaceful_package = peaceful_entry
+
+    default_tier = default_package.get("package_tier")
+    if default_tier != "foundation":
+        problems.append(
+            ValidationProblem(
+                default_path,
+                "Default package must declare package_tier 'foundation'.",
+                "$.package_tier",
+            )
+        )
+    peaceful_tier = peaceful_package.get("package_tier")
+    if peaceful_tier != "bundle":
+        problems.append(
+            ValidationProblem(
+                peaceful_path,
+                "Peaceful world order must declare package_tier 'bundle'.",
+                "$.package_tier",
+            )
+        )
+
     default_contract = default_package.get("runtime_contract", {})
     if not isinstance(default_contract, dict):
         problems.append(

@@ -297,6 +297,7 @@ func review_rule_package_proposal(rule_package: Dictionary) -> Dictionary:
     return {
         "status": "ready_for_install" if review_status == "approved" else "needs_approval",
         "package_id": rule_package.get("package_id", ""),
+        "package_tier": rule_package.get("package_tier", ""),
         "display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
         "review_status": review_status,
         "operation_count": operations.size(),
@@ -702,6 +703,7 @@ func _package_summary_to_proposal(package_summary: Dictionary) -> Dictionary:
 func _rule_package_to_proposal(rule_package: Dictionary, compilation: Dictionary = {}) -> Dictionary:
     var proposal := {
         "package_id": rule_package.get("package_id", ""),
+        "package_tier": rule_package.get("package_tier", ""),
         "display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
         "description": rule_package.get("description", ""),
         "version": rule_package.get("version", ""),

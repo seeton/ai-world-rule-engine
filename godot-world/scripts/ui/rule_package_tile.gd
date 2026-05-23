@@ -135,6 +135,16 @@ func _build_header_row(package_summary: Dictionary, visual: Dictionary, accent: 
 		version_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_row.add_child(version_label)
 
+	var tier := String(package_summary.get("package_tier", "")).strip_edges()
+	var tier_label := UiData.ja_for_tier(tier)
+	if not tier_label.is_empty():
+		var tier_accent: Color = UiData.accent_for_tier(tier)
+		title_row.add_child(_build_pill(
+			tier_label,
+			tier_accent,
+			Color(tier_accent.r, tier_accent.g, tier_accent.b, 0.14)
+		))
+
 	var pkg_id_label := Label.new()
 	pkg_id_label.text = String(package_summary.get("package_id", ""))
 	pkg_id_label.add_theme_color_override("font_color", Color("#6a6e78"))

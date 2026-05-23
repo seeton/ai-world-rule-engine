@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.sleep",
+  "package_tier": "capability",
   "display_name": "Sleep",
   "description": "Adds energy depletion, sleeping recovery, and low-energy penalties for actors.",
   "version": "1.0.0",

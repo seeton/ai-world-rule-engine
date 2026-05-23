@@ -7,6 +7,7 @@ Godot World is a small rule-driven world simulation. Rule packages are JSON bund
 Each package is a JSON document with:
 
 - `package_id`
+- `package_tier` (任意。`foundation` / `bundle` / `capability` のいずれか。後述の階層を明示するときに付ける)
 - `display_name`
 - `description`
 - `version`
@@ -24,6 +25,27 @@ Each package is a JSON document with:
 The `patch` block is intentionally limited to structured operations. This keeps the AI rule compiler safe and reviewable.
 
 When `patch.operations` contains `upsert_rule`, that rule must also include `player_description`. This is the stored player-facing "これは何？" explanation and is treated as part of the canonical rule definition.
+
+## Package tiers (`package_tier`)
+
+「ルールパッケージ」と一口に言っても、実際は次の 3 階層に分かれている。`package_tier` フィールドはこの階層を一語で示すための明示ラベルで、UI / ドキュメント / 会話で同じ単語を使うときの拠り所になる。
+
+| `package_tier` | 日本語呼称 | 役割 | 例 |
+| --- | --- | --- | --- |
+| `foundation` | **基盤** | 2D / 3D 共通の最小世界前提を提供する。`world.foundation` / `world.existence` / `world.state` / `world.space` / `world.base-time` / `world.movement` / `world.basic-action` などの能力を `provides_capabilities` で公開する。 | `builtin.default_package` |
+| `bundle` | **プリセット** (旧称: セット) | 基盤の上に高位の生活秩序 (時間帯・所有・金銭・食事・空腹・体・体力 etc.) をまとめて積む preset。基盤の能力を `requires_capabilities` で要求し、特定 `package_id` ではなく能力で結合する。 | `builtin.peaceful_world_order` |
+| `capability` | **機能パッケージ** | 単一の主目的 (体力 / 空腹 / 睡眠 / 時間 / マナ吸収など) だけを扱う追加パッケージ。基盤 / プリセットに依存せず、必要なら自分の中で stat / rule を完結させる。 | `builtin.health`, `builtin.hunger`, `builtin.sleep`, `builtin.time`, `builtin.mana_absorption` |
+
+呼称の使い分け:
+
+- 「基盤」と言ったときは `package_tier == "foundation"` だけを指す。`builtin.default_package` の id 末尾に `_package` が付いていても、これは「Default Package」という固有 display_name の都合で残しているだけで、階層上は基盤 1 つしか存在しない。
+- 「プリセット」「セット」と言ったときは `package_tier == "bundle"` を指す。複数のルール群を 1 ファイルに束ねる preset であり、単一機能とは区別する。
+- 「機能パッケージ」と言ったときは `package_tier == "capability"` を指す。`builtin.health` のような単一機能の追加 package を意味する。
+- 単に「パッケージ」と書くと 3 階層のどれを指しているか曖昧になるため、運用 / docs では原則として階層名 (基盤 / プリセット / 機能パッケージ) を添える。
+
+UI 上はタイルの見出し横に同じラベル (`基盤` / `プリセット` / `機能パッケージ`) を pill 表示するので、利用者は同じ単語で階層を識別できる。
+
+`package_tier` 自体はスキーマ上は任意項目だが、`builtin.default_package` は `foundation`、`builtin.peaceful_world_order` は `bundle` を明示しなければ `godot-world/scripts/validate_repo.py` が拒否する。新しい built-in package を追加するときは、上の 3 値のいずれかを必ず付与すること。
 
 ## Rule model invariants
 
@@ -135,6 +157,8 @@ For rule package PRs, include:
 - Human review is expected before a custom draft is merged into gameplay.
 
 ## Default package vs. peaceful world order
+
+これは前節「Package tiers」の **基盤 (foundation)** と **プリセット (bundle)** の関係を、具体的な built-in package に落とし込んだものである。`package_tier` フィールドの値はそれぞれ `foundation` / `bundle` と一致する。
 
 `builtin.default_package` is the minimum base-world contract shared by both the 2D and 3D runtimes. It provides the `world.foundation.v1` capabilities:
 

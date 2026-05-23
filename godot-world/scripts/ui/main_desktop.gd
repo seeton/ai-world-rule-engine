@@ -21,7 +21,7 @@ const FALLBACK_TEMPLATES: Array = [
     {
         "id": "shared-kitchen",
         "name": "共同台所",
-        "description": "共同の食事準備と片付けを導入します."
+        "description": "共同の食事準備と片付けを導入します。"
     }
 ]
 const RulePackageTileScript = preload("res://scripts/ui/rule_package_tile.gd")
@@ -124,6 +124,7 @@ var _approved_proposal_text := ""
 var _current_proposal_review: Dictionary = {}
 var _is_updating_proposal_editor := false
 var _installed_package_cache: Array = []
+var _installed_rule_cache: Array = []
 var _available_package_cache: Array = []
 var _snapshot_cache: Dictionary = {}
 var _poc4_state_cache: Dictionary = {}
@@ -725,6 +726,7 @@ func _refresh_all() -> void:
     _proposal_cache = _extract_task_proposals(_latest_task_result)
     _refresh_poc4_state()
     _installed_package_cache = _extract_installed_packages(_snapshot_cache)
+    _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _available_package_cache = _fetch_available_packages()
     _update_proposal_panel()
     _update_installed_rules_panel()
@@ -1081,6 +1083,7 @@ func _update_installed_rules_panel() -> void:
             _update_installed_package_details(0)
 
     _refresh_packages_grid()
+    _update_installed_rule_tree()
     if has_packages:
         _select_first_rule_for_package(_extract_identifier(_installed_package_cache[0]))
 
@@ -1457,6 +1460,26 @@ func _on_package_enable_pressed() -> void:
 func _on_package_disable_pressed() -> void:
     _set_selected_package_enabled(false)
 
+func _on_rule_tree_selected() -> void:
+    if _installed_rule_tree == null or _installed_package_list == null:
+        return
+    var selected_item := _installed_rule_tree.get_selected()
+    if selected_item == null:
+        return
+    var rule_id_variant := selected_item.get_metadata(0)
+    if rule_id_variant == null:
+        return
+    var rule_index := _find_rule_index_by_id(str(rule_id_variant))
+    if rule_index == -1:
+        return
+    var package_id := _extract_rule_package_id(_installed_rule_cache[rule_index])
+    var package_index := _find_package_index_by_id(package_id)
+    if package_index == -1:
+        return
+    _installed_package_list.deselect_all()
+    _installed_package_list.select(package_index)
+    _update_installed_package_details(package_index)
+
 # Assumption: the live simulation autoload is available as /root/WorldState.
 func _extract_installed_rules(snapshot: Dictionary) -> Array:
     var raw_rules = snapshot.get("installed_rules", [])
@@ -1530,15 +1553,39 @@ func _find_package_index_by_id(package_id: String) -> int:
     return -1
 
 func _select_first_rule_for_package(package_id: String) -> void:
-    if package_id.is_empty() or _installed_rule_list == null:
+    if package_id.is_empty() or _installed_rule_tree == null:
         return
+    var target_rule_id := ""
     for index in range(_installed_rule_cache.size()):
         if _extract_rule_package_id(_installed_rule_cache[index]) != package_id:
             continue
-        _installed_rule_list.deselect_all()
-        _installed_rule_list.select(index)
-        _update_installed_rule_details(index)
+        target_rule_id = _extract_identifier(_installed_rule_cache[index])
+        break
+    if target_rule_id.is_empty():
         return
+    var root_item := _installed_rule_tree.get_root()
+    if root_item == null:
+        return
+    var target_item := _find_rule_tree_item_by_rule_id(root_item, target_rule_id)
+    if target_item == null:
+        return
+
+    target_item.select(0)
+
+func _find_rule_tree_item_by_rule_id(item: TreeItem, rule_id: String) -> TreeItem:
+    if item == null:
+        return null
+    var metadata := item.get_metadata(0)
+    if metadata != null and str(metadata) == rule_id:
+        return item
+
+    var child := item.get_first_child()
+    while child != null:
+        var found := _find_rule_tree_item_by_rule_id(child, rule_id)
+        if found != null:
+            return found
+        child = child.get_next()
+    return null
 
 func _find_rule_index_by_id(rule_id: String) -> int:
     for index in range(_installed_rule_cache.size()):

@@ -29,6 +29,42 @@ func describe_codex_execution() -> Dictionary:
 	return codex
 
 
+func describe_codex_preflight() -> Dictionary:
+	_ensure_dependencies()
+	var preflight := {
+		"status": "offline",
+		"cli_available": false,
+		"cli_path": "",
+		"login_ok": false,
+		"login_message": "未確認",
+		"schema_ready": false,
+		"schema_message": "未確認",
+		"checked_at_unix": Time.get_unix_time_from_system(),
+	}
+	var executable: Dictionary = _resolve_codex_executable()
+	if String(executable.get("status", "")) != "ok":
+		preflight["login_message"] = String(executable.get("message", "codex CLI が見つかりません。"))
+		preflight["schema_message"] = "CLI が見つからないため未確認"
+		return preflight
+
+	preflight["cli_available"] = true
+	preflight["cli_path"] = String(executable.get("path", ""))
+	var login_probe := _probe_codex_login_status(preflight["cli_path"])
+	preflight["login_ok"] = bool(login_probe.get("logged_in", false))
+	preflight["login_message"] = String(login_probe.get("message", "ログイン状態を確認できませんでした。"))
+	var schema_probe := _probe_codex_response_schema()
+	preflight["schema_ready"] = bool(schema_probe.get("ready", false))
+	preflight["schema_message"] = String(schema_probe.get("message", "schema 状態を確認できませんでした。"))
+
+	if not bool(preflight.get("login_ok", false)):
+		preflight["status"] = "offline"
+	elif not bool(preflight.get("schema_ready", false)):
+		preflight["status"] = "degraded"
+	else:
+		preflight["status"] = "ready"
+	return preflight
+
+
 func generate_proposal(player_request: String) -> Dictionary:
 	_ensure_dependencies()
 	var trimmed_request := player_request.strip_edges()
@@ -76,7 +112,7 @@ func generate_proposal(player_request: String) -> Dictionary:
 
 	if exit_code != 0:
 		var error_code: String = "codex_execution_failed"
-		if cli_output.to_lower().find("auth") != -1:
+		if _looks_like_codex_auth_error(cli_output):
 			error_code = "codex_auth_required"
 		return _error_result(error_code, "Codex proposal generation failed.", {
 			"exit_code": exit_code,
@@ -491,6 +527,106 @@ func _resolve_codex_executable() -> Dictionary:
 	return _error_result("codex_unavailable", "codex CLI が見つかりません。")
 
 
+func _probe_codex_login_status(executable_path: String) -> Dictionary:
+	var output: Array = []
+	var exit_code := OS.execute(executable_path, ["login", "status"], output, true)
+	var text := _join_output(output)
+	var lowered := text.to_lower()
+	var logged_in := exit_code == 0 and lowered.find("logged in") != -1
+	if logged_in:
+		return {
+			"status": "ok",
+			"logged_in": true,
+			"message": text if not text.is_empty() else "Logged in"
+		}
+	if not text.is_empty():
+		return {
+			"status": "error",
+			"logged_in": false,
+			"message": text
+		}
+	return {
+		"status": "error",
+		"logged_in": false,
+		"message": "codex login status が失敗しました (exit=%d)." % exit_code
+	}
+
+
+func _probe_codex_response_schema() -> Dictionary:
+	var schema_path := ProjectSettings.globalize_path(RULE_PROPOSAL_SCHEMA_PATH)
+	if not FileAccess.file_exists(schema_path):
+		return {
+			"status": "error",
+			"ready": false,
+			"message": "PoC4 proposal schema が見つかりません。"
+		}
+	var raw_schema := FileAccess.get_file_as_string(schema_path)
+	var parsed_schema: Variant = JSON.parse_string(raw_schema)
+	if not (parsed_schema is Dictionary):
+		return {
+			"status": "error",
+			"ready": false,
+			"message": "PoC4 proposal schema が JSON object として読めません。"
+		}
+	var findings: Array[String] = []
+	_collect_response_schema_findings(parsed_schema, [], findings)
+	if not findings.is_empty():
+		return {
+			"status": "error",
+			"ready": false,
+			"message": findings[0]
+		}
+	return {
+		"status": "ok",
+		"ready": true,
+		"message": "schema ready"
+	}
+
+
+func _collect_response_schema_findings(schema_variant: Variant, trail: Array, findings: Array[String]) -> void:
+	if not (schema_variant is Dictionary):
+		return
+	var schema: Dictionary = schema_variant
+	if _schema_acts_like_object(schema):
+		var properties_variant: Variant = schema.get("properties", null)
+		if properties_variant is Dictionary:
+			var properties: Dictionary = properties_variant
+			var required_variant: Variant = schema.get("required", [])
+			var required: Array = required_variant if required_variant is Array else []
+			var missing: Array[String] = []
+			for key_variant in properties.keys():
+				var key := String(key_variant)
+				if not required.has(key):
+					missing.append(key)
+			if not missing.is_empty():
+				findings.append("%s missing required keys: %s" % [_schema_trail(trail), ", ".join(missing)])
+				return
+			for key_variant in properties.keys():
+				var next_trail := trail.duplicate()
+				next_trail.append("properties")
+				next_trail.append(String(key_variant))
+				_collect_response_schema_findings(properties.get(key_variant, null), next_trail, findings)
+	if findings.is_empty() and schema.has("items"):
+		var items_trail := trail.duplicate()
+		items_trail.append("items")
+		_collect_response_schema_findings(schema.get("items", null), items_trail, findings)
+
+
+func _schema_acts_like_object(schema: Dictionary) -> bool:
+	var schema_type: Variant = schema.get("type", null)
+	if schema_type is String:
+		return String(schema_type) == "object"
+	if schema_type is Array:
+		for entry in schema_type:
+			if String(entry) == "object":
+				return true
+	return false
+
+
+func _schema_trail(trail: Array) -> String:
+	return "<root>" if trail.is_empty() else ".".join(trail)
+
+
 func _ensure_runtime_directory() -> Dictionary:
 	var absolute_path := ProjectSettings.globalize_path(WORKSPACE_RUNTIME_DIR)
 	if DirAccess.dir_exists_absolute(absolute_path):
@@ -640,6 +776,25 @@ func _count_non_empty_output_lines(cli_output: String) -> int:
 		if not String(raw_line).strip_edges().is_empty():
 			count += 1
 	return count
+
+
+func _looks_like_codex_auth_error(cli_output: String) -> bool:
+	var lowered := cli_output.to_lower()
+	for needle in [
+		"authentication",
+		"auth required",
+		"authorization",
+		"not logged in",
+		"login required",
+		"please login",
+		"please log in",
+		"unauthorized",
+		"invalid_api_key",
+		"missing_api_key"
+	]:
+		if lowered.find(needle) != -1:
+			return true
+	return false
 
 
 func _error_result(error_code: String, message: String, details: Dictionary = {}, codex: Dictionary = {}) -> Dictionary:

@@ -6,6 +6,7 @@ const GM_SCREEN_OVERLAY_SCRIPT := preload("res://scripts/game/gm_screen_overlay.
 const RULE_TREE_OVERLAY_SCRIPT := preload("res://scripts/game/rule_tree_overlay.gd")
 const CLI_INSPECT_OVERLAY_SCRIPT := preload("res://scripts/game/cli_inspect_overlay.gd")
 const COLLAPSE_WATCHER_SCRIPT := preload("res://scripts/game/collapse_watcher.gd")
+const CODEX_PREFLIGHT_INDICATOR_SCRIPT := preload("res://scripts/ui/codex_preflight_indicator.gd")
 const AUTO_OPEN_COOLDOWN_SECONDS: float = 8.0
 
 @onready var world_host: Node = $WorldHost
@@ -14,6 +15,8 @@ const AUTO_OPEN_COOLDOWN_SECONDS: float = 8.0
 var _world_state: Node = null
 var _active_world: Node = null
 var _active_mode: String = ""
+var _status_layer: CanvasLayer = null
+var _codex_preflight_indicator: Control = null
 var _gm_screen: Control = null
 var _rule_tree_overlay: Control = null
 var _cli_inspect_overlay: Control = null
@@ -29,6 +32,7 @@ func _ready() -> void:
 	_collapse_watcher = COLLAPSE_WATCHER_SCRIPT.new()
 	_collapse_watcher.collapse_signals_appeared.connect(_on_collapse_signals_appeared)
 	add_child(_collapse_watcher)
+	_ensure_codex_preflight_indicator()
 	_switch_world(_desired_world_mode())
 
 
@@ -63,6 +67,17 @@ func _switch_world(world_mode: String) -> void:
 	world_host.add_child(_active_world)
 	_active_mode = world_mode
 	_refresh_world_overlay_state()
+
+
+func _ensure_codex_preflight_indicator() -> void:
+	if _status_layer == null:
+		_status_layer = CanvasLayer.new()
+		_status_layer.name = "StatusLayer"
+		_status_layer.layer = 5
+		add_child(_status_layer)
+	if _codex_preflight_indicator == null:
+		_codex_preflight_indicator = CODEX_PREFLIGHT_INDICATOR_SCRIPT.new()
+		_status_layer.add_child(_codex_preflight_indicator)
 
 
 func _on_gm_interaction_requested() -> void:

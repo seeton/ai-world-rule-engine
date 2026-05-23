@@ -64,6 +64,37 @@ func _initialize() -> void:
 						exit_code = 1
 						failure_message = "sample tooltip missing human summary lines: %s" % tooltip
 					else:
+						var tooltip_popup := _find_tooltip_popup(view)
+						if tooltip_popup == null:
+							exit_code = 1
+							failure_message = "graph view missing tooltip popup"
+						else:
+							view.set("_hover_rule_id", sample_rule_id)
+							var press := InputEventMouseButton.new()
+							press.button_index = MOUSE_BUTTON_LEFT
+							press.pressed = true
+							press.position = Vector2(128.0, 96.0)
+							view._gui_input(press)
+							if not bool(view.get("_is_panning")):
+								exit_code = 1
+								failure_message = "graph view did not enter panning mode after drag start"
+							else:
+								var held_motion := InputEventMouseMotion.new()
+								held_motion.position = Vector2(140.0, 108.0)
+								held_motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+								view._gui_input(held_motion)
+								if not bool(view.get("_is_panning")):
+									exit_code = 1
+									failure_message = "graph view stopped panning while drag button was still held"
+								else:
+									var release_lost_motion := InputEventMouseMotion.new()
+									release_lost_motion.position = Vector2(156.0, 120.0)
+									release_lost_motion.button_mask = 0
+									view._gui_input(release_lost_motion)
+									if bool(view.get("_is_panning")):
+										exit_code = 1
+										failure_message = "graph view kept panning after drag buttons were released"
+					if exit_code == 0:
 						var disable_result: Dictionary = world_state.set_rule_enabled(FOUNDATION_RULE_ID, false)
 						if String(disable_result.get("status", "")) != "disabled":
 							exit_code = 1
@@ -121,3 +152,10 @@ func _colors_match(left: Color, right: Color) -> bool:
 		and abs(left.g - right.g) < 0.001 \
 		and abs(left.b - right.b) < 0.001 \
 		and abs(left.a - right.a) < 0.001
+
+
+func _find_tooltip_popup(view: Control) -> PopupPanel:
+	for child in view.get_children():
+		if child is PopupPanel:
+			return child as PopupPanel
+	return null

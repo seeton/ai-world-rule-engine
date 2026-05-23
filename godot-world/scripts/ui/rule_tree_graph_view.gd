@@ -14,6 +14,7 @@ const MIN_ZOOM: float = 0.45
 const MAX_ZOOM: float = 1.7
 const ZOOM_STEP: float = 0.1
 const GRID_SPACING: float = 88.0
+const PAN_BUTTON_MASK := MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT
 
 const COLOR_BG_TOP := Color(0.07, 0.10, 0.16, 1.0)
 const COLOR_BG_BOTTOM := Color(0.03, 0.05, 0.09, 1.0)
@@ -635,6 +636,7 @@ func _gui_input(event: InputEvent) -> void:
 				_is_panning = true
 				_pan_start_mouse = mb.position
 				_pan_start_value = _pan
+				_hide_hover_tooltip()
 			else:
 				_is_panning = false
 			accept_event()
@@ -644,18 +646,24 @@ func _gui_input(event: InputEvent) -> void:
 				_is_panning = true
 				_pan_start_mouse = mb.position
 				_pan_start_value = _pan
+				_hide_hover_tooltip()
 			else:
 				_is_panning = false
 			accept_event()
 			return
 	elif event is InputEventMouseMotion:
-		if not _hover_rule_id.is_empty():
-			_show_hover_tooltip(_hover_rule_id)
 		if _is_panning:
 			var motion := event as InputEventMouseMotion
+			if (motion.button_mask & PAN_BUTTON_MASK) == 0:
+				_is_panning = false
+				return
+			_hide_hover_tooltip()
 			_pan = _pan_start_value + (motion.position - _pan_start_mouse)
 			_apply_transform()
 			accept_event()
+			return
+		if not _hover_rule_id.is_empty():
+			_show_hover_tooltip(_hover_rule_id)
 
 
 func _zoom_at(mouse_pos: Vector2, delta: float) -> void:
@@ -753,6 +761,9 @@ func get_node_tooltip(rule_id: String) -> String:
 func _show_hover_tooltip(rule_id: String) -> void:
 	if _tooltip_popup == null:
 		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
 	var tooltip_text := get_node_tooltip(rule_id)
 	if tooltip_text.is_empty():
 		_hide_hover_tooltip()
@@ -760,8 +771,8 @@ func _show_hover_tooltip(rule_id: String) -> void:
 	(_tooltip_popup as Object).call(
 		"show_tooltip",
 		tooltip_text,
-		get_viewport().get_mouse_position(),
-		get_viewport_rect().size
+		viewport.get_mouse_position(),
+		viewport.get_visible_rect().size
 	)
 
 

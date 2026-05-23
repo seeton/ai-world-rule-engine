@@ -1466,7 +1466,7 @@ func _on_rule_tree_selected() -> void:
     var selected_item := _installed_rule_tree.get_selected()
     if selected_item == null:
         return
-    var rule_id_variant := selected_item.get_metadata(0)
+    var rule_id_variant: Variant = selected_item.get_metadata(0)
     if rule_id_variant == null:
         return
     var rule_index := _find_rule_index_by_id(str(rule_id_variant))
@@ -1575,7 +1575,7 @@ func _select_first_rule_for_package(package_id: String) -> void:
 func _find_rule_tree_item_by_rule_id(item: TreeItem, rule_id: String) -> TreeItem:
     if item == null:
         return null
-    var metadata := item.get_metadata(0)
+    var metadata: Variant = item.get_metadata(0)
     if metadata != null and str(metadata) == rule_id:
         return item
 
@@ -1829,6 +1829,21 @@ func _summarize_rule_dependency_status(rule_id: String, dependency_model: Dictio
         parts.append("必要: %s" % _join_values(unresolved_required_kinds))
 
     return _join_values(parts) if not parts.is_empty() else "依存メタデータなし"
+
+func _format_rule_reference_list(rule_ids: Array, dependency_model: Dictionary) -> String:
+    var rules_by_id: Dictionary = dependency_model.get("rules_by_id", {})
+    var pieces: Array[String] = []
+    for rule_id_variant in rule_ids:
+        var rule_id := str(rule_id_variant)
+        if rule_id.is_empty():
+            continue
+        var rule_data: Dictionary = rules_by_id.get(rule_id, {})
+        var rule_name := String(rule_data.get("name", "")).strip_edges()
+        if rule_name.is_empty() or rule_name == rule_id:
+            pieces.append(rule_id)
+        else:
+            pieces.append("%s (%s)" % [rule_name, rule_id])
+    return _join_values(pieces)
 
 func _build_rule_tree_tooltip_data(rule_id: String, dependency_model: Dictionary) -> Dictionary:
     var rules_by_id: Dictionary = dependency_model.get("rules_by_id", {})

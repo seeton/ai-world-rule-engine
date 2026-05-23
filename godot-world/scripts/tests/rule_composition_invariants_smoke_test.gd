@@ -214,6 +214,7 @@ func _initialize() -> void:
 						"rule_id": "issue_86.bad_dependency.rule",
 						"rule_type": "runtime_rule",
 						"name": "Issue 86 Bad Dependency Rule",
+						"player_description": "Synthetic smoke-test rule used to verify missing-dependency rejection.",
 						"requires_rule_kinds": [],
 						"provides_rule_kinds": ["issue_86.bad_dependency.kind"]
 					}

@@ -39,6 +39,35 @@ function collectEnumLikeNodes(schema, findings = [], trail = []) {
   return findings;
 }
 
+function collectObjectsMissingRequiredProperties(schema, findings = [], trail = []) {
+  if (!schema || typeof schema !== "object") {
+    return findings;
+  }
+
+  const expectedTypes = Array.isArray(schema.type) ? schema.type : [schema.type];
+  const actsLikeObject = expectedTypes.includes("object");
+  if (actsLikeObject && schema.properties && typeof schema.properties === "object") {
+    const propertyKeys = Object.keys(schema.properties);
+    const requiredKeys = Array.isArray(schema.required) ? schema.required : [];
+    const missingKeys = propertyKeys.filter((key) => !requiredKeys.includes(key));
+    if (missingKeys.length > 0) {
+      findings.push(`${trail.join(".") || "<root>"} missing required keys: ${missingKeys.join(", ")}`);
+    }
+  }
+
+  if (schema.properties && typeof schema.properties === "object") {
+    for (const [key, value] of Object.entries(schema.properties)) {
+      collectObjectsMissingRequiredProperties(value, findings, [...trail, "properties", key]);
+    }
+  }
+
+  if (schema.items) {
+    collectObjectsMissingRequiredProperties(schema.items, findings, [...trail, "items"]);
+  }
+
+  return findings;
+}
+
 function validateAgainstSchema(value, schema, location = "$", problems = []) {
   const expectedTypes = schema.type;
   if (expectedTypes !== undefined) {
@@ -138,12 +167,60 @@ function validProposal() {
           default: 0,
           min: 0,
           max: 100,
+          ui_group: null,
+          rule_id: null,
+          rule_type: null,
+          player_description: null,
+          event: null,
+          target_rule: null,
+          target_stat: null,
+          watch_stat: null,
+          delta: null,
+          delta_source_field: null,
+          delta_per_point: null,
+          interval_seconds: null,
+          environment_key: null,
+          clamp_to_stat_bounds: null,
+          binding_id: null,
+          relation_id: null,
+          source: null,
+          target: null,
+          design_prompt: null,
+          comparator: null,
+          value: null,
+          effects: null,
+          safety_notes: null,
         },
         {
           op: "upsert_rule",
+          stat_id: null,
+          value_type: null,
+          default: null,
+          min: null,
+          max: null,
+          ui_group: null,
           rule_id: "hunger.rises_slowly",
           rule_type: "designer_review_required",
           player_description: "空腹がゆっくり増えて、放っておくと食事が必要になるルールです。",
+          event: null,
+          target_rule: null,
+          target_stat: null,
+          watch_stat: null,
+          delta: null,
+          delta_source_field: null,
+          delta_per_point: null,
+          interval_seconds: null,
+          environment_key: null,
+          clamp_to_stat_bounds: null,
+          binding_id: null,
+          relation_id: null,
+          source: null,
+          target: null,
+          design_prompt: null,
+          comparator: null,
+          value: null,
+          effects: null,
+          safety_notes: null,
         },
       ],
     },
@@ -454,6 +531,13 @@ test("Codex rule proposal schema exists and has a strict root contract", () => {
   assert.equal(schema.properties.schema_version.const, "codex_rule_proposal_v1");
 });
 
+test("proposal schema keeps object required sets codex response-format compatible", () => {
+  const schema = readJson(proposalSchemaPath);
+  const findings = collectObjectsMissingRequiredProperties(schema);
+
+  assert.deepEqual(findings, []);
+});
+
 test("proposal patch operation enum stays aligned with rule package patch operations", () => {
   const proposalSchema = readJson(proposalSchemaPath);
   const packageSchema = readJson(packageSchemaPath);
@@ -499,6 +583,15 @@ test("proposal schema allows player_description on upsert_rule", () => {
     Object.hasOwn(schema.properties.patch.properties.operations.items.properties, "player_description"),
     true
   );
+});
+
+test("workflow does not classify every 'author' string as an auth failure", () => {
+  const workflowPath = path.join(repoRoot, "godot-world", "scripts", "integration", "rule_proposal_workflow.gd");
+  const workflowSource = fs.readFileSync(workflowPath, "utf8");
+
+  assert.equal(workflowSource.includes('if cli_output.toLowerCase().includes("auth")'), false);
+  assert.equal(workflowSource.includes('if cli_output.to_lower().find("auth") != -1:'), false);
+  assert.equal(workflowSource.includes("func _looks_like_codex_auth_error(cli_output: String) -> bool:"), true);
 });
 
 test("proposal validation rejects unexpected root properties", () => {

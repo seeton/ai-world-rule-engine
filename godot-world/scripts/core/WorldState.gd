@@ -7,6 +7,7 @@ const RulePackageRepositoryScript = preload("res://scripts/integration/rule_pack
 const RuleCompilerScript = preload("res://scripts/integration/rule_compiler.gd")
 const RuntimeRulePatchCompilerScript = preload("res://scripts/integration/runtime_rule_patch_compiler.gd")
 const RULE_PACKAGE_SCHEMA_VERSION := "rule_package_v1"
+const CODEX_PREFLIGHT_CACHE_MSEC := 30000
 
 var _runtime = null
 var _rule_package_repository = null
@@ -19,6 +20,8 @@ var _proposal_thread: Thread = null
 var _proposal_request_serial: int = 0
 var _proposal_thread_request_serial: int = 0
 var _proposal_thread_task_text: String = ""
+var _codex_preflight_cache: Dictionary = {}
+var _codex_preflight_checked_at_msec: int = -CODEX_PREFLIGHT_CACHE_MSEC
 
 static var _detached_proposal_threads: Array = []
 
@@ -204,6 +207,22 @@ func get_pending_rule_proposal() -> Dictionary:
     _ensure_runtime()
     _poll_pending_proposal_thread()
     return _runtime.get_pending_poc4_proposal_state()
+
+
+func get_codex_preflight_status(force_refresh: bool = false) -> Dictionary:
+    _ensure_runtime()
+    _ensure_workflow()
+    _poll_pending_proposal_thread()
+    var now_msec := Time.get_ticks_msec()
+    if force_refresh or _codex_preflight_cache.is_empty() or now_msec - _codex_preflight_checked_at_msec >= CODEX_PREFLIGHT_CACHE_MSEC:
+        _codex_preflight_cache = _proposal_workflow.describe_codex_preflight()
+        _codex_preflight_checked_at_msec = now_msec
+
+    var snapshot: Dictionary = _codex_preflight_cache.duplicate(true)
+    snapshot["checked_at_msec"] = _codex_preflight_checked_at_msec
+    snapshot["recent"] = _build_codex_recent_status()
+    snapshot["overall_status"] = _derive_codex_overall_status(snapshot)
+    return snapshot
 
 
 func update_pending_rule_review(reviewed: bool, metadata: Dictionary = {}) -> Dictionary:
@@ -500,6 +519,34 @@ func _ensure_runtime() -> void:
 func _ensure_workflow() -> void:
     if _proposal_workflow == null:
         _proposal_workflow = RuleProposalWorkflowScript.new()
+
+
+func _build_codex_recent_status() -> Dictionary:
+    var poc4_state: Dictionary = _runtime.get_pending_poc4_proposal_state()
+    var execution: Dictionary = poc4_state.get("execution", {})
+    var summary: Dictionary = poc4_state.get("summary", {})
+    var last_error: Dictionary = poc4_state.get("last_error", {})
+    return {
+        "status": String(execution.get("status", "idle")),
+        "phase": String(execution.get("phase", "")),
+        "message": String(last_error.get("message", execution.get("message", ""))),
+        "error_code": String(last_error.get("error_code", "")),
+        "package_id": String(summary.get("package_id", "")),
+        "request_text": String(poc4_state.get("last_request_text", "")),
+    }
+
+
+func _derive_codex_overall_status(snapshot: Dictionary) -> String:
+    var preflight_status := String(snapshot.get("status", "offline"))
+    if preflight_status != "ready":
+        return preflight_status
+    var recent: Dictionary = snapshot.get("recent", {})
+    var recent_status := String(recent.get("status", "idle"))
+    if recent_status == "error":
+        return "degraded"
+    if recent_status == "running":
+        return "running"
+    return "ready"
 
 
 func _gm_response_for_proposal_result(result: Dictionary) -> String:

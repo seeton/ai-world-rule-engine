@@ -23,6 +23,8 @@ Each package is a JSON document with:
 
 The `patch` block is intentionally limited to structured operations. This keeps the AI rule compiler safe and reviewable.
 
+When `patch.operations` contains `upsert_rule`, that rule must also include `player_description`. This is the stored player-facing "これは何？" explanation and is treated as part of the canonical rule definition.
+
 ## Rule model invariants
 
 Rule packages eventually compile into the runtime's shared rule model, so package authors should follow these invariants:
@@ -159,6 +161,7 @@ The world-order composition contract that sits on top of this split — DAG shap
 - `upsert_stat` compiles into baseline runtime effects with defaults and bounds
 - `upsert_rule` with `rule_type = "tick_delta"` compiles into `value_per_second`
 - `upsert_rule` with `rule_type = "runtime_rule"` compiles into explicit runtime rules, including `requires_rule_kinds` / `provides_rule_kinds` and `install_actions`
+- every `upsert_rule` must include `player_description` so the player can immediately understand what the rule is for
 - `package_dependencies` are installed before the requesting package so higher-order packages can rely on shared defaults without re-owning them
 - event-driven, threshold, and environment operations are preserved as `deferred_operations` for future core support
 

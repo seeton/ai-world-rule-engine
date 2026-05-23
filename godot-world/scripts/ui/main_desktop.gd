@@ -4,6 +4,26 @@ signal close_requested
 
 const GMDialogScript = preload("res://scripts/ui/gm_dialog.gd")
 const WorldOpDispatcherScript = preload("res://scripts/world_ops/dispatcher.gd")
+const RuleDescriptionFormatterScript = preload("res://scripts/ui/rule_description_formatter.gd")
+const RuleTooltipThemeScript = preload("res://scripts/ui/rule_tooltip_theme.gd")
+const RuleTooltipTreeScript = preload("res://scripts/ui/rule_tooltip_tree.gd")
+const FALLBACK_TEMPLATES: Array = [
+    {
+        "id": "starter-farming",
+        "name": "農作業のたたき台",
+        "description": "待機中の村人に簡単な農作業ルーチンを足します。"
+    },
+    {
+        "id": "night-watch",
+        "name": "夜警",
+        "description": "日没後に警備巡回を入れます。"
+    },
+    {
+        "id": "shared-kitchen",
+        "name": "共同台所",
+        "description": "共同の食事準備と片付けを導入します。"
+    }
+]
 const RulePackageTileScript = preload("res://scripts/ui/rule_package_tile.gd")
 const RulePackageUiDataScript = preload("res://scripts/ui/rule_package_ui_data.gd")
 const PACKAGES_TAB_INSTALLED := "installed"
@@ -73,6 +93,10 @@ var _approve_proposal_button: Button
 var _install_proposal_button: Button
 var _tick_amount: SpinBox
 var _installed_rule_tree: Tree
+var _installed_package_list: ItemList
+var _package_enable_button: Button
+var _package_disable_button: Button
+var _installed_package_details_view: TextEdit
 var _packages_tab_uninstalled_button: Button
 var _packages_tab_installed_button: Button
 var _packages_scroll: ScrollContainer
@@ -100,6 +124,7 @@ var _approved_proposal_text := ""
 var _current_proposal_review: Dictionary = {}
 var _is_updating_proposal_editor := false
 var _installed_package_cache: Array = []
+var _installed_rule_cache: Array = []
 var _available_package_cache: Array = []
 var _snapshot_cache: Dictionary = {}
 var _poc4_state_cache: Dictionary = {}
@@ -513,8 +538,40 @@ func _build_installed_rules_panel() -> Control:
     body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
     var package_label := Label.new()
-    package_label.text = "パッケージ"
+    package_label.text = "導入済みパッケージ"
     body.add_child(package_label)
+
+    _installed_package_list = ItemList.new()
+    _installed_package_list.custom_minimum_size = Vector2(0, 76)
+    _installed_package_list.select_mode = ItemList.SELECT_SINGLE
+    _installed_package_list.item_selected.connect(_on_installed_package_selected)
+    body.add_child(_installed_package_list)
+
+    var package_action_row := HBoxContainer.new()
+    package_action_row.add_theme_constant_override("separation", 8)
+    body.add_child(package_action_row)
+
+    _package_enable_button = Button.new()
+    _package_enable_button.text = "選択パッケージを有効化"
+    _package_enable_button.disabled = true
+    _package_enable_button.pressed.connect(_on_package_enable_pressed)
+    package_action_row.add_child(_package_enable_button)
+
+    _package_disable_button = Button.new()
+    _package_disable_button.text = "選択パッケージを無効化"
+    _package_disable_button.disabled = true
+    _package_disable_button.pressed.connect(_on_package_disable_pressed)
+    package_action_row.add_child(_package_disable_button)
+
+    _installed_package_details_view = TextEdit.new()
+    _installed_package_details_view.editable = false
+    _installed_package_details_view.custom_minimum_size = Vector2(0, 88)
+    _installed_package_details_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    body.add_child(_installed_package_details_view)
+
+    var tile_label := Label.new()
+    tile_label.text = "パッケージタイル"
+    body.add_child(tile_label)
 
     var tab_row := HBoxContainer.new()
     tab_row.add_theme_constant_override("separation", 6)
@@ -566,6 +623,18 @@ func _build_installed_rules_panel() -> Control:
     _packages_grid.add_theme_constant_override("v_separation", 10)
     _packages_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroll_inner.add_child(_packages_grid)
+
+    _installed_rule_tree = RuleTooltipTreeScript.new()
+    _installed_rule_tree.theme = RuleTooltipThemeScript.build_theme()
+    _installed_rule_tree.columns = 2
+    _installed_rule_tree.column_titles_visible = true
+    _installed_rule_tree.hide_root = true
+    _installed_rule_tree.custom_minimum_size = Vector2(0, 132)
+    _installed_rule_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _installed_rule_tree.set_column_title(0, "ルール")
+    _installed_rule_tree.set_column_title(1, "親 / 依存状態")
+    _installed_rule_tree.item_selected.connect(_on_rule_tree_selected)
+    body.add_child(_installed_rule_tree)
 
     return panel
 
@@ -657,6 +726,7 @@ func _refresh_all() -> void:
     _proposal_cache = _extract_task_proposals(_latest_task_result)
     _refresh_poc4_state()
     _installed_package_cache = _extract_installed_packages(_snapshot_cache)
+    _installed_rule_cache = _extract_installed_rules(_snapshot_cache)
     _available_package_cache = _fetch_available_packages()
     _update_proposal_panel()
     _update_installed_rules_panel()
@@ -995,7 +1065,27 @@ func _update_proposal_views() -> void:
     )
 
 func _update_installed_rules_panel() -> void:
+    if _installed_package_list != null:
+        _installed_package_list.clear()
+        for package_data in _installed_package_cache:
+            _installed_package_list.add_item(_format_package_list_label(package_data))
+
+    var has_packages := not _installed_package_cache.is_empty()
+    if _package_enable_button != null:
+        _package_enable_button.disabled = true
+    if _package_disable_button != null:
+        _package_disable_button.disabled = true
+    if _installed_package_details_view != null:
+        if not has_packages:
+            _installed_package_details_view.text = "まだパッケージ由来の導入ルールはありません。package_id 付きのルールを導入すると、ここから一括ON/OFFできます。"
+        elif _installed_package_list != null:
+            _installed_package_list.select(0)
+            _update_installed_package_details(0)
+
     _refresh_packages_grid()
+    _update_installed_rule_tree()
+    if has_packages:
+        _select_first_rule_for_package(_extract_identifier(_installed_package_cache[0]))
 
 func _update_world_state_view() -> void:
     if _snapshot_cache.is_empty():
@@ -1361,6 +1451,35 @@ func _on_tick_pressed() -> void:
     _refresh_all()
     _append_log("フォールバックシミュレーションを進めました。", result)
 
+func _on_installed_package_selected(index: int) -> void:
+    _update_installed_package_details(index)
+
+func _on_package_enable_pressed() -> void:
+    _set_selected_package_enabled(true)
+
+func _on_package_disable_pressed() -> void:
+    _set_selected_package_enabled(false)
+
+func _on_rule_tree_selected() -> void:
+    if _installed_rule_tree == null or _installed_package_list == null:
+        return
+    var selected_item := _installed_rule_tree.get_selected()
+    if selected_item == null:
+        return
+    var rule_id_variant := selected_item.get_metadata(0)
+    if rule_id_variant == null:
+        return
+    var rule_index := _find_rule_index_by_id(str(rule_id_variant))
+    if rule_index == -1:
+        return
+    var package_id := _extract_rule_package_id(_installed_rule_cache[rule_index])
+    var package_index := _find_package_index_by_id(package_id)
+    if package_index == -1:
+        return
+    _installed_package_list.deselect_all()
+    _installed_package_list.select(package_index)
+    _update_installed_package_details(package_index)
+
 # Assumption: the live simulation autoload is available as /root/WorldState.
 func _extract_installed_rules(snapshot: Dictionary) -> Array:
     var raw_rules = snapshot.get("installed_rules", [])
@@ -1427,6 +1546,331 @@ func _format_package_state_label(state: String) -> String:
         _:
             return "無効"
 
+func _find_package_index_by_id(package_id: String) -> int:
+    for index in range(_installed_package_cache.size()):
+        if _extract_identifier(_installed_package_cache[index]) == package_id:
+            return index
+    return -1
+
+func _select_first_rule_for_package(package_id: String) -> void:
+    if package_id.is_empty() or _installed_rule_tree == null:
+        return
+    var target_rule_id := ""
+    for index in range(_installed_rule_cache.size()):
+        if _extract_rule_package_id(_installed_rule_cache[index]) != package_id:
+            continue
+        target_rule_id = _extract_identifier(_installed_rule_cache[index])
+        break
+    if target_rule_id.is_empty():
+        return
+    var root_item := _installed_rule_tree.get_root()
+    if root_item == null:
+        return
+    var target_item := _find_rule_tree_item_by_rule_id(root_item, target_rule_id)
+    if target_item == null:
+        return
+
+    target_item.select(0)
+
+func _find_rule_tree_item_by_rule_id(item: TreeItem, rule_id: String) -> TreeItem:
+    if item == null:
+        return null
+    var metadata := item.get_metadata(0)
+    if metadata != null and str(metadata) == rule_id:
+        return item
+
+    var child := item.get_first_child()
+    while child != null:
+        var found := _find_rule_tree_item_by_rule_id(child, rule_id)
+        if found != null:
+            return found
+        child = child.get_next()
+    return null
+
+func _find_rule_index_by_id(rule_id: String) -> int:
+    for index in range(_installed_rule_cache.size()):
+        if _extract_identifier(_installed_rule_cache[index]) == rule_id:
+            return index
+    return -1
+
+func _update_installed_package_details(index: int) -> void:
+    if _installed_package_details_view == null:
+        return
+    if index < 0 or index >= _installed_package_cache.size():
+        _installed_package_details_view.text = ""
+        if _package_enable_button != null:
+            _package_enable_button.disabled = true
+        if _package_disable_button != null:
+            _package_disable_button.disabled = true
+        return
+
+    var package_data = _installed_package_cache[index]
+    var package_id := _extract_identifier(package_data)
+    var package_state := str(package_data.get("state", "disabled"))
+    var lines: Array[String] = []
+    lines.append("パッケージ: %s" % _format_package_list_label(package_data))
+    lines.append("状態: %s" % _format_package_state_label(package_state))
+    lines.append("ルール数: %d (有効 %d / 無効 %d)" % [
+        int(package_data.get("rule_count", 0)),
+        int(package_data.get("enabled_rule_count", 0)),
+        int(package_data.get("disabled_rule_count", 0))
+    ])
+    var version := str(package_data.get("version", ""))
+    if not version.is_empty():
+        lines.append("バージョン: %s" % version)
+    var source_repo := str(package_data.get("source_repo", ""))
+    if not source_repo.is_empty():
+        lines.append("ソース: %s" % source_repo)
+    var source_ref := str(package_data.get("source_ref", ""))
+    if not source_ref.is_empty():
+        lines.append("参照: %s" % source_ref)
+    var rule_ids: Array = package_data.get("rule_ids", [])
+    if not rule_ids.is_empty():
+        lines.append("対象ルール: %s" % _join_values(rule_ids))
+    lines.append("")
+    lines.append("生JSON:")
+    lines.append(JSON.stringify(package_data, "\t"))
+    _installed_package_details_view.text = "\n".join(lines)
+
+    if _package_enable_button != null:
+        _package_enable_button.disabled = package_state == "enabled"
+    if _package_disable_button != null:
+        _package_disable_button.disabled = package_state == "disabled"
+    _select_first_rule_for_package(package_id)
+
+func _update_installed_rule_tree() -> void:
+    if _installed_rule_tree == null:
+        return
+
+    _installed_rule_tree.clear()
+    var root_item := _installed_rule_tree.create_item()
+    if _installed_rule_cache.is_empty():
+        var empty_item := _installed_rule_tree.create_item(root_item)
+        empty_item.set_text(0, "導入済みルールなし")
+        empty_item.set_text(1, "テンプレートを追加すると依存ツリーが表示されます。")
+        return
+
+    var dependency_model := _build_rule_dependency_model()
+    var displayed_rule_ids: Array = []
+
+    var root_rule_ids: Array = dependency_model.get("root_rule_ids", [])
+    if not root_rule_ids.is_empty():
+        var resolved_group := _installed_rule_tree.create_item(root_item)
+        resolved_group.set_text(0, "解決済みの根")
+        resolved_group.set_text(1, "解決済みの親がないルール")
+        for rule_id in root_rule_ids:
+            _add_rule_tree_item(resolved_group, str(rule_id), dependency_model, [], displayed_rule_ids)
+
+    var unresolved_rule_ids: Array = dependency_model.get("unresolved_rule_ids", [])
+    if not unresolved_rule_ids.is_empty():
+        var unresolved_group := _installed_rule_tree.create_item(root_item)
+        unresolved_group.set_text(0, "親リンク待ち")
+        unresolved_group.set_text(1, "必要な親種別がまだ解決されていません")
+        for rule_id in unresolved_rule_ids:
+            _add_rule_tree_item(unresolved_group, str(rule_id), dependency_model, [], displayed_rule_ids)
+
+    var overflow_group: TreeItem = null
+    var rule_ids: Array = dependency_model.get("rule_ids", [])
+    for rule_id in rule_ids:
+        if displayed_rule_ids.has(rule_id):
+            continue
+        if overflow_group == null:
+            overflow_group = _installed_rule_tree.create_item(root_item)
+            overflow_group.set_text(0, "追加の連結ルール")
+            overflow_group.set_text(1, "隠れた依存循環を避けるためここに表示します")
+        _add_rule_tree_item(overflow_group, str(rule_id), dependency_model, [], displayed_rule_ids)
+
+func _build_rule_dependency_model() -> Dictionary:
+    var rules_by_id: Dictionary = {}
+    var rule_ids: Array = []
+    for rule_data in _installed_rule_cache:
+        if not (rule_data is Dictionary):
+            continue
+        var rule_id := _extract_identifier(rule_data)
+        if rules_by_id.has(rule_id):
+            continue
+        rules_by_id[rule_id] = rule_data
+        rule_ids.append(rule_id)
+    rule_ids.sort()
+
+    var children_by_parent: Dictionary = {}
+    var providers_by_kind: Dictionary = {}
+    var resolved_parents_by_rule: Dictionary = {}
+    var required_kinds_by_rule: Dictionary = {}
+    var provided_kinds_by_rule: Dictionary = {}
+
+    for rule_id in rule_ids:
+        var rule_data: Dictionary = rules_by_id[rule_id]
+        var resolved_parent_ids: Array = []
+        for parent_id in _extract_rule_parent_ids(rule_data):
+            if rules_by_id.has(parent_id) and not resolved_parent_ids.has(parent_id):
+                resolved_parent_ids.append(parent_id)
+                if not children_by_parent.has(parent_id):
+                    children_by_parent[parent_id] = []
+                var child_ids: Array = children_by_parent[parent_id]
+                if not child_ids.has(rule_id):
+                    child_ids.append(rule_id)
+                children_by_parent[parent_id] = child_ids
+        resolved_parents_by_rule[rule_id] = resolved_parent_ids
+
+        var required_kinds := _extract_rule_required_kinds(rule_data)
+        required_kinds_by_rule[rule_id] = required_kinds
+
+        var provided_kinds := _extract_rule_provided_kinds(rule_data)
+        provided_kinds_by_rule[rule_id] = provided_kinds
+        for provided_kind in provided_kinds:
+            if not providers_by_kind.has(provided_kind):
+                providers_by_kind[provided_kind] = []
+            var provider_ids: Array = providers_by_kind[provided_kind]
+            if not provider_ids.has(rule_id):
+                provider_ids.append(rule_id)
+            providers_by_kind[provided_kind] = provider_ids
+
+    for parent_id in children_by_parent.keys():
+        var child_ids: Array = children_by_parent[parent_id]
+        child_ids.sort()
+        children_by_parent[parent_id] = child_ids
+    for provided_kind in providers_by_kind.keys():
+        var provider_ids: Array = providers_by_kind[provided_kind]
+        provider_ids.sort()
+        providers_by_kind[provided_kind] = provider_ids
+
+    var root_rule_ids: Array = []
+    var unresolved_rule_ids: Array = []
+    for rule_id in rule_ids:
+        var resolved_parent_ids: Array = resolved_parents_by_rule.get(rule_id, [])
+        var required_kinds: Array = required_kinds_by_rule.get(rule_id, [])
+        if resolved_parent_ids.is_empty():
+            if required_kinds.is_empty():
+                root_rule_ids.append(rule_id)
+            else:
+                unresolved_rule_ids.append(rule_id)
+
+    return {
+        "children_by_parent": children_by_parent,
+        "provided_kinds_by_rule": provided_kinds_by_rule,
+        "providers_by_kind": providers_by_kind,
+        "required_kinds_by_rule": required_kinds_by_rule,
+        "resolved_parents_by_rule": resolved_parents_by_rule,
+        "root_rule_ids": root_rule_ids,
+        "rule_ids": rule_ids,
+        "rules_by_id": rules_by_id,
+        "unresolved_rule_ids": unresolved_rule_ids
+    }
+
+func _add_rule_tree_item(parent_item: TreeItem, rule_id: String, dependency_model: Dictionary, ancestry: Array, displayed_rule_ids: Array) -> void:
+    if ancestry.has(rule_id):
+        var cycle_item := _installed_rule_tree.create_item(parent_item)
+        cycle_item.set_text(0, "循環を検出")
+        cycle_item.set_text(1, rule_id)
+        return
+
+    var rules_by_id: Dictionary = dependency_model.get("rules_by_id", {})
+    if not rules_by_id.has(rule_id):
+        var missing_item := _installed_rule_tree.create_item(parent_item)
+        missing_item.set_text(0, rule_id)
+        missing_item.set_text(1, "スナップショット内にルールがありません")
+        return
+
+    var rule_item := _installed_rule_tree.create_item(parent_item)
+    rule_item.set_text(0, _format_rule_reference_list([rule_id], dependency_model))
+    rule_item.set_text(1, _summarize_rule_dependency_status(rule_id, dependency_model))
+    rule_item.set_metadata(0, rule_id)
+    var tooltip := RuleDescriptionFormatterScript.build_tooltip(
+        _build_rule_tree_tooltip_data(rule_id, dependency_model),
+        dependency_model.get("rules_by_id", {})
+    )
+    rule_item.set_metadata(1, tooltip)
+    if not displayed_rule_ids.has(rule_id):
+        displayed_rule_ids.append(rule_id)
+
+    var resolved_parent_ids: Array = dependency_model.get("resolved_parents_by_rule", {}).get(rule_id, [])
+    if resolved_parent_ids.size() > 1:
+        var extra_parent_item := _installed_rule_tree.create_item(rule_item)
+        extra_parent_item.set_text(0, "別の親にも接続")
+        extra_parent_item.set_text(1, _format_rule_reference_list(resolved_parent_ids.slice(1, resolved_parent_ids.size()), dependency_model))
+
+    for required_kind in _get_rule_unresolved_required_kinds(rule_id, dependency_model):
+        var unresolved_item := _installed_rule_tree.create_item(rule_item)
+        unresolved_item.set_text(0, "必要な親種別")
+        var candidate_ids: Array = Array(dependency_model.get("providers_by_kind", {}).get(required_kind, []))
+        if candidate_ids.is_empty():
+            unresolved_item.set_text(1, str(required_kind))
+        else:
+            unresolved_item.set_text(1, "%s (候補: %s)" % [
+                str(required_kind),
+                _format_rule_reference_list(candidate_ids, dependency_model)
+            ])
+
+    var next_ancestry := ancestry.duplicate()
+    next_ancestry.append(rule_id)
+    var child_ids: Array = dependency_model.get("children_by_parent", {}).get(rule_id, [])
+    for child_id in child_ids:
+        _add_rule_tree_item(rule_item, str(child_id), dependency_model, next_ancestry, displayed_rule_ids)
+
+func _summarize_rule_dependency_status(rule_id: String, dependency_model: Dictionary) -> String:
+    var parts: Array[String] = []
+    var resolved_parent_ids: Array = dependency_model.get("resolved_parents_by_rule", {}).get(rule_id, [])
+    if resolved_parent_ids.is_empty():
+        parts.append("根ルール" if _get_rule_unresolved_required_kinds(rule_id, dependency_model).is_empty() else "親リンク待ち")
+    else:
+        parts.append("親: %s" % _format_rule_reference_list(resolved_parent_ids, dependency_model))
+
+    var child_ids: Array = dependency_model.get("children_by_parent", {}).get(rule_id, [])
+    if not child_ids.is_empty():
+        parts.append("子ルール %d 件" % child_ids.size())
+
+    var provided_kinds: Array = dependency_model.get("provided_kinds_by_rule", {}).get(rule_id, [])
+    if not provided_kinds.is_empty():
+        parts.append("提供: %s" % _join_values(provided_kinds))
+
+    var unresolved_required_kinds := _get_rule_unresolved_required_kinds(rule_id, dependency_model)
+    if not unresolved_required_kinds.is_empty():
+        parts.append("必要: %s" % _join_values(unresolved_required_kinds))
+
+    return _join_values(parts) if not parts.is_empty() else "依存メタデータなし"
+
+func _build_rule_tree_tooltip_data(rule_id: String, dependency_model: Dictionary) -> Dictionary:
+    var rules_by_id: Dictionary = dependency_model.get("rules_by_id", {})
+    var rule_data: Dictionary = rules_by_id.get(rule_id, {})
+    var metadata: Dictionary = rule_data.get("metadata", {})
+    return {
+        "rule_id": rule_id,
+        "name": String(rule_data.get("name", rule_id)),
+        "player_description": String(rule_data.get("player_description", "")),
+        "concept": String(rule_data.get("concept", "")),
+        "rule_type": String(rule_data.get("rule_type", "")),
+        "description": String(rule_data.get("description", rule_data.get("summary", ""))),
+        "package_id": String(metadata.get("package_id", "")),
+        "package_display_name": String(metadata.get("package_display_name", metadata.get("package_id", ""))),
+        "package_description": String(metadata.get("package_description", "")),
+        "resolved_parent_rule_ids": Array(dependency_model.get("resolved_parents_by_rule", {}).get(rule_id, [])).duplicate(),
+        "child_rule_ids": Array(dependency_model.get("children_by_parent", {}).get(rule_id, [])).duplicate(),
+        "provides_rule_kinds": _extract_rule_provided_kinds(rule_data),
+        "requires_rule_kinds": _extract_rule_required_kinds(rule_data),
+        "unresolved_required_rule_kinds": _get_rule_unresolved_required_kinds(rule_id, dependency_model),
+        "blocked": bool(rule_data.get("blocked", false)),
+        "inactive": not bool(rule_data.get("enabled", true)) or bool(rule_data.get("inactive", false)),
+        "dependency_status": String(rule_data.get("dependency_status", ""))
+    }
+
+func _get_rule_unresolved_required_kinds(rule_id: String, dependency_model: Dictionary) -> Array:
+    var unresolved_required_kinds: Array = []
+    var required_kinds: Array = dependency_model.get("required_kinds_by_rule", {}).get(rule_id, [])
+    var resolved_parent_ids: Array = dependency_model.get("resolved_parents_by_rule", {}).get(rule_id, [])
+    var providers_by_kind: Dictionary = dependency_model.get("providers_by_kind", {})
+
+    for required_kind in required_kinds:
+        var provider_ids: Array = Array(providers_by_kind.get(required_kind, []))
+        var is_resolved := false
+        for parent_id in resolved_parent_ids:
+            if provider_ids.has(parent_id):
+                is_resolved = true
+                break
+        if not is_resolved and not unresolved_required_kinds.has(required_kind):
+            unresolved_required_kinds.append(required_kind)
+
+    return unresolved_required_kinds
 func _extract_rule_parent_ids(rule_data: Variant) -> Array:
     return _extract_string_list_from_keys(
         rule_data,
@@ -2051,6 +2495,7 @@ func _simulate_task_submission(task_text: String) -> Dictionary:
                     "op": "upsert_rule",
                     "rule_id": "fallback.review_required",
                     "rule_type": "designer_review_required",
+                    "player_description": "プレイヤーの相談内容をもとに、人が詳細を詰めるためのレビュー待ちルールです。",
                     "design_prompt": task_text
                 }
             ]
@@ -2335,6 +2780,24 @@ func _summary_for_package_id(package_id: String) -> Dictionary:
         if entry is Dictionary and String(entry.get("package_id", "")) == package_id:
             return entry
     return {"package_id": package_id, "display_name": package_id}
+
+func _set_selected_package_enabled(enabled: bool) -> void:
+    if _installed_package_list == null:
+        return
+    var selected_items := _installed_package_list.get_selected_items()
+    if selected_items.is_empty():
+        _append_log("導入済みパッケージ未選択のまま状態変更しようとしました。")
+        return
+
+    var package_data = _installed_package_cache[selected_items[0]]
+    var package_id := _extract_identifier(package_data)
+    _apply_package_enabled(package_id, enabled)
+
+    var package_index := _find_package_index_by_id(package_id)
+    if package_index != -1:
+        _installed_package_list.deselect_all()
+        _installed_package_list.select(package_index)
+        _update_installed_package_details(package_index)
 
 func _simulate_package_enabled(package_id: String, enabled: bool) -> Dictionary:
     var installed_rules: Dictionary = _fallback_snapshot.get("installed_rules", {})

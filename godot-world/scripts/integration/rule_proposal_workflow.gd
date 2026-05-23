@@ -154,6 +154,7 @@ func _build_codex_prompt(player_request: String, available_packages: Array, clon
 		"Proposal requirements:",
 		"- Keep package_schema_version = rule_package_v1 and schema_version = codex_rule_proposal_v1.",
 		"- Only use declarative patch.operations with op in [upsert_stat, upsert_rule, add_event_binding, add_relation].",
+		"- Every upsert_rule operation must include a non-empty player_description that answers the player's 'これは何？'.",
 		"- touched_surfaces must enumerate every stat_id, rule_id, binding_id, or relation touched by the patch.",
 		"- review_status must be needs_design_review unless repair_required or rejected is clearly justified.",
 		"- suggested_pr_target should follow the closest existing package when appropriate.",
@@ -200,6 +201,8 @@ func _validate_proposal_contract(proposal: Dictionary) -> Dictionary:
 				var op := String(operation.get("op", ""))
 				if not ALLOWED_OPERATION_TYPES.has(op):
 					findings.append(_finding("schema", "error", "Unsupported patch operation: %s" % op))
+				elif op == "upsert_rule" and String(operation.get("player_description", "")).strip_edges().is_empty():
+					findings.append(_finding("schema", "error", "upsert_rule operations must include a non-empty player_description."))
 
 	var touched_surfaces = proposal.get("touched_surfaces", null)
 	if typeof(touched_surfaces) != TYPE_DICTIONARY:

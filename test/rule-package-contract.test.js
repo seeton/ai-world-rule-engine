@@ -64,6 +64,22 @@ test("every built-in rule package satisfies the repository contract", () => {
     assert.equal(Array.isArray(packageData.patch), false, `${fileName} patch must not be an array.`);
     assert.equal(packageIds.has(packageData.package_id), false, `Duplicate package_id ${packageData.package_id}.`);
 
+    for (const operation of packageData.patch.operations || []) {
+      if (operation?.op !== "upsert_rule") {
+        continue;
+      }
+      assert.equal(
+        typeof operation.player_description,
+        "string",
+        `${fileName} upsert_rule ${operation.rule_id} must include player_description.`
+      );
+      assert.notEqual(
+        operation.player_description.trim(),
+        "",
+        `${fileName} upsert_rule ${operation.rule_id} must not leave player_description empty.`
+      );
+    }
+
     packageIds.add(packageData.package_id);
   }
 });

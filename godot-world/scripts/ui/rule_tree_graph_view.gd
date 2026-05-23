@@ -1,6 +1,10 @@
 class_name RuleTreeGraphView
 extends Control
 
+const RuleDescriptionFormatterScript = preload("res://scripts/ui/rule_description_formatter.gd")
+const RuleTooltipThemeScript = preload("res://scripts/ui/rule_tooltip_theme.gd")
+const RuleTooltipCardScript = preload("res://scripts/ui/rule_tooltip_card.gd")
+const RuleTooltipPopupScript = preload("res://scripts/ui/rule_tooltip_popup.gd")
 const NODE_WIDTH: float = 232.0
 const NODE_HEIGHT: float = 116.0
 const COLUMN_SPACING: float = 56.0
@@ -65,6 +69,7 @@ var _connectors: Array = []
 var _graph_size: Vector2 = Vector2.ZERO
 var _last_signature: String = ""
 var _has_centered: bool = false
+var _tooltip_popup: PopupPanel = null
 
 
 func _ready() -> void:
@@ -129,6 +134,10 @@ func _build_layers() -> void:
 	_empty_label.visible = false
 	add_child(_empty_label)
 
+	_tooltip_popup = RuleTooltipPopupScript.new()
+	_tooltip_popup.theme = RuleTooltipThemeScript.build_theme()
+	add_child(_tooltip_popup)
+
 
 func _rebuild(rule_tree: Dictionary) -> int:
 	for child in _graph_layer.get_children():
@@ -177,11 +186,15 @@ func _rebuild(rule_tree: Dictionary) -> int:
 
 
 func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nodes_by_rule_id: Dictionary) -> Panel:
-	var card := Panel.new()
+	var card := RuleTooltipCardScript.new()
 	card.mouse_filter = MOUSE_FILTER_PASS
 	card.clip_contents = true
 	card.set_meta("rule_id", rule_id)
 	card.set_meta("state", state)
+	card.tooltip_content = RuleDescriptionFormatterScript.build_tooltip(
+		_build_tooltip_rule_data(rule_id, node_data, nodes_by_rule_id),
+		nodes_by_rule_id
+	)
 	_apply_card_style(card, state, false, true)
 	card.mouse_entered.connect(_on_card_hover.bind(rule_id, true))
 	card.mouse_exited.connect(_on_card_hover.bind(rule_id, false))
@@ -270,6 +283,47 @@ func _build_node_card(rule_id: String, node_data: Dictionary, state: String, nod
 	content.add_child(status_label)
 
 	return card
+
+
+func _build_tooltip_rule_data(rule_id: String, node_data: Dictionary, nodes_by_rule_id: Dictionary) -> Dictionary:
+	var resolved_parent_ids := _normalize_string_array(node_data.get("resolved_parent_rule_ids", []))
+	return {
+		"rule_id": rule_id,
+		"name": String(node_data.get("name", rule_id)),
+		"player_description": String(node_data.get("player_description", "")),
+		"concept": String(node_data.get("concept", "")),
+		"rule_type": String(node_data.get("rule_type", "")),
+		"description": String(node_data.get("description", node_data.get("summary", ""))),
+		"package_id": String(node_data.get("package_id", "")),
+		"package_display_name": String(node_data.get("package_display_name", node_data.get("package_id", ""))),
+		"package_description": String(node_data.get("package_description", "")),
+		"resolved_parent_rule_ids": resolved_parent_ids,
+		"child_rule_ids": _normalize_string_array(node_data.get("child_rule_ids", [])),
+		"provides_rule_kinds": _normalize_string_array(node_data.get("provides_rule_kinds", [])),
+		"requires_rule_kinds": _normalize_string_array(node_data.get("requires_rule_kinds", [])),
+		"unresolved_required_rule_kinds": _unresolved_required_kinds(node_data, resolved_parent_ids, nodes_by_rule_id),
+		"blocked": bool(node_data.get("blocked", false)),
+		"inactive": bool(node_data.get("inactive", false)),
+		"dependency_status": String(node_data.get("dependency_status", "active"))
+	}
+
+
+func _unresolved_required_kinds(node_data: Dictionary, resolved_parent_ids: Array, nodes_by_rule_id: Dictionary) -> Array:
+	var unresolved_required_kinds: Array = []
+	var required_kinds := _normalize_string_array(node_data.get("requires_rule_kinds", []))
+
+	for required_kind in required_kinds:
+		var is_resolved := false
+		for parent_rule_id in resolved_parent_ids:
+			var parent_node := _coerce_dictionary(nodes_by_rule_id.get(parent_rule_id, {}))
+			var provided_kinds := _normalize_string_array(parent_node.get("provides_rule_kinds", []))
+			if provided_kinds.has(required_kind):
+				is_resolved = true
+				break
+		if not is_resolved and not unresolved_required_kinds.has(required_kind):
+			unresolved_required_kinds.append(required_kind)
+
+	return unresolved_required_kinds
 
 
 func _make_badge(text: String, color: Color) -> Control:
@@ -595,6 +649,8 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 	elif event is InputEventMouseMotion:
+		if not _hover_rule_id.is_empty():
+			_show_hover_tooltip(_hover_rule_id)
 		if _is_panning:
 			var motion := event as InputEventMouseMotion
 			_pan = _pan_start_value + (motion.position - _pan_start_mouse)
@@ -616,10 +672,12 @@ func _on_card_hover(rule_id: String, hovered: bool) -> void:
 	if hovered:
 		_hover_rule_id = rule_id
 		_highlight_set = _compute_highlight_set(rule_id)
+		_show_hover_tooltip(rule_id)
 	else:
 		if _hover_rule_id == rule_id:
 			_hover_rule_id = ""
 			_highlight_set = {}
+			_hide_hover_tooltip()
 	_apply_highlight_styles()
 	_graph_layer.queue_redraw()
 
@@ -683,6 +741,33 @@ func get_highlight_set() -> Dictionary:
 
 func get_hover_rule_id() -> String:
 	return _hover_rule_id
+
+
+func get_node_tooltip(rule_id: String) -> String:
+	var control_variant: Variant = _node_controls.get(rule_id, null)
+	if not (control_variant is RuleTooltipCardScript):
+		return ""
+	return String((control_variant as RuleTooltipCardScript).tooltip_content)
+
+
+func _show_hover_tooltip(rule_id: String) -> void:
+	if _tooltip_popup == null:
+		return
+	var tooltip_text := get_node_tooltip(rule_id)
+	if tooltip_text.is_empty():
+		_hide_hover_tooltip()
+		return
+	(_tooltip_popup as Object).call(
+		"show_tooltip",
+		tooltip_text,
+		get_viewport().get_mouse_position(),
+		get_viewport_rect().size
+	)
+
+
+func _hide_hover_tooltip() -> void:
+	if _tooltip_popup != null:
+		(_tooltip_popup as Object).call("hide_tooltip")
 
 
 func _normalize_string_array(value: Variant) -> Array:

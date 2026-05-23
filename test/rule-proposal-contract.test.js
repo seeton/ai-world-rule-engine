@@ -143,6 +143,7 @@ function validProposal() {
           op: "upsert_rule",
           rule_id: "hunger.rises_slowly",
           rule_type: "designer_review_required",
+          player_description: "空腹がゆっくり増えて、放っておくと食事が必要になるルールです。",
         },
       ],
     },
@@ -489,6 +490,15 @@ test("proposal validation rejects schema-unsafe operations", () => {
 
   assert.ok(problems.some((problem) => problem.includes("expected one of")));
   assert.ok(problems.some((problem) => problem.includes("$.patch.operations[2].op")));
+});
+
+test("proposal schema allows player_description on upsert_rule", () => {
+  const schema = readJson(proposalSchemaPath);
+
+  assert.equal(
+    Object.hasOwn(schema.properties.patch.properties.operations.items.properties, "player_description"),
+    true
+  );
 });
 
 test("proposal validation rejects unexpected root properties", () => {

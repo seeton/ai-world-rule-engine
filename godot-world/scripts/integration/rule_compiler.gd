@@ -118,6 +118,7 @@ func _build_custom_draft(task: Dictionary, request_text: String, best_candidate:
 					"op": "upsert_rule",
 					"rule_id": "%s.core_loop" % stat_id,
 					"rule_type": "designer_review_required",
+					"player_description": "プレイヤーの依頼「%s」を実現するための下書きルールです。" % String(task.get("title", request_text)),
 					"design_prompt": String(task.get("prompt", request_text)),
 					"safety_notes": [
 						"Replace placeholder rule_type during review.",

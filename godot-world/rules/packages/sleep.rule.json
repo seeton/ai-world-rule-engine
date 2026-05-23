@@ -48,6 +48,7 @@
         "op": "upsert_rule",
         "rule_id": "sleep.energy_decay",
         "rule_type": "tick_delta",
+        "player_description": "時間がたつと元気が少しずつ減るルールです。",
         "target_stat": "energy",
         "delta": -1.0,
         "interval_seconds": 20.0
@@ -62,6 +63,7 @@
         "op": "upsert_rule",
         "rule_id": "sleep.recover_energy",
         "rule_type": "stateful_recovery",
+        "player_description": "眠っている間に元気を回復するルールです。",
         "active_event": "sleep_started",
         "inactive_event": "sleep_stopped",
         "target_stat": "energy",
@@ -71,6 +73,7 @@
         "op": "upsert_rule",
         "rule_id": "sleep.low_energy_penalty",
         "rule_type": "threshold_effect",
+        "player_description": "元気が少ないと眠そうな状態になるルールです。",
         "watch_stat": "energy",
         "comparator": "<",
         "value": 20.0,

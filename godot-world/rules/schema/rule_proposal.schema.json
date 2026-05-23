@@ -88,6 +88,7 @@
               "ui_group": { "type": ["string", "null"] },
               "rule_id": { "type": ["string", "null"] },
               "rule_type": { "type": ["string", "null"] },
+              "player_description": { "type": ["string", "null"] },
               "event": { "type": ["string", "null"] },
               "target_rule": { "type": ["string", "null"] },
               "target_stat": { "type": ["string", "null"] },

@@ -245,6 +245,7 @@ def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) ->
 
     for package_path, package_data in package_entries:
         package_id = package_data.get("package_id")
+        validate_rule_operation_player_descriptions(package_path, package_data, problems)
         raw_dependencies = package_data.get("package_dependencies", [])
         if not isinstance(raw_dependencies, list):
             continue
@@ -275,6 +276,33 @@ def validate_rule_packages(root_dir: Path, problems: List[ValidationProblem]) ->
     validate_default_package_contract(package_entries, problems)
 
     return len(package_paths)
+
+
+def validate_rule_operation_player_descriptions(
+    package_path: Path, package_data: Dict[str, Any], problems: List[ValidationProblem]
+) -> None:
+    patch = package_data.get("patch", {})
+    if not isinstance(patch, dict):
+        return
+    operations = patch.get("operations", [])
+    if not isinstance(operations, list):
+        return
+
+    for operation_index, operation in enumerate(operations):
+        if not isinstance(operation, dict):
+            continue
+        if str(operation.get("op", "")).strip() != "upsert_rule":
+            continue
+        player_description = operation.get("player_description", "")
+        if isinstance(player_description, str) and player_description.strip():
+            continue
+        problems.append(
+            ValidationProblem(
+                package_path,
+                "Every upsert_rule operation must include a non-empty player_description.",
+                f"$.patch.operations[{operation_index}].player_description",
+            )
+        )
 
 
 def package_operation_rule_kinds(package_data: Dict[str, Any], field_name: str) -> List[str]:

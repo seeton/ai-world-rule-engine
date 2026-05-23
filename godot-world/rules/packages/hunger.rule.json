@@ -48,6 +48,7 @@
         "op": "upsert_rule",
         "rule_id": "hunger.decay",
         "rule_type": "tick_delta",
+        "player_description": "時間がたつと空腹が少しずつ増えるルールです。",
         "target_stat": "hunger",
         "delta": -2.0,
         "interval_seconds": 30.0
@@ -62,6 +63,7 @@
         "op": "upsert_rule",
         "rule_id": "hunger.restore_from_food",
         "rule_type": "event_delta",
+        "player_description": "食べ物を食べると空腹が回復するルールです。",
         "event": "consume_food",
         "target_stat": "hunger",
         "delta": 25.0,
@@ -71,6 +73,7 @@
         "op": "upsert_rule",
         "rule_id": "hunger.starvation_damage",
         "rule_type": "threshold_effect",
+        "player_description": "空腹が限界まで進むと体力にダメージが入るルールです。",
         "watch_stat": "hunger",
         "comparator": "<=",
         "value": 0.0,

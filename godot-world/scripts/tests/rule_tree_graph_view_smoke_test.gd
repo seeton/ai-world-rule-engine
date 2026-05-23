@@ -44,50 +44,69 @@ func _initialize() -> void:
 				if displayed != (nodes_by_rule_id_variant as Dictionary).size():
 					exit_code = 1
 					failure_message = "displayed count %d does not match nodes %d" % [displayed, (nodes_by_rule_id_variant as Dictionary).size()]
+				elif not view.has_method("get_node_tooltip"):
+					exit_code = 1
+					failure_message = "graph view missing get_node_tooltip helper"
 				else:
-					var disable_result: Dictionary = world_state.set_rule_enabled(FOUNDATION_RULE_ID, false)
-					if String(disable_result.get("status", "")) != "disabled":
+					var sample_rule_ids: Array = (nodes_by_rule_id_variant as Dictionary).keys()
+					sample_rule_ids.sort()
+					var sample_rule_id := String(sample_rule_ids[0])
+					var sample_node: Dictionary = (nodes_by_rule_id_variant as Dictionary).get(sample_rule_id, {})
+					var expected_name := String(sample_node.get("name", sample_rule_id))
+					var tooltip := String(view.call("get_node_tooltip", sample_rule_id))
+					if tooltip.is_empty():
 						exit_code = 1
-						failure_message = "disable foundation failed: %s" % JSON.stringify(disable_result)
+						failure_message = "sample rule tooltip was empty"
+					elif tooltip.find(expected_name) == -1 and tooltip.find(sample_rule_id) == -1:
+						exit_code = 1
+						failure_message = "sample tooltip missing rule identity: %s" % tooltip
+					elif tooltip.find("これは何？:") == -1 or tooltip.find("いまの状態:") == -1:
+						exit_code = 1
+						failure_message = "sample tooltip missing human summary lines: %s" % tooltip
 					else:
-						var disabled_snapshot: Dictionary = world_state.get_world_snapshot()
-						var disabled_rule_tree_variant: Variant = disabled_snapshot.get("rule_tree", {})
-						if not (disabled_rule_tree_variant is Dictionary):
+						var disable_result: Dictionary = world_state.set_rule_enabled(FOUNDATION_RULE_ID, false)
+						if String(disable_result.get("status", "")) != "disabled":
 							exit_code = 1
-							failure_message = "disabled snapshot has no rule_tree dictionary"
+							failure_message = "disable foundation failed: %s" % JSON.stringify(disable_result)
 						else:
-							var disabled_rule_tree: Dictionary = disabled_rule_tree_variant
-							var disabled_displayed: int = int(view.update_rule_tree(disabled_rule_tree))
-							var disabled_nodes_by_rule_id: Dictionary = disabled_rule_tree.get("nodes_by_rule_id", {})
-							if disabled_displayed != disabled_nodes_by_rule_id.size():
+							var disabled_snapshot: Dictionary = world_state.get_world_snapshot()
+							var disabled_rule_tree_variant: Variant = disabled_snapshot.get("rule_tree", {})
+							if not (disabled_rule_tree_variant is Dictionary):
 								exit_code = 1
-								failure_message = "disabled displayed count %d does not match nodes %d" % [disabled_displayed, disabled_nodes_by_rule_id.size()]
+								failure_message = "disabled snapshot has no rule_tree dictionary"
 							else:
-								var foundation_card := view.get_node_card(FOUNDATION_RULE_ID)
-								var existence_card := view.get_node_card(EXISTENCE_RULE_ID)
-								if foundation_card == null or existence_card == null:
+								var disabled_rule_tree: Dictionary = disabled_rule_tree_variant
+								var disabled_displayed: int = int(view.update_rule_tree(disabled_rule_tree))
+								var disabled_nodes_by_rule_id: Dictionary = disabled_rule_tree.get("nodes_by_rule_id", {})
+								if disabled_displayed != disabled_nodes_by_rule_id.size():
 									exit_code = 1
-									failure_message = "view did not build cards for disabled rule tree"
+									failure_message = "disabled displayed count %d does not match nodes %d" % [disabled_displayed, disabled_nodes_by_rule_id.size()]
 								else:
-									var foundation_status_label := foundation_card.get_node_or_null("Content/StatusLabel") as Label
-									var foundation_name_label := foundation_card.get_node_or_null("Content/NameLabel") as Label
-									var status_label := existence_card.get_node_or_null("Content/StatusLabel") as Label
-									var name_label := existence_card.get_node_or_null("Content/NameLabel") as Label
-									if foundation_status_label == null or foundation_name_label == null or status_label == null or name_label == null:
+									var foundation_card := view.get_node_card(FOUNDATION_RULE_ID)
+									var existence_card := view.get_node_card(EXISTENCE_RULE_ID)
+									if foundation_card == null or existence_card == null:
 										exit_code = 1
-										failure_message = "view did not expose status/name labels for disabled rule tree"
-									elif foundation_status_label.text != EXPECTED_DISABLED_STATUS_TEXT:
-										exit_code = 1
-										failure_message = "unexpected disabled status text: %s" % foundation_status_label.text
-									elif not _colors_match(foundation_name_label.get_theme_color("font_color"), EXPECTED_UNRESOLVED_NAME_COLOR):
-										exit_code = 1
-										failure_message = "disabled parent name color was not highlighted red enough: %s" % str(foundation_name_label.get_theme_color("font_color"))
-									elif status_label.text != "親未解決/未適用":
-										exit_code = 1
-										failure_message = "unexpected unresolved status text: %s" % status_label.text
-									elif not _colors_match(name_label.get_theme_color("font_color"), EXPECTED_UNRESOLVED_NAME_COLOR):
-										exit_code = 1
-										failure_message = "unresolved node name color was not highlighted red enough: %s" % str(name_label.get_theme_color("font_color"))
+										failure_message = "view did not build cards for disabled rule tree"
+									else:
+										var foundation_status_label := foundation_card.get_node_or_null("Content/StatusLabel") as Label
+										var foundation_name_label := foundation_card.get_node_or_null("Content/NameLabel") as Label
+										var status_label := existence_card.get_node_or_null("Content/StatusLabel") as Label
+										var name_label := existence_card.get_node_or_null("Content/NameLabel") as Label
+										if foundation_status_label == null or foundation_name_label == null or status_label == null or name_label == null:
+											exit_code = 1
+											failure_message = "view did not expose status/name labels for disabled rule tree"
+										elif foundation_status_label.text != EXPECTED_DISABLED_STATUS_TEXT:
+											exit_code = 1
+											failure_message = "unexpected disabled status text: %s" % foundation_status_label.text
+										elif not _colors_match(foundation_name_label.get_theme_color("font_color"), EXPECTED_UNRESOLVED_NAME_COLOR):
+											exit_code = 1
+											failure_message = "disabled parent name color was not highlighted red enough: %s" % str(foundation_name_label.get_theme_color("font_color"))
+										elif status_label.text != "親未解決/未適用":
+											exit_code = 1
+											failure_message = "unexpected unresolved status text: %s" % status_label.text
+										elif not _colors_match(name_label.get_theme_color("font_color"), EXPECTED_UNRESOLVED_NAME_COLOR):
+											exit_code = 1
+											failure_message = "unresolved node name color was not highlighted red enough: %s" % str(name_label.get_theme_color("font_color"))
 				print("[smoke] displayed=%d roots=%d" % [displayed, (roots_variant as Array).size()])
 
 	if exit_code != 0:

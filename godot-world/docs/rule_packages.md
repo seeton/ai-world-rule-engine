@@ -150,7 +150,7 @@ The default package is **not** an immutable engine invariant. It is an initially
 
 The engine safety shell is separate from world rules. Inspector, restore, and dependency-reporting tools may remain available even when world rules collapse, but they must not pretend that default-package rules are protected engine internals.
 
-For future #86 composition-invariant work, rule packages should continue to form a prerequisite DAG: consumers require capability kinds, providers advertise capability kinds, cycles remain invalid, and package-id dependencies are treated as initial provider choices rather than permanent coupling.
+The world-order composition contract that sits on top of this split — DAG shape, implemented package-dependency rejection, future capability-cycle rejection, deterministic snapshot `rule_tree` view, conflict semantics on stat / relation / event binding / capability, 2D / 3D parity, and the 18-rule base taxonomy targeted by #62 — is defined in [`rule_composition_invariants.md`](rule_composition_invariants.md). New peaceful-world-order rules must satisfy that contract: consumers require capability kinds, providers advertise capability kinds, package cycles remain invalid, and package-id dependencies are treated as initial provider choices rather than permanent coupling.
 
 ## Current runtime bridge
 

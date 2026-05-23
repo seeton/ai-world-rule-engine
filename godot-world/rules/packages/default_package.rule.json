@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.default_package",
+  "package_tier": "foundation",
   "display_name": "Default Package",
   "description": "Defines the minimum mutable world assumptions shared by the 2D and 3D runtime: existence, representation, state, space, base time, movement, and basic actions.",
   "version": "1.0.0",

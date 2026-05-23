@@ -134,6 +134,7 @@ func _build_baseline_runtime_rule(rule_package: Dictionary, patch: Dictionary, p
 func _build_package_metadata(rule_package: Dictionary) -> Dictionary:
     var metadata := {
         "package_id": rule_package.get("package_id", ""),
+        "package_tier": rule_package.get("package_tier", ""),
         "package_display_name": rule_package.get("display_name", rule_package.get("package_id", "")),
         "package_description": rule_package.get("description", ""),
         "package_version": rule_package.get("version", ""),

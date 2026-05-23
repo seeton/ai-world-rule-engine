@@ -26,6 +26,15 @@
       "type": "string",
       "pattern": "^[a-z0-9._-]+$"
     },
+    "package_tier": {
+      "description": "Which of the three package layers this entry belongs to: 'foundation' (base-world contract such as builtin.default_package), 'bundle' (preset that stacks on a foundation such as builtin.peaceful_world_order), or 'capability' (single-feature package such as builtin.health).",
+      "type": "string",
+      "enum": [
+        "foundation",
+        "bundle",
+        "capability"
+      ]
+    },
     "display_name": {
       "type": "string"
     },

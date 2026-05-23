@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.peaceful_world_order",
+  "package_tier": "bundle",
   "display_name": "Peaceful World Order",
   "description": "Adds peaceful life-order structures above the shared default package: time-of-day, objects, ownership, money, meals, hunger, body, and health.",
   "version": "1.0.0",

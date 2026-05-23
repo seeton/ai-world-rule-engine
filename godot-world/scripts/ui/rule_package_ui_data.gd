@@ -11,10 +11,24 @@ const PKG_UI := {
 	"builtin.time":                 {"ja": "時間",           "icon": "⌚", "accent": Color("#b89bd9")},
 	"builtin.mana_absorption":      {"ja": "マナ吸収",       "icon": "✦", "accent": Color("#7ec488")},
 	"builtin.peaceful_world_order": {"ja": "平和な世界秩序", "icon": "❀", "accent": Color("#e8c66a")},
-	"builtin.default_package":      {"ja": "既定セット",     "icon": "◈", "accent": Color("#a8acb7")},
+	"builtin.default_package":      {"ja": "世界の基盤",     "icon": "◈", "accent": Color("#a8acb7")},
 }
 
 const DEFAULT_PKG_UI := {"ja": "", "icon": "▣", "accent": Color("#a8acb7")}
+
+# Package tier labels follow the foundation / bundle / capability split defined
+# in `godot-world/docs/rule_packages.md`.
+const TIER_JA := {
+	"foundation": "基盤",
+	"bundle":     "プリセット",
+	"capability": "機能パッケージ",
+}
+
+const TIER_ACCENT := {
+	"foundation": Color("#a8acb7"),
+	"bundle":     Color("#e8c66a"),
+	"capability": Color("#7ec488"),
+}
 
 const STAT_JA := {
 	"health": "体力",
@@ -54,7 +68,7 @@ const TAG_JA := {
 	"space": "空間",
 	"movement": "移動",
 	"action": "行動",
-	"default-package": "既定セット",
+	"default-package": "基盤",
 	"two_d": "2D",
 	"three_d": "3D",
 }
@@ -88,6 +102,14 @@ static func ja_for_stat(stat_id: String) -> String:
 
 static func ja_for_tag(tag: String) -> String:
 	return TAG_JA.get(tag, tag)
+
+
+static func ja_for_tier(tier: String) -> String:
+	return TIER_JA.get(tier, "")
+
+
+static func accent_for_tier(tier: String) -> Color:
+	return TIER_ACCENT.get(tier, Color("#a8acb7"))
 
 
 static func glyph_for_effect(kind: String) -> String:

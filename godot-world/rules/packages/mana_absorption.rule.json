@@ -1,6 +1,7 @@
 {
   "schema_version": "rule_package_v1",
   "package_id": "builtin.mana_absorption",
+  "package_tier": "capability",
   "display_name": "Mana Absorption",
   "description": "Adds mana gain from mana-rich zones, mana spending hooks, and overload caps.",
   "version": "1.0.0",
